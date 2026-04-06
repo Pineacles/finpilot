@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-finpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finpilot_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-finpilot}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finpilot}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-finpilot}:${POSTGRES_PASSWORD:-finpilot_dev}@db:5432/${POSTGRES_DB:-finpilot}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANALYSIS_MODEL: ${ANALYSIS_MODEL:-claude-sonnet-4-20250514}
+      SAXO_APP_KEY: ${SAXO_APP_KEY:-}
+      SAXO_APP_SECRET: ${SAXO_APP_SECRET:-}
+      SAXO_CERT_PATH: ${SAXO_CERT_PATH:-}
+      SAXO_ACCOUNT_KEY: ${SAXO_ACCOUNT_KEY:-}
+      VISECA_USERNAME: ${VISECA_USERNAME:-}
+      VISECA_PASSWORD: ${VISECA_PASSWORD:-}
+    ports:
+      - "${API_PORT:-8001}:8000"
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-8001}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
