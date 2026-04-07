@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 // Warm chart palette matching the theme
-const COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
+const COLORS = ["#34c759", "#007aff", "#ff9500", "#ff3b30", "#af52de", "#ff2d55", "#5ac8fa", "#4cd964"];
 const RANGES = [
   { value: "1mo", label: "1M" }, { value: "3mo", label: "3M" },
   { value: "6mo", label: "6M" }, { value: "1y", label: "1Y" },
@@ -37,7 +37,7 @@ function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
   const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`).join(" ");
   return (
     <svg width={w} height={h} className="shrink-0">
-      <polyline fill="none" stroke={positive ? "#3b82f6" : "#ef4444"} strokeWidth="1.5" points={points} />
+      <polyline fill="none" stroke={positive ? "#007aff" : "#ff3b30"} strokeWidth="1.5" points={points} />
     </svg>
   );
 }
@@ -355,14 +355,14 @@ export default function PortfolioPage() {
                 <AreaChart data={historyData}>
                   <defs>
                     <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={pnlPositive ? "#10b981" : "#ef4444"} stopOpacity={0.2} />
-                      <stop offset="100%" stopColor={pnlPositive ? "#10b981" : "#ef4444"} stopOpacity={0} />
+                      <stop offset="0%" stopColor={pnlPositive ? "#10b981" : "#ff3b30"} stopOpacity={0.2} />
+                      <stop offset="100%" stopColor={pnlPositive ? "#10b981" : "#ff3b30"} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} stroke="#334155" />
-                  <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} stroke="#334155" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} stroke="#48484a" />
+                  <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} stroke="#48484a" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v))} />
-                  <Area type="monotone" dataKey="value" stroke={pnlPositive ? "#10b981" : "#ef4444"} strokeWidth={2} fill="url(#portfolioGrad)" />
+                  <Area type="monotone" dataKey="value" stroke={pnlPositive ? "#10b981" : "#ff3b30"} strokeWidth={2} fill="url(#portfolioGrad)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -522,15 +522,15 @@ export default function PortfolioPage() {
                       <AreaChart data={chartData}>
                         <defs>
                           <linearGradient id="stockGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#22c55e" stopOpacity={0.2} />
-                            <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
+                            <stop offset="0%" stopColor="#34c759" stopOpacity={0.2} />
+                            <stop offset="100%" stopColor="#34c759" stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="date" tick={{ fontSize: 9 }} tickFormatter={(d) => d.slice(5)} stroke="#334155" />
-                        <YAxis tick={{ fontSize: 9 }} domain={["auto", "auto"]} stroke="#334155" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#38383a" />
+                        <XAxis dataKey="date" tick={{ fontSize: 9 }} tickFormatter={(d) => d.slice(5)} stroke="#48484a" />
+                        <YAxis tick={{ fontSize: 9 }} domain={["auto", "auto"]} stroke="#48484a" />
                         <Tooltip formatter={(v) => Number(v).toFixed(2)} />
-                        <Area type="monotone" dataKey="close" stroke="#22c55e" strokeWidth={2} fill="url(#stockGrad)" />
+                        <Area type="monotone" dataKey="close" stroke="#34c759" strokeWidth={2} fill="url(#stockGrad)" />
                       </AreaChart>
                     </ResponsiveContainer>
                   )}
