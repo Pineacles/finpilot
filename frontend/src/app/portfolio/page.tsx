@@ -82,6 +82,13 @@ export default function PortfolioPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { const i = setInterval(load, 120000); return () => clearInterval(i); }, [load]);
 
+  // Auto-select first stock on initial load
+  useEffect(() => {
+    if (!chartTicker && portfolio?.positions.length) {
+      openChart(portfolio.positions[0].symbol);
+    }
+  }, [portfolio?.positions.length]); // eslint-disable-line
+
   const handleTrade = async () => {
     const f = tradeForm;
     if (!f.quantity || (f.type !== "deposit" && f.type !== "withdraw" && !f.symbol)) return;
@@ -212,18 +219,18 @@ export default function PortfolioPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Allocation Donut */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Allocation</CardTitle></CardHeader>
-          <CardContent className="h-64">
+      <div className="grid gap-4 lg:grid-cols-5">
+        {/* Allocation Donut — compact */}
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-1 px-4 pt-3"><CardTitle className="text-xs">Allocation</CardTitle></CardHeader>
+          <CardContent className="h-48 px-2">
             {(p?.positions.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted-foreground pt-8 text-center">No positions yet</p>
+              <p className="text-xs text-muted-foreground pt-6 text-center">No positions</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={p!.positions} dataKey="market_value" nameKey="symbol" cx="50%" cy="50%"
-                    outerRadius={85} innerRadius={55}
+                    outerRadius={65} innerRadius={40}
                     label={((e: { symbol: string; weight_pct: number }) => `${e.symbol} ${e.weight_pct.toFixed(0)}%`) as unknown as boolean}>
                     {p!.positions.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
@@ -236,14 +243,12 @@ export default function PortfolioPage() {
 
         {/* Holdings List */}
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Holdings</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardHeader className="pb-1 px-4 pt-3"><CardTitle className="text-xs">Holdings</CardTitle></CardHeader>
+          <CardContent className="px-2">
             {(p?.positions.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted-foreground">Click "Trade" to add your first position.</p>
+              <p className="text-sm text-muted-foreground p-2">Click "Trade" to add your first position.</p>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-0.5 max-h-[400px] overflow-y-auto">
                 {p!.positions.map((pos) => (
                   editingId === pos.id ? (
                     <div key={pos.id} className="flex items-center gap-2 p-3 rounded-lg bg-primary/5">
@@ -254,7 +259,7 @@ export default function PortfolioPage() {
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : (
-                    <div key={pos.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent/40 cursor-pointer transition-colors group"
+                    <div key={pos.id} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors group ${chartTicker === pos.symbol ? "bg-accent" : "hover:bg-accent/40"}`}
                       onClick={() => openChart(pos.symbol)}>
                       {/* Left: ticker + name */}
                       <div className="min-w-[100px]">
@@ -297,6 +302,69 @@ export default function PortfolioPage() {
                   )
                 ))}
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Inline Chart Panel */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-1 px-4 pt-3">
+            <CardTitle className="text-xs flex items-center gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" />
+              {chartTicker || "Select a stock"}
+              {chartTicker && (() => {
+                const pos = p?.positions.find((pp) => pp.symbol === chartTicker);
+                return pos ? <span className="font-normal text-muted-foreground ml-1">{pos.name}</span> : null;
+              })()}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-3">
+            {!chartTicker ? (
+              <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">Click a holding to view its chart</div>
+            ) : (
+              <>
+                {(() => {
+                  const pos = p?.positions.find((pp) => pp.symbol === chartTicker);
+                  return pos ? (
+                    <div className="flex items-center gap-3 mb-3 flex-wrap">
+                      <span className="text-lg font-bold">{pos.last_price?.toFixed(2)}</span>
+                      <span className={`text-xs ${pos.change >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        {pos.change >= 0 ? "+" : ""}{pos.change.toFixed(2)} ({pos.change_pct >= 0 ? "+" : ""}{pos.change_pct.toFixed(1)}%)
+                      </span>
+                      <span className="text-xs text-muted-foreground">{pos.quantity} shares</span>
+                      <PnlBadge value={pos.unrealized_pnl} pct={pos.pnl_pct} size="sm" />
+                    </div>
+                  ) : null;
+                })()}
+                <div className="flex gap-1 mb-2">
+                  {RANGES.map((r) => (
+                    <Button key={r.value} variant={chartRange === r.value ? "default" : "ghost"} size="sm" className="h-6 text-[10px] px-2" onClick={() => setChartRange(r.value)}>{r.label}</Button>
+                  ))}
+                </div>
+                <div className="h-56">
+                  {chartLoading ? (
+                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading...</div>
+                  ) : chartData.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No data.</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id="stockGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2} />
+                            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                        <XAxis dataKey="date" tick={{ fontSize: 9 }} tickFormatter={(d) => d.slice(5)} stroke="#555" />
+                        <YAxis tick={{ fontSize: 9 }} domain={["auto", "auto"]} stroke="#555" />
+                        <Tooltip formatter={(v) => Number(v).toFixed(2)} />
+                        <Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#stockGrad)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -354,45 +422,6 @@ export default function PortfolioPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Price Chart Dialog */}
-      <Dialog open={!!chartTicker} onOpenChange={(v) => { if (!v) setChartTicker(null); }}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              {chartTicker}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex gap-1 mb-2">
-            {RANGES.map((r) => (
-              <Button key={r.value} variant={chartRange === r.value ? "default" : "ghost"} size="sm" className="h-7 text-xs px-3" onClick={() => setChartRange(r.value)}>{r.label}</Button>
-            ))}
-          </div>
-          <div className="h-80">
-            {chartLoading ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>
-            ) : chartData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No data.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2} />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} stroke="#555" />
-                  <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} stroke="#555" />
-                  <Tooltip formatter={(v) => Number(v).toFixed(2)} />
-                  <Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#chartGrad)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
