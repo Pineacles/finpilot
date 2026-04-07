@@ -9,14 +9,48 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell,
+  LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid, PieChart, Pie, Cell,
 } from "recharts";
 import {
   Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3,
+  TrendingUp, TrendingDown, Wallet,
 } from "lucide-react";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
-const RANGES = ["1mo", "3mo", "6mo", "1y", "2y", "5y"];
+const RANGES = [
+  { value: "1mo", label: "1M" }, { value: "3mo", label: "3M" },
+  { value: "6mo", label: "6M" }, { value: "1y", label: "1Y" },
+  { value: "2y", label: "2Y" }, { value: "5y", label: "5Y" },
+];
+
+// Mini sparkline component
+function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
+  if (!data || data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const h = 32;
+  const w = 80;
+  const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`).join(" ");
+  return (
+    <svg width={w} height={h} className="shrink-0">
+      <polyline fill="none" stroke={positive ? "#10b981" : "#ef4444"} strokeWidth="1.5" points={points} />
+    </svg>
+  );
+}
+
+// P&L badge
+function PnlBadge({ value, pct, size = "md" }: { value: number; pct?: number; size?: "sm" | "md" }) {
+  const positive = value >= 0;
+  const cls = size === "sm" ? "text-[11px] px-1.5 py-0.5" : "text-xs px-2 py-1";
+  return (
+    <span className={`${cls} rounded-md font-medium inline-flex items-center gap-1 ${positive ? "bg-green-500/15 text-green-500" : "bg-red-500/15 text-red-500"}`}>
+      {positive ? "+" : ""}{formatCurrency(value)}
+      {pct !== undefined && <span className="opacity-75">({positive ? "+" : ""}{pct.toFixed(1)}%)</span>}
+    </span>
+  );
+}
 
 export default function PortfolioPage() {
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
@@ -31,43 +65,39 @@ export default function PortfolioPage() {
   const [chartRange, setChartRange] = useState("1y");
   const [chartData, setChartData] = useState<{ date: string; close: number }[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
+  const [historyData, setHistoryData] = useState<{ date: string; value: number }[]>([]);
+  const [historyRange, setHistoryRange] = useState("3mo");
 
   const load = useCallback(() => {
     setLoading(true);
-    api.portfolio().then(setPortfolio).finally(() => setLoading(false));
-  }, []);
+    Promise.all([
+      api.portfolio(),
+      api.portfolioHistory(historyRange === "1mo" ? 30 : historyRange === "3mo" ? 90 : historyRange === "1y" ? 365 : 180),
+    ]).then(([p, h]) => {
+      setPortfolio(p);
+      setHistoryData(h);
+    }).finally(() => setLoading(false));
+  }, [historyRange]);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    const interval = setInterval(load, 120000);
-    return () => clearInterval(interval);
-  }, [load]);
+  useEffect(() => { const i = setInterval(load, 120000); return () => clearInterval(i); }, [load]);
 
   const handleTrade = async () => {
     const f = tradeForm;
     if (!f.quantity || (f.type !== "deposit" && f.type !== "withdraw" && !f.symbol)) return;
-    setTrading(true);
-    setTradeError("");
+    setTrading(true); setTradeError("");
     try {
       await api.trade({
         symbol: f.type === "deposit" || f.type === "withdraw" ? "CASH" : f.symbol.toUpperCase().trim(),
-        type: f.type,
-        quantity: parseFloat(f.quantity),
+        type: f.type, quantity: parseFloat(f.quantity),
         price: f.price ? parseFloat(f.price) : undefined,
-        currency: f.currency,
-        date: f.date || undefined,
-        fees: f.fees ? parseFloat(f.fees) : 0,
-        deduct_from_cash: f.deduct_from_cash,
+        currency: f.currency, date: f.date || undefined,
+        fees: f.fees ? parseFloat(f.fees) : 0, deduct_from_cash: f.deduct_from_cash,
       });
       setTradeForm({ symbol: "", type: "buy", quantity: "", price: "", currency: "USD", date: new Date().toISOString().split("T")[0], fees: "", deduct_from_cash: true });
-      setShowTrade(false);
-      load();
-    } catch (e) {
-      setTradeError(e instanceof Error ? e.message : "Trade failed");
-    } finally {
-      setTrading(false);
-    }
+      setShowTrade(false); load();
+    } catch (e) { setTradeError(e instanceof Error ? e.message : "Trade failed"); }
+    finally { setTrading(false); }
   };
 
   const handleUpdate = async (id: string) => {
@@ -75,38 +105,26 @@ export default function PortfolioPage() {
       quantity: editForm.quantity ? parseFloat(editForm.quantity) : undefined,
       avg_cost_price: editForm.avg_cost_price ? parseFloat(editForm.avg_cost_price) : undefined,
     });
-    setEditingId(null);
-    load();
+    setEditingId(null); load();
   };
 
-  const handleDelete = async (id: string) => {
-    await api.deletePosition(id);
-    load();
-  };
+  const handleDelete = async (id: string) => { await api.deletePosition(id); load(); };
 
   const openChart = async (ticker: string, range = chartRange) => {
-    setChartTicker(ticker);
-    setChartRange(range);
-    setChartLoading(true);
-    try {
-      const res = await api.priceChart(ticker, range);
-      setChartData(res.data);
-    } catch {
-      setChartData([]);
-    } finally {
-      setChartLoading(false);
-    }
+    setChartTicker(ticker); setChartRange(range); setChartLoading(true);
+    try { const res = await api.priceChart(ticker, range); setChartData(res.data); }
+    catch { setChartData([]); }
+    finally { setChartLoading(false); }
   };
 
-  useEffect(() => {
-    if (chartTicker) openChart(chartTicker, chartRange);
-  }, [chartRange]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (chartTicker) openChart(chartTicker, chartRange); }, [chartRange]); // eslint-disable-line
 
   if (loading && !portfolio) {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Portfolio</h1>
-        <div className="grid gap-4 md:grid-cols-4">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+        <Skeleton className="h-12 w-64" />
+        <Skeleton className="h-64" />
+        <Skeleton className="h-96" />
       </div>
     );
   }
@@ -116,59 +134,97 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Portfolio</h1>
+      {/* Hero Section — Portfolio Value + P&L */}
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground mb-1">Portfolio Value</p>
+          <p className="text-4xl font-bold tracking-tight">{formatCurrency(p?.total_value ?? 0)}</p>
+          <div className="flex items-center gap-3 mt-2">
+            <PnlBadge value={p?.total_pnl ?? 0} pct={p?.total_pnl_pct ?? 0} />
+            <span className="text-sm text-muted-foreground">All time</span>
+          </div>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />Refresh
           </Button>
           <Button size="sm" onClick={() => setShowTrade(true)}>
-            <Plus className="h-4 w-4 mr-1" />Trade / Deposit
+            <Plus className="h-4 w-4 mr-1" />Trade
           </Button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card>
-          <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Portfolio Value</CardTitle></CardHeader>
-          <CardContent><p className="text-xl font-bold">{formatCurrency(p?.total_value ?? 0)}</p></CardContent>
+      {/* Portfolio History Chart */}
+      {historyData.length > 1 && (
+        <Card className="border-0 bg-transparent shadow-none">
+          <CardContent className="p-0">
+            <div className="flex gap-1 mb-3">
+              {[{ value: "1mo", label: "1M" }, { value: "3mo", label: "3M" }, { value: "1y", label: "1Y" }].map((r) => (
+                <Button key={r.value} variant={historyRange === r.value ? "default" : "ghost"} size="sm" className="h-7 text-xs px-3"
+                  onClick={() => setHistoryRange(r.value)}>{r.label}</Button>
+              ))}
+            </div>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={historyData}>
+                  <defs>
+                    <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={pnlPositive ? "#10b981" : "#ef4444"} stopOpacity={0.2} />
+                      <stop offset="100%" stopColor={pnlPositive ? "#10b981" : "#ef4444"} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} stroke="#555" />
+                  <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} stroke="#555" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip formatter={(v) => formatCurrency(Number(v))} />
+                  <Area type="monotone" dataKey="value" stroke={pnlPositive ? "#10b981" : "#ef4444"} strokeWidth={2} fill="url(#portfolioGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
         </Card>
+      )}
+
+      {/* Summary Cards */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Total Cost</CardTitle></CardHeader>
-          <CardContent><p className="text-xl font-bold text-muted-foreground">{formatCurrency(p?.total_cost ?? 0)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Unrealized P&L</CardTitle></CardHeader>
-          <CardContent>
-            <p className={`text-xl font-bold ${pnlPositive ? "text-green-500" : "text-red-500"}`}>{formatCurrency(p?.total_pnl ?? 0)}</p>
-            <p className={`text-xs ${pnlPositive ? "text-green-500" : "text-red-500"}`}>{formatPct(p?.total_pnl_pct ?? 0)}</p>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Invested</p>
+            <p className="text-lg font-bold">{formatCurrency(p?.total_cost ?? 0)}</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Cash (Uninvested)</CardTitle></CardHeader>
-          <CardContent>
-            <p className="text-xl font-bold">{formatCurrency(p?.cash_balance ?? 0)}</p>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Cash</p>
+            <p className="text-lg font-bold">{formatCurrency(p?.cash_balance ?? 0)}</p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Positions</CardTitle></CardHeader>
-          <CardContent><p className="text-xl font-bold">{p?.positions_count ?? 0}</p></CardContent>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Positions</p>
+            <p className="text-lg font-bold">{p?.positions_count ?? 0}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Total (incl. cash)</p>
+            <p className="text-lg font-bold">{formatCurrency((p?.total_value ?? 0) + (p?.cash_balance ?? 0))}</p>
+          </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Allocation Pie */}
+        {/* Allocation Donut */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Allocation</CardTitle></CardHeader>
-          <CardContent className="h-72">
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Allocation</CardTitle></CardHeader>
+          <CardContent className="h-64">
             {(p?.positions.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted-foreground">No positions yet.</p>
+              <p className="text-sm text-muted-foreground pt-8 text-center">No positions yet</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={p!.positions} dataKey="market_value" nameKey="symbol" cx="50%" cy="50%" outerRadius={90} innerRadius={50}
-                    label={((entry: { symbol: string; weight_pct: number }) => `${entry.symbol} ${entry.weight_pct.toFixed(0)}%`) as unknown as boolean}>
+                  <Pie data={p!.positions} dataKey="market_value" nameKey="symbol" cx="50%" cy="50%"
+                    outerRadius={85} innerRadius={55}
+                    label={((e: { symbol: string; weight_pct: number }) => `${e.symbol} ${e.weight_pct.toFixed(0)}%`) as unknown as boolean}>
                     {p!.positions.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
                   <Tooltip formatter={(v) => formatCurrency(Number(v))} />
@@ -178,72 +234,68 @@ export default function PortfolioPage() {
           </CardContent>
         </Card>
 
-        {/* Positions Table */}
+        {/* Holdings List */}
         <Card className="lg:col-span-2">
-          <CardHeader><CardTitle className="text-base">Positions</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Holdings</CardTitle>
+          </CardHeader>
           <CardContent>
             {(p?.positions.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted-foreground">No positions. Click "Add Position" to get started.</p>
+              <p className="text-sm text-muted-foreground">Click "Trade" to add your first position.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="pb-2 font-medium">Ticker</th>
-                      <th className="pb-2 font-medium">Qty</th>
-                      <th className="pb-2 font-medium text-right">Price</th>
-                      <th className="pb-2 font-medium text-right">Day</th>
-                      <th className="pb-2 font-medium text-right">Value</th>
-                      <th className="pb-2 font-medium text-right">P&L</th>
-                      <th className="pb-2 w-20"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {p!.positions.map((pos) => (
-                      editingId === pos.id ? (
-                        <tr key={pos.id} className="border-b bg-primary/5">
-                          <td className="py-2 font-bold">{pos.symbol}</td>
-                          <td className="py-2"><Input value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} className="h-7 w-20 text-sm" /></td>
-                          <td className="py-2 text-right"><Input value={editForm.avg_cost_price} onChange={(e) => setEditForm({ ...editForm, avg_cost_price: e.target.value })} className="h-7 w-24 text-sm text-right" placeholder="Avg price" /></td>
-                          <td colSpan={2}></td>
-                          <td colSpan={2} className="py-2 text-right">
-                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleUpdate(pos.id)}><Check className="h-3 w-3 text-green-500" /></Button>
-                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingId(null)}><X className="h-3 w-3" /></Button>
-                          </td>
-                        </tr>
-                      ) : (
-                        <tr key={pos.id} className="border-b border-border/50 hover:bg-accent/30 cursor-pointer" onClick={() => openChart(pos.symbol)}>
-                          <td className="py-2">
-                            <div>
-                              <span className="font-bold">{pos.symbol}</span>
-                              <span className="text-xs text-muted-foreground ml-1 hidden md:inline">{pos.name}</span>
-                            </div>
-                            {pos.first_bought && (
-                              <span className="text-[10px] text-muted-foreground">Since {pos.first_bought.split("T")[0]}</span>
-                            )}
-                          </td>
-                          <td className="py-2">{pos.quantity}</td>
-                          <td className="py-2 text-right">{pos.last_price?.toFixed(2) ?? "-"}</td>
-                          <td className={`py-2 text-right text-xs ${pos.change >= 0 ? "text-green-500" : "text-red-500"}`}>
-                            {pos.change >= 0 ? "+" : ""}{pos.change.toFixed(2)} ({pos.change_pct >= 0 ? "+" : ""}{pos.change_pct.toFixed(1)}%)
-                          </td>
-                          <td className="py-2 text-right font-medium">{formatCurrency(pos.market_value)}</td>
-                          <td className={`py-2 text-right text-xs ${pos.unrealized_pnl >= 0 ? "text-green-500" : "text-red-500"}`}>
-                            {formatCurrency(pos.unrealized_pnl)} ({pos.pnl_pct >= 0 ? "+" : ""}{pos.pnl_pct.toFixed(1)}%)
-                          </td>
-                          <td className="py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditingId(pos.id); setEditForm({ quantity: String(pos.quantity), avg_cost_price: String(pos.avg_cost_price) }); }}>
-                              <Pencil className="h-3 w-3 text-muted-foreground" />
-                            </Button>
-                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleDelete(pos.id)}>
-                              <Trash2 className="h-3 w-3 text-muted-foreground" />
-                            </Button>
-                          </td>
-                        </tr>
-                      )
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-1">
+                {p!.positions.map((pos) => (
+                  editingId === pos.id ? (
+                    <div key={pos.id} className="flex items-center gap-2 p-3 rounded-lg bg-primary/5">
+                      <span className="font-bold text-sm w-16">{pos.symbol}</span>
+                      <Input value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} className="h-8 w-20 text-sm" placeholder="Qty" />
+                      <Input value={editForm.avg_cost_price} onChange={(e) => setEditForm({ ...editForm, avg_cost_price: e.target.value })} className="h-8 w-24 text-sm" placeholder="Avg price" />
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleUpdate(pos.id)}><Check className="h-3.5 w-3.5 text-green-500" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  ) : (
+                    <div key={pos.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent/40 cursor-pointer transition-colors group"
+                      onClick={() => openChart(pos.symbol)}>
+                      {/* Left: ticker + name */}
+                      <div className="min-w-[100px]">
+                        <p className="font-bold text-sm">{pos.symbol}</p>
+                        <p className="text-[11px] text-muted-foreground truncate max-w-[120px]">{pos.name}</p>
+                      </div>
+
+                      {/* Sparkline */}
+                      <Sparkline data={pos.sparkline} positive={pos.change >= 0} />
+
+                      {/* Price + day change */}
+                      <div className="text-right min-w-[90px]">
+                        <p className="text-sm font-medium">{pos.last_price?.toFixed(2)}</p>
+                        <p className={`text-[11px] ${pos.change >= 0 ? "text-green-500" : "text-red-500"}`}>
+                          {pos.change >= 0 ? "+" : ""}{pos.change.toFixed(2)} ({pos.change_pct >= 0 ? "+" : ""}{pos.change_pct.toFixed(1)}%)
+                        </p>
+                      </div>
+
+                      {/* Shares + value */}
+                      <div className="text-right min-w-[80px] hidden md:block">
+                        <p className="text-sm font-medium">{formatCurrency(pos.market_value)}</p>
+                        <p className="text-[11px] text-muted-foreground">{pos.quantity} shares</p>
+                      </div>
+
+                      {/* P&L badge */}
+                      <div className="min-w-[100px] text-right hidden sm:block">
+                        <PnlBadge value={pos.unrealized_pnl} pct={pos.pnl_pct} size="sm" />
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditingId(pos.id); setEditForm({ quantity: String(pos.quantity), avg_cost_price: String(pos.avg_cost_price) }); }}>
+                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDelete(pos.id)}>
+                          <Trash2 className="h-3 w-3 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                ))}
               </div>
             )}
           </CardContent>
@@ -255,31 +307,26 @@ export default function PortfolioPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Record Trade</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Type</label>
-              <div className="grid grid-cols-4 gap-1">
-                {(["buy", "sell", "deposit", "withdraw"] as const).map((t) => (
-                  <Button key={t} variant={tradeForm.type === t ? "default" : "outline"} size="sm" onClick={() => setTradeForm({ ...tradeForm, type: t })} className="capitalize">
-                    {t}
-                  </Button>
-                ))}
-              </div>
+            <div className="grid grid-cols-4 gap-1">
+              {(["buy", "sell", "deposit", "withdraw"] as const).map((t) => (
+                <Button key={t} variant={tradeForm.type === t ? "default" : "outline"} size="sm" onClick={() => setTradeForm({ ...tradeForm, type: t })} className="capitalize">{t}</Button>
+              ))}
             </div>
             {tradeForm.type !== "deposit" && tradeForm.type !== "withdraw" && (
               <div>
-                <label className="text-xs text-muted-foreground">Ticker Symbol</label>
-                <Input placeholder="AAPL, NVDA, NESN.SW, BTC-USD..." value={tradeForm.symbol} onChange={(e) => setTradeForm({ ...tradeForm, symbol: e.target.value })} />
+                <label className="text-xs text-muted-foreground">Ticker</label>
+                <Input placeholder="AAPL, NVDA, BTC-USD..." value={tradeForm.symbol} onChange={(e) => setTradeForm({ ...tradeForm, symbol: e.target.value })} />
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-muted-foreground">{tradeForm.type === "deposit" || tradeForm.type === "withdraw" ? "Amount" : "Quantity"}</label>
-                <Input type="number" placeholder={tradeForm.type === "deposit" ? "5000" : "10"} value={tradeForm.quantity} onChange={(e) => setTradeForm({ ...tradeForm, quantity: e.target.value })} />
+                <Input type="number" value={tradeForm.quantity} onChange={(e) => setTradeForm({ ...tradeForm, quantity: e.target.value })} />
               </div>
               {tradeForm.type !== "deposit" && tradeForm.type !== "withdraw" && (
                 <div>
-                  <label className="text-xs text-muted-foreground">Price per share (empty = market)</label>
-                  <Input type="number" placeholder="150.00" value={tradeForm.price} onChange={(e) => setTradeForm({ ...tradeForm, price: e.target.value })} />
+                  <label className="text-xs text-muted-foreground">Price (empty = market)</label>
+                  <Input type="number" value={tradeForm.price} onChange={(e) => setTradeForm({ ...tradeForm, price: e.target.value })} />
                 </div>
               )}
             </div>
@@ -291,24 +338,14 @@ export default function PortfolioPage() {
               <div>
                 <label className="text-xs text-muted-foreground">Currency</label>
                 <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={tradeForm.currency} onChange={(e) => setTradeForm({ ...tradeForm, currency: e.target.value })}>
-                  <option value="USD">USD</option>
-                  <option value="CHF">CHF</option>
-                  <option value="EUR">EUR</option>
-                  <option value="GBP">GBP</option>
-                  <option value="KRW">KRW</option>
+                  {["USD", "CHF", "EUR", "GBP", "KRW"].map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
             </div>
-            {tradeForm.type === "buy" && (
+            {(tradeForm.type === "buy" || tradeForm.type === "sell") && (
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={tradeForm.deduct_from_cash} onChange={(e) => setTradeForm({ ...tradeForm, deduct_from_cash: e.target.checked })} />
-                Deduct from cash balance
-              </label>
-            )}
-            {tradeForm.type === "sell" && (
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={tradeForm.deduct_from_cash} onChange={(e) => setTradeForm({ ...tradeForm, deduct_from_cash: e.target.checked })} />
-                Add proceeds to cash balance
+                {tradeForm.type === "buy" ? "Deduct from cash" : "Add proceeds to cash"}
               </label>
             )}
             {tradeError && <p className="text-xs text-red-500">{tradeError}</p>}
@@ -324,34 +361,33 @@ export default function PortfolioPage() {
             <DialogTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
               {chartTicker}
-              {chartData.length > 0 && (
-                <span className="text-sm font-normal text-muted-foreground ml-2">
-                  {chartData[0].date} — {chartData[chartData.length - 1].date}
-                </span>
-              )}
             </DialogTitle>
           </DialogHeader>
           <div className="flex gap-1 mb-2">
             {RANGES.map((r) => (
-              <Button key={r} variant={chartRange === r ? "default" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setChartRange(r)}>
-                {r.replace("mo", "M").replace("y", "Y")}
-              </Button>
+              <Button key={r.value} variant={chartRange === r.value ? "default" : "ghost"} size="sm" className="h-7 text-xs px-3" onClick={() => setChartRange(r.value)}>{r.label}</Button>
             ))}
           </div>
           <div className="h-80">
             {chartLoading ? (
               <div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>
             ) : chartData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No data available.</p>
+              <p className="text-sm text-muted-foreground">No data.</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2} />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
-                  <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} />
-                  <Tooltip formatter={(v) => Number(v).toFixed(2)} labelFormatter={(l) => l} />
-                  <Line type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                </LineChart>
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} stroke="#555" />
+                  <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} stroke="#555" />
+                  <Tooltip formatter={(v) => Number(v).toFixed(2)} />
+                  <Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#chartGrad)" />
+                </AreaChart>
               </ResponsiveContainer>
             )}
           </div>

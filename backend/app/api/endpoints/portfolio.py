@@ -123,6 +123,14 @@ async def get_portfolio(
     for r in trade_result.all():
         trade_dates[r.symbol] = {"first_buy": r.first_buy.isoformat() if r.first_buy else None, "trades": r.trade_count}
 
+    # Fetch 7-day sparkline data for each stock
+    sparklines: dict[str, list[float]] = {}
+    if stock_positions:
+        for p in stock_positions:
+            hist = await get_history(p.symbol, range="5d", interval="1d")
+            if hist:
+                sparklines[p.symbol] = [h["close"] for h in hist]
+
     pos_list = []
     for p in stock_positions:
         q_data = quotes.get(p.symbol, {}) if stock_positions else {}
@@ -144,6 +152,7 @@ async def get_portfolio(
             "weight_pct": (mv / total_value * 100) if total_value else 0,
             "first_bought": td.get("first_buy"),
             "trade_count": td.get("trades", 0),
+            "sparkline": sparklines.get(p.symbol, []),
         })
 
     # Save daily snapshot

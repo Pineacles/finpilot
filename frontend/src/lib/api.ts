@@ -201,9 +201,10 @@ export interface Position {
   weight_pct: number;
   first_bought: string | null;
   trade_count: number;
+  sparkline: number[];
 }
 
-export interface PortfolioSnapshot { snapshot_date: string; total_value: number; total_cost: number; total_pnl: number }
+export interface PortfolioSnapshot { date: string; value: number; pnl: number }
 export interface StockTransaction { id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; executed_at: string }
 
 export interface TransactionItem {
