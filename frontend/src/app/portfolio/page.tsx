@@ -53,6 +53,148 @@ function PnlBadge({ value, pct, size = "md" }: { value: number; pct?: number; si
   );
 }
 
+function AnalysisCard({ title, analysis, olderList, showOlder, onLoadOlder, onCloseOlder, onViewOlder }: {
+  title: string;
+  analysis: PortfolioAnalysis | null;
+  olderList: AnalysisListItem[];
+  showOlder: boolean;
+  onLoadOlder: () => void;
+  onCloseOlder: () => void;
+  onViewOlder: (id: string) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm flex items-center gap-1.5"><Brain className="h-4 w-4" />{title}</CardTitle>
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onLoadOlder}>View older</Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {showOlder && (
+          <div className="mb-4 space-y-1.5 p-3 rounded-lg bg-accent/20">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium">Previous Reports</span>
+              <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={onCloseOlder}><X className="h-3 w-3" /></Button>
+            </div>
+            {olderList.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No older reports.</p>
+            ) : olderList.map((a) => (
+              <div key={a.id} className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors text-xs ${analysis?.id === a.id ? "bg-accent" : "hover:bg-accent/50"}`}
+                onClick={() => onViewOlder(a.id)}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${a.market_sentiment === "bullish" ? "bg-green-500" : a.market_sentiment === "bearish" ? "bg-red-500" : "bg-yellow-500"}`} />
+                  <span className="capitalize">{a.market_sentiment || "neutral"}</span>
+                </div>
+                <span className="text-muted-foreground">{new Date(a.created_at).toLocaleDateString("en-CH", { day: "numeric", month: "short", year: "numeric" })}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!analysis ? (
+          <p className="text-sm text-muted-foreground py-4">No analysis yet. Your agent will store reports here.</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                analysis.content.market_sentiment === "bullish" ? "bg-green-500/15 text-green-500" :
+                analysis.content.market_sentiment === "bearish" ? "bg-red-500/15 text-red-500" :
+                "bg-yellow-500/15 text-yellow-500"
+              }`}>{analysis.content.market_sentiment}</span>
+              <span className="text-xs text-muted-foreground">{new Date(analysis.created_at).toLocaleString()}</span>
+            </div>
+
+            <div className="p-3 rounded-lg bg-accent/30">
+              <p className="text-sm">{analysis.content.market_summary}</p>
+            </div>
+
+            {/* Portfolio stocks */}
+            {analysis.content.stocks && analysis.content.stocks.length > 0 && (
+              <div className="space-y-3">
+                {analysis.content.stocks.map((s) => (
+                  <div key={s.symbol} className="p-4 rounded-lg border">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold">{s.symbol}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                          s.action === "ADD" ? "bg-green-500/15 text-green-500" :
+                          s.action === "SELL" ? "bg-red-500/15 text-red-500" :
+                          "bg-blue-500/15 text-blue-500"
+                        }`}>{s.action}</span>
+                      </div>
+                      <div className="text-right text-xs">
+                        <span className="text-muted-foreground">Entry: {s.entry_price.toFixed(2)}</span>
+                        <span className="mx-1.5 text-muted-foreground">/</span>
+                        <span>Now: {s.current_price.toFixed(2)}</span>
+                        <span className={`ml-2 ${s.unrealized_pnl_pct >= 0 ? "text-green-500" : "text-red-500"}`}>
+                          {s.unrealized_pnl_pct >= 0 ? "+" : ""}{s.unrealized_pnl_pct.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-2">{s.rationale}</p>
+                    <div className="flex gap-4 text-xs">
+                      {s.key_risks.length > 0 && (
+                        <div className="flex-1">
+                          <p className="font-medium text-red-400 flex items-center gap-1 mb-1"><AlertTriangle className="h-3 w-3" />Risks</p>
+                          <ul className="space-y-0.5 text-muted-foreground">{s.key_risks.map((r, i) => <li key={i}>- {r}</li>)}</ul>
+                        </div>
+                      )}
+                      {s.key_catalysts.length > 0 && (
+                        <div className="flex-1">
+                          <p className="font-medium text-green-400 flex items-center gap-1 mb-1"><Zap className="h-3 w-3" />Catalysts</p>
+                          <ul className="space-y-0.5 text-muted-foreground">{s.key_catalysts.map((c, i) => <li key={i}>- {c}</li>)}</ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Economy indicators */}
+            {analysis.content.key_indicators && analysis.content.key_indicators.length > 0 && (
+              <div className="grid gap-2 grid-cols-2 md:grid-cols-4">
+                {analysis.content.key_indicators.map((ind, i) => (
+                  <div key={i} className="p-3 rounded-lg border text-center">
+                    <p className="text-[11px] text-muted-foreground">{ind.name}</p>
+                    <p className="text-lg font-bold">{ind.value}</p>
+                    <p className={`text-[10px] ${ind.trend === "up" ? "text-green-500" : ind.trend === "down" ? "text-red-500" : "text-muted-foreground"}`}>
+                      {ind.trend === "up" ? "Trending up" : ind.trend === "down" ? "Trending down" : "Stable"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {analysis.content.outlook && (
+              <div className="p-3 rounded-lg border">
+                <p className="text-xs font-medium mb-1">Outlook</p>
+                <p className="text-sm text-muted-foreground">{analysis.content.outlook}</p>
+              </div>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {analysis.content.risks && analysis.content.risks.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-red-400 flex items-center gap-1 mb-2"><AlertTriangle className="h-3 w-3" />Key Risks</p>
+                  <ul className="space-y-1 text-xs text-muted-foreground">{analysis.content.risks.map((r, i) => <li key={i} className="flex gap-1.5"><span className="text-red-400">-</span>{r}</li>)}</ul>
+                </div>
+              )}
+              {analysis.content.opportunities && analysis.content.opportunities.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-green-400 flex items-center gap-1 mb-2"><Zap className="h-3 w-3" />Opportunities</p>
+                  <ul className="space-y-1 text-xs text-muted-foreground">{analysis.content.opportunities.map((o, i) => <li key={i} className="flex gap-1.5"><span className="text-green-400">-</span>{o}</li>)}</ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function PortfolioPage() {
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,12 +210,14 @@ export default function PortfolioPage() {
   const [chartLoading, setChartLoading] = useState(false);
   const [historyData, setHistoryData] = useState<{ date: string; value: number }[]>([]);
   const [historyRange, setHistoryRange] = useState("3mo");
-  const [analysisTab, setAnalysisTab] = useState<"portfolio" | "economy">("portfolio");
   const [latestPortfolio, setLatestPortfolio] = useState<PortfolioAnalysis | null>(null);
   const [latestEconomy, setLatestEconomy] = useState<PortfolioAnalysis | null>(null);
-  const [activeAnalysis, setActiveAnalysis] = useState<PortfolioAnalysis | null>(null);
-  const [olderList, setOlderList] = useState<AnalysisListItem[]>([]);
-  const [showOlder, setShowOlder] = useState(false);
+  const [activePortfolio, setActivePortfolio] = useState<PortfolioAnalysis | null>(null);
+  const [activeEconomy, setActiveEconomy] = useState<PortfolioAnalysis | null>(null);
+  const [olderPortfolio, setOlderPortfolio] = useState<AnalysisListItem[]>([]);
+  const [olderEconomy, setOlderEconomy] = useState<AnalysisListItem[]>([]);
+  const [showOlderPortfolio, setShowOlderPortfolio] = useState(false);
+  const [showOlderEconomy, setShowOlderEconomy] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -85,8 +229,8 @@ export default function PortfolioPage() {
     ]).then(([p, h, ap, ae]) => {
       setPortfolio(p);
       setHistoryData(h);
-      if (ap && !("status" in ap && ap.status === "none")) { setLatestPortfolio(ap); setActiveAnalysis(ap); }
-      if (ae && !("status" in ae && ae.status === "none")) setLatestEconomy(ae);
+      if (ap && !("status" in ap && ap.status === "none")) { setLatestPortfolio(ap); setActivePortfolio(ap); }
+      if (ae && !("status" in ae && ae.status === "none")) { setLatestEconomy(ae); setActiveEconomy(ae); }
     }).finally(() => setLoading(false));
   }, [historyRange]);
 
@@ -128,27 +272,25 @@ export default function PortfolioPage() {
 
   const handleDelete = async (id: string) => { await api.deletePosition(id); load(); };
 
-  const viewAnalysis = async (id: string) => {
+  const viewAnalysis = async (id: string, type: "portfolio" | "economy") => {
     try {
       const a = await api.analysisDetail(id);
-      setActiveAnalysis(a);
-      setShowOlder(false);
+      if (type === "portfolio") { setActivePortfolio(a); setShowOlderPortfolio(false); }
+      else { setActiveEconomy(a); setShowOlderEconomy(false); }
     } catch { /* ignore */ }
   };
 
-  const loadOlder = async () => {
-    const list = await api.analysisList(analysisTab, 20);
-    setOlderList(list);
-    setShowOlder(true);
+  const loadOlderPortfolio = async () => {
+    const list = await api.analysisList("portfolio", 20);
+    setOlderPortfolio(list);
+    setShowOlderPortfolio(true);
   };
 
-  // Switch active analysis when tab changes
-  useEffect(() => {
-    if (analysisTab === "portfolio" && latestPortfolio) setActiveAnalysis(latestPortfolio);
-    else if (analysisTab === "economy" && latestEconomy) setActiveAnalysis(latestEconomy);
-    else setActiveAnalysis(null);
-    setShowOlder(false);
-  }, [analysisTab, latestPortfolio, latestEconomy]);
+  const loadOlderEconomy = async () => {
+    const list = await api.analysisList("economy", 20);
+    setOlderEconomy(list);
+    setShowOlderEconomy(true);
+  };
 
   const openChart = async (ticker: string, range = chartRange) => {
     setChartTicker(ticker); setChartRange(range); setChartLoading(true);
@@ -403,156 +545,27 @@ export default function PortfolioPage() {
         </Card>
       </div>
 
-      {/* Analysis Section — Inline, Tabbed */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Brain className="h-4 w-4" />
-              <div className="flex gap-1">
-                <Button variant={analysisTab === "portfolio" ? "default" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setAnalysisTab("portfolio")}>Portfolio</Button>
-                <Button variant={analysisTab === "economy" ? "default" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setAnalysisTab("economy")}>Economy</Button>
-              </div>
-            </div>
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={loadOlder}>View older</Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Older reports list */}
-          {showOlder && (
-            <div className="mb-4 space-y-1.5 p-3 rounded-lg bg-accent/20">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium">Previous Reports</span>
-                <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setShowOlder(false)}><X className="h-3 w-3" /></Button>
-              </div>
-              {olderList.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No older reports.</p>
-              ) : (
-                olderList.map((a) => (
-                  <div key={a.id} className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors text-xs ${activeAnalysis?.id === a.id ? "bg-accent" : "hover:bg-accent/50"}`}
-                    onClick={() => viewAnalysis(a.id)}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${a.market_sentiment === "bullish" ? "bg-green-500" : a.market_sentiment === "bearish" ? "bg-red-500" : "bg-yellow-500"}`} />
-                      <span className="capitalize">{a.market_sentiment || "neutral"}</span>
-                    </div>
-                    <span className="text-muted-foreground">{new Date(a.created_at).toLocaleDateString("en-CH", { day: "numeric", month: "short" })}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
+      {/* Portfolio Analysis */}
+      <AnalysisCard
+        title="Portfolio Analysis"
+        analysis={activePortfolio}
+        olderList={olderPortfolio}
+        showOlder={showOlderPortfolio}
+        onLoadOlder={loadOlderPortfolio}
+        onCloseOlder={() => setShowOlderPortfolio(false)}
+        onViewOlder={(id) => viewAnalysis(id, "portfolio")}
+      />
 
-          {/* Active Analysis Content */}
-          {!activeAnalysis ? (
-            <p className="text-sm text-muted-foreground py-4">No {analysisTab} analysis yet. Your agent will store reports here.</p>
-          ) : (
-            <div className="space-y-4">
-              {/* Header */}
-              <div className="flex items-center gap-3">
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  activeAnalysis.content.market_sentiment === "bullish" ? "bg-green-500/15 text-green-500" :
-                  activeAnalysis.content.market_sentiment === "bearish" ? "bg-red-500/15 text-red-500" :
-                  "bg-yellow-500/15 text-yellow-500"
-                }`}>{activeAnalysis.content.market_sentiment}</span>
-                <span className="text-xs text-muted-foreground">{new Date(activeAnalysis.created_at).toLocaleString()}</span>
-              </div>
-
-              {/* Market Summary */}
-              <div className="p-3 rounded-lg bg-accent/30">
-                <p className="text-sm">{activeAnalysis.content.market_summary}</p>
-              </div>
-
-              {/* Portfolio: Per-Stock Analysis */}
-              {activeAnalysis.content.stocks && activeAnalysis.content.stocks.length > 0 && (
-                <div className="space-y-3">
-                  {activeAnalysis.content.stocks.map((s) => (
-                    <div key={s.symbol} className="p-4 rounded-lg border">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold">{s.symbol}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                            s.action === "ADD" ? "bg-green-500/15 text-green-500" :
-                            s.action === "SELL" ? "bg-red-500/15 text-red-500" :
-                            "bg-blue-500/15 text-blue-500"
-                          }`}>{s.action}</span>
-                        </div>
-                        <div className="text-right text-xs">
-                          <span className="text-muted-foreground">Entry: {s.entry_price.toFixed(2)}</span>
-                          <span className="mx-1.5 text-muted-foreground">/</span>
-                          <span>Now: {s.current_price.toFixed(2)}</span>
-                          <span className={`ml-2 ${s.unrealized_pnl_pct >= 0 ? "text-green-500" : "text-red-500"}`}>
-                            {s.unrealized_pnl_pct >= 0 ? "+" : ""}{s.unrealized_pnl_pct.toFixed(1)}%
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-2">{s.rationale}</p>
-                      <div className="flex gap-4 text-xs">
-                        {s.key_risks.length > 0 && (
-                          <div className="flex-1">
-                            <p className="font-medium text-red-400 flex items-center gap-1 mb-1"><AlertTriangle className="h-3 w-3" />Risks</p>
-                            <ul className="space-y-0.5 text-muted-foreground">
-                              {s.key_risks.map((r, i) => <li key={i}>- {r}</li>)}
-                            </ul>
-                          </div>
-                        )}
-                        {s.key_catalysts.length > 0 && (
-                          <div className="flex-1">
-                            <p className="font-medium text-green-400 flex items-center gap-1 mb-1"><Zap className="h-3 w-3" />Catalysts</p>
-                            <ul className="space-y-0.5 text-muted-foreground">
-                              {s.key_catalysts.map((c, i) => <li key={i}>- {c}</li>)}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Economy: Indicators, Outlook, Risks, Opportunities */}
-              {activeAnalysis.content.key_indicators && activeAnalysis.content.key_indicators.length > 0 && (
-                <div className="grid gap-2 grid-cols-2 md:grid-cols-4">
-                  {activeAnalysis.content.key_indicators.map((ind, i) => (
-                    <div key={i} className="p-3 rounded-lg border text-center">
-                      <p className="text-[11px] text-muted-foreground">{ind.name}</p>
-                      <p className="text-lg font-bold">{ind.value}</p>
-                      <p className={`text-[10px] ${ind.trend === "up" ? "text-green-500" : ind.trend === "down" ? "text-red-500" : "text-muted-foreground"}`}>
-                        {ind.trend === "up" ? "Trending up" : ind.trend === "down" ? "Trending down" : "Stable"}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {activeAnalysis.content.outlook && (
-                <div className="p-3 rounded-lg border">
-                  <p className="text-xs font-medium mb-1">Outlook</p>
-                  <p className="text-sm text-muted-foreground">{activeAnalysis.content.outlook}</p>
-                </div>
-              )}
-
-              <div className="grid gap-4 md:grid-cols-2">
-                {activeAnalysis.content.risks && activeAnalysis.content.risks.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-red-400 flex items-center gap-1 mb-2"><AlertTriangle className="h-3 w-3" />Key Risks</p>
-                    <ul className="space-y-1 text-xs text-muted-foreground">
-                      {activeAnalysis.content.risks.map((r, i) => <li key={i} className="flex gap-1.5"><span className="text-red-400">-</span>{r}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {activeAnalysis.content.opportunities && activeAnalysis.content.opportunities.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-green-400 flex items-center gap-1 mb-2"><Zap className="h-3 w-3" />Opportunities</p>
-                    <ul className="space-y-1 text-xs text-muted-foreground">
-                      {activeAnalysis.content.opportunities.map((o, i) => <li key={i} className="flex gap-1.5"><span className="text-green-400">-</span>{o}</li>)}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Economy Analysis */}
+      <AnalysisCard
+        title="Economy & Market"
+        analysis={activeEconomy}
+        olderList={olderEconomy}
+        showOlder={showOlderEconomy}
+        onLoadOlder={loadOlderEconomy}
+        onCloseOlder={() => setShowOlderEconomy(false)}
+        onViewOlder={(id) => viewAnalysis(id, "economy")}
+      />
 
       {/* Trade Dialog */}
       <Dialog open={showTrade} onOpenChange={setShowTrade}>
