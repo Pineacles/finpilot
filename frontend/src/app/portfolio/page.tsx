@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { api, PortfolioSummary, Position } from "@/lib/api";
+import { api, PortfolioSummary, Position, PortfolioAnalysis, AnalysisListItem, StockAnalysis } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,8 @@ import {
 } from "recharts";
 import {
   Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3,
-  TrendingUp, TrendingDown, Wallet,
+  TrendingUp, TrendingDown, Wallet, Brain, ChevronDown, ChevronUp,
+  Shield, Zap, AlertTriangle,
 } from "lucide-react";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
@@ -67,15 +68,20 @@ export default function PortfolioPage() {
   const [chartLoading, setChartLoading] = useState(false);
   const [historyData, setHistoryData] = useState<{ date: string; value: number }[]>([]);
   const [historyRange, setHistoryRange] = useState("3mo");
+  const [analysisList, setAnalysisList] = useState<AnalysisListItem[]>([]);
+  const [activeAnalysis, setActiveAnalysis] = useState<PortfolioAnalysis | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       api.portfolio(),
       api.portfolioHistory(historyRange === "1mo" ? 30 : historyRange === "3mo" ? 90 : historyRange === "1y" ? 365 : 180),
-    ]).then(([p, h]) => {
+      api.analysisList(20),
+    ]).then(([p, h, a]) => {
       setPortfolio(p);
       setHistoryData(h);
+      setAnalysisList(a);
     }).finally(() => setLoading(false));
   }, [historyRange]);
 
@@ -116,6 +122,14 @@ export default function PortfolioPage() {
   };
 
   const handleDelete = async (id: string) => { await api.deletePosition(id); load(); };
+
+  const viewAnalysis = async (id: string) => {
+    try {
+      const a = await api.analysisDetail(id);
+      setActiveAnalysis(a);
+      setAnalysisOpen(true);
+    } catch { /* ignore */ }
+  };
 
   const openChart = async (ticker: string, range = chartRange) => {
     setChartTicker(ticker); setChartRange(range); setChartLoading(true);
@@ -369,6 +383,118 @@ export default function PortfolioPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Analysis History */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-1.5"><Brain className="h-4 w-4" />Portfolio Analysis</CardTitle>
+            <span className="text-xs text-muted-foreground">{analysisList.length} reports</span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {analysisList.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No analyses yet. Your agent will store reports here.</p>
+          ) : (
+            <div className="space-y-2">
+              {analysisList.map((a) => (
+                <div key={a.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/40 cursor-pointer transition-colors"
+                  onClick={() => viewAnalysis(a.id)}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2.5 h-2.5 rounded-full ${
+                      a.market_sentiment === "bullish" ? "bg-green-500" :
+                      a.market_sentiment === "bearish" ? "bg-red-500" : "bg-yellow-500"
+                    }`} />
+                    <div>
+                      <p className="text-sm font-medium capitalize">{a.market_sentiment || "neutral"} outlook</p>
+                      <p className="text-[11px] text-muted-foreground">{new Date(a.created_at).toLocaleDateString("en-CH", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{a.stocks_count} stocks analyzed</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Analysis Detail Dialog */}
+      <Dialog open={analysisOpen} onOpenChange={setAnalysisOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+          {activeAnalysis && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Brain className="h-5 w-5" />
+                  Portfolio Analysis
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    activeAnalysis.content.market_sentiment === "bullish" ? "bg-green-500/15 text-green-500" :
+                    activeAnalysis.content.market_sentiment === "bearish" ? "bg-red-500/15 text-red-500" :
+                    "bg-yellow-500/15 text-yellow-500"
+                  }`}>
+                    {activeAnalysis.content.market_sentiment}
+                  </span>
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(activeAnalysis.created_at).toLocaleString()}
+                </p>
+              </DialogHeader>
+
+              <div className="overflow-y-auto flex-1 space-y-4 -mx-6 px-6">
+                {/* Market Summary */}
+                <div className="p-3 rounded-lg bg-accent/30">
+                  <p className="text-sm">{activeAnalysis.content.market_summary}</p>
+                </div>
+
+                {/* Per-Stock Analysis */}
+                <div className="space-y-3">
+                  {activeAnalysis.content.stocks.map((s) => (
+                    <div key={s.symbol} className="p-4 rounded-lg border">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">{s.symbol}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                            s.action === "ADD" ? "bg-green-500/15 text-green-500" :
+                            s.action === "SELL" ? "bg-red-500/15 text-red-500" :
+                            "bg-blue-500/15 text-blue-500"
+                          }`}>{s.action}</span>
+                        </div>
+                        <div className="text-right text-xs">
+                          <span className="text-muted-foreground">Entry: {s.entry_price.toFixed(2)}</span>
+                          <span className="mx-1.5 text-muted-foreground">/</span>
+                          <span>Now: {s.current_price.toFixed(2)}</span>
+                          <span className={`ml-2 ${s.unrealized_pnl_pct >= 0 ? "text-green-500" : "text-red-500"}`}>
+                            {s.unrealized_pnl_pct >= 0 ? "+" : ""}{s.unrealized_pnl_pct.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">{s.rationale}</p>
+                      <div className="flex gap-4 text-xs">
+                        {s.key_risks.length > 0 && (
+                          <div className="flex-1">
+                            <p className="font-medium text-red-400 flex items-center gap-1 mb-1"><AlertTriangle className="h-3 w-3" />Risks</p>
+                            <ul className="space-y-0.5 text-muted-foreground">
+                              {s.key_risks.map((r, i) => <li key={i}>- {r}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        {s.key_catalysts.length > 0 && (
+                          <div className="flex-1">
+                            <p className="font-medium text-green-400 flex items-center gap-1 mb-1"><Zap className="h-3 w-3" />Catalysts</p>
+                            <ul className="space-y-0.5 text-muted-foreground">
+                              {s.key_catalysts.map((c, i) => <li key={i}>- {c}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Trade Dialog */}
       <Dialog open={showTrade} onOpenChange={setShowTrade}>

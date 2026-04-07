@@ -149,10 +149,9 @@ export const api = {
     request<YearlyStats>(`/api/dashboard/stats/yearly${year ? `?year=${year}` : ""}`),
 
   // Analysis
-  analysisLatest: (type?: string) =>
-    request<AnalysisResult[]>(`/api/dashboard/analysis/latest${type ? `?analysis_type=${type}` : ""}`),
-  runAnalysis: (type: string) =>
-    request<AnalysisResult>("/api/dashboard/analysis/run", { method: "POST", body: JSON.stringify({ analysis_type: type }) }),
+  analysisLatest: () => request<PortfolioAnalysis>("/api/dashboard/analysis/latest"),
+  analysisList: (limit = 10) => request<AnalysisListItem[]>(`/api/dashboard/analysis?limit=${limit}`),
+  analysisDetail: (id: string) => request<PortfolioAnalysis>(`/api/dashboard/analysis/${id}`),
 
   // Settings
   getSettings: () => request<{ settings: Record<string, string>; groups: Record<string, { label: string; keys: string[] }> }>("/api/settings"),
@@ -259,19 +258,32 @@ export interface YearlyStats {
   net_worth_history: { date: string; value: number; pnl: number }[];
 }
 
-export interface AnalysisResult {
+export interface StockAnalysis {
+  symbol: string;
+  action: string;
+  current_price: number;
+  entry_price: number;
+  unrealized_pnl_pct: number;
+  rationale: string;
+  key_risks: string[];
+  key_catalysts: string[];
+}
+
+export interface PortfolioAnalysis {
   id: string;
-  analysis_type: string;
   content: {
-    summary?: string;
-    risk_level?: string;
-    key_insights?: string[];
-    recommendations?: string[];
-    sector_breakdown?: Record<string, string>;
-    position_notes?: Record<string, string>;
-    macro_outlook?: string;
+    market_summary: string;
+    market_sentiment: string;
+    stocks: StockAnalysis[];
+    analyzed_at: string;
   };
-  model_used: string | null;
+  created_at: string;
+}
+
+export interface AnalysisListItem {
+  id: string;
+  market_sentiment: string | null;
+  stocks_count: number;
   created_at: string;
 }
 
