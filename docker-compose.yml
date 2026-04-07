@@ -24,7 +24,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-finpilot}:${POSTGRES_PASSWORD:-finpilot_dev}@db:5432/${POSTGRES_DB:-finpilot}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANALYSIS_MODEL: ${ANALYSIS_MODEL:-claude-sonnet-4-20250514}
       SAXO_APP_KEY: ${SAXO_APP_KEY:-}
@@ -35,8 +35,6 @@ services:
       VISECA_PASSWORD: ${VISECA_PASSWORD:-}
     ports:
       - "${API_PORT:-8001}:8000"
-    volumes:
-      - ./backend/app:/app/app
     depends_on:
       db:
         condition: service_healthy
@@ -47,9 +45,9 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-8001}
+      API_URL: http://api:8000
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "${WEB_PORT:-3010}:3000"
     depends_on:
       - api
 

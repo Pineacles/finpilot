@@ -28,6 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await api.login(email, password);
     localStorage.setItem("token", data.access_token);
     localStorage.setItem("refreshToken", data.refresh_token);
+    // Set cookie for middleware auth check
+    document.cookie = `token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
     setIsAuthenticated(true);
     router.push("/");
   };
@@ -35,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
+    document.cookie = "token=; path=/; max-age=0";
     setIsAuthenticated(false);
     router.push("/login");
   };

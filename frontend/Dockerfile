@@ -7,8 +7,8 @@ RUN npm ci
 
 COPY . .
 
-ENV NEXT_PUBLIC_API_URL=http://localhost:8001
-
 RUN npm run build
+
+ENV PORT=3000
 
 CMD ["npm", "start"]

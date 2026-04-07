@@ -9,7 +9,8 @@ import {
   PiggyBank,
   Target,
   ArrowLeftRight,
-  Brain,
+  BarChart3,
+  Tag,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -22,7 +23,8 @@ const nav = [
   { href: "/budgets", label: "Budgets", icon: PiggyBank },
   { href: "/goals", label: "Goals", icon: Target },
   { href: "/cashflow", label: "Cash Flow", icon: ArrowLeftRight },
-  { href: "/analysis", label: "Analysis", icon: Brain },
+  { href: "/stats", label: "Statistics", icon: BarChart3 },
+  { href: "/categories", label: "Categories", icon: Tag },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

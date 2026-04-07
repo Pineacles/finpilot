@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.endpoints import auth, health, dashboard, portfolio, sync, transactions, finance, agent, analysis
+from app.api.endpoints import auth, health, dashboard, portfolio, sync, transactions, finance, agent, analysis, user_settings, stats, csv_import, categorize, merchants
 from app.core.config import settings
 
 app = FastAPI(
@@ -12,7 +12,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3010",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,3 +30,8 @@ app.include_router(transactions.router)
 app.include_router(finance.router)
 app.include_router(agent.router)
 app.include_router(analysis.router)
+app.include_router(user_settings.router)
+app.include_router(stats.router)
+app.include_router(csv_import.router)
+app.include_router(categorize.router)
+app.include_router(merchants.router)

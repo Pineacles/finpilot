@@ -25,7 +25,7 @@ async def list_transactions(
     from_date: date | None = None,
     to_date: date | None = None,
     search: str | None = None,
-    limit: int = Query(default=50, le=200),
+    limit: int = Query(default=50, le=5000),
     offset: int = 0,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
