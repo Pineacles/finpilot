@@ -72,7 +72,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-between">
-        <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
+        <div><p className="text-sm font-medium text-primary mb-1">Settings</p><h1 className="text-3xl font-bold tracking-tight">Configuration</h1></div>
         <div className="flex items-center gap-3">
           {saved && <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 rounded-xl"><CheckCircle2 className="h-3 w-3 mr-1" />Saved</Badge>}
           {hasEdits && <Button onClick={handleSave} disabled={saving} className="rounded-xl"><Save className="h-4 w-4 mr-1.5" />{saving ? "Saving..." : "Save Changes"}</Button>}

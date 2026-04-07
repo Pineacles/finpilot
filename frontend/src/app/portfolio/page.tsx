@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight } from "lucide-react";
 
-const COLORS = ["#f97316","#007aff","#ff9500","#ff3b30","#af52de","#ff2d55","#5ac8fa","#4cd964"];
+const COLORS = ["#3b82f6","#007aff","#ff9500","#ff3b30","#af52de","#ff2d55","#5ac8fa","#4cd964"];
 const RANGES = [{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
 
 function GlassCard({children,className="",delay=0}:{children:React.ReactNode;className?:string;delay?:number}){
@@ -19,7 +19,7 @@ function Sparkline({data,positive}:{data:number[];positive:boolean}){
   if(!data||data.length<2)return null;
   const min=Math.min(...data),max=Math.max(...data),range=max-min||1,h=36,w=90;
   const points=data.map((v,i)=>`${(i/(data.length-1))*w},${h-((v-min)/range)*h}`).join(" ");
-  return <svg width={w} height={h} className="shrink-0"><polyline fill="none" stroke={positive?"#f97316":"#ff3b30"} strokeWidth="2" points={points}/></svg>;
+  return <svg width={w} height={h} className="shrink-0"><polyline fill="none" stroke={positive?"#3b82f6":"#ff3b30"} strokeWidth="2" points={points}/></svg>;
 }
 function PnlBadge({value,pct}:{value:number;pct?:number}){
   const pos=value>=0;
@@ -85,8 +85,9 @@ export default function PortfolioPage(){
       {/* Header */}
       <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Portfolio</h1>
-          <p className="text-[13px] text-muted-foreground mt-1 uppercase tracking-wider">Total Value</p>
+          <p className="text-sm font-medium text-primary mb-1">Portfolio</p>
+          <h1 className="text-3xl font-bold tracking-tight">Investments & Holdings</h1>
+          <p className="text-[13px] text-muted-foreground mt-2 uppercase tracking-wider">Total Value</p>
           <p className="text-4xl font-bold tracking-tight mt-1">{formatCurrency(p?.total_value??0)}</p>
           <div className="flex items-center gap-3 mt-2"><PnlBadge value={p?.total_pnl??0} pct={p?.total_pnl_pct??0}/><span className="text-[13px] text-muted-foreground">all time</span></div>
         </div>
@@ -143,7 +144,7 @@ export default function PortfolioPage(){
               {(()=>{const pos=p?.positions.find(pp=>pp.symbol===chartTicker);return pos?<div className="flex items-center gap-3 mb-3"><span className="text-2xl font-bold tabular-nums">{pos.last_price?.toFixed(2)}</span><span className={`text-sm font-medium ${pos.change>=0?"text-gain":"text-loss"}`}>{pos.change>=0?"+":""}{pos.change.toFixed(2)} ({pos.change_pct>=0?"+":""}{pos.change_pct.toFixed(1)}%)</span></div>:null;})()}
               <div className="flex gap-1 mb-2">{RANGES.map(r=><button key={r.value} onClick={()=>setChartRange(r.value)} className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${chartRange===r.value?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}>{r.label}</button>)}</div>
               <div className="h-52">{chartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:chartData.length===0?<p className="text-sm text-muted-foreground">No data</p>:(
-                <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f97316" stopOpacity={0.2}/><stop offset="100%" stopColor="#f97316" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#f97316" strokeWidth={2} fill="url(#sg)"/></AreaChart></ResponsiveContainer>
+                <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg)"/></AreaChart></ResponsiveContainer>
               )}</div>
             </>
           )}
@@ -165,7 +166,7 @@ export default function PortfolioPage(){
               <span className={`text-[13px] px-3 py-1.5 rounded-xl font-semibold capitalize ${latestPortfolio.content.market_sentiment==="bullish"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":latestPortfolio.content.market_sentiment==="bearish"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"}`}>{latestPortfolio.content.market_sentiment}</span>
             </div>
             <div className="p-5 rounded-2xl bg-accent/60">
-              <p className="text-[15px] leading-[1.8]">{latestPortfolio.content.market_summary}</p>
+              <p className="text-[15px] leading-[1.85] text-foreground/90">{latestPortfolio.content.market_summary}</p>
             </div>
             {latestPortfolio.content.stocks?.map(s=>(
               <div key={s.symbol} className="p-5 rounded-2xl border border-border space-y-3">
@@ -179,10 +180,10 @@ export default function PortfolioPage(){
                     <span className={`ml-3 text-[15px] font-bold ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
                   </div>
                 </div>
-                <p className="text-[15px] leading-[1.75] text-muted-foreground">{s.rationale}</p>
+                <p className="text-[15px] leading-[1.85] text-foreground/80">{s.rationale}</p>
                 <div className="grid gap-5 md:grid-cols-2">
-                  {s.key_risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Risks</p><ul className="space-y-1.5">{s.key_risks.map((r,i)=><li key={i} className="text-[14px] text-muted-foreground leading-relaxed pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
-                  {s.key_catalysts.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Catalysts</p><ul className="space-y-1.5">{s.key_catalysts.map((c,i)=><li key={i} className="text-[14px] text-muted-foreground leading-relaxed pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{c}</li>)}</ul></div>}
+                  {s.key_risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Risks</p><ul className="space-y-1.5">{s.key_risks.map((r,i)=><li key={i} className="text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
+                  {s.key_catalysts.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Catalysts</p><ul className="space-y-1.5">{s.key_catalysts.map((c,i)=><li key={i} className="text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{c}</li>)}</ul></div>}
                 </div>
               </div>
             ))}
@@ -205,7 +206,7 @@ export default function PortfolioPage(){
               <span className={`text-[13px] px-3 py-1.5 rounded-xl font-semibold capitalize ${latestEconomy.content.market_sentiment==="bullish"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":latestEconomy.content.market_sentiment==="bearish"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"}`}>{latestEconomy.content.market_sentiment}</span>
             </div>
             <div className="p-5 rounded-2xl bg-accent/60">
-              <p className="text-[15px] leading-[1.8]">{latestEconomy.content.market_summary}</p>
+              <p className="text-[15px] leading-[1.85] text-foreground/90">{latestEconomy.content.market_summary}</p>
             </div>
             {latestEconomy.content.key_indicators&&latestEconomy.content.key_indicators.length>0&&(
               <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
@@ -223,13 +224,13 @@ export default function PortfolioPage(){
             {latestEconomy.content.outlook&&(
               <div className="p-5 rounded-2xl border border-border">
                 <p className="text-[14px] font-semibold mb-2">Outlook</p>
-                <p className="text-[15px] leading-[1.75] text-muted-foreground">{latestEconomy.content.outlook}</p>
+                <p className="text-[15px] leading-[1.85] text-foreground/80">{latestEconomy.content.outlook}</p>
               </div>
             )}
             {(latestEconomy.content.risks?.length||latestEconomy.content.opportunities?.length)&&(
               <div className="grid gap-5 md:grid-cols-2">
-                {latestEconomy.content.risks&&latestEconomy.content.risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Key Risks</p><ul className="space-y-1.5">{latestEconomy.content.risks.map((r,i)=><li key={i} className="text-[14px] text-muted-foreground leading-relaxed pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
-                {latestEconomy.content.opportunities&&latestEconomy.content.opportunities.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Opportunities</p><ul className="space-y-1.5">{latestEconomy.content.opportunities.map((o,i)=><li key={i} className="text-[14px] text-muted-foreground leading-relaxed pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{o}</li>)}</ul></div>}
+                {latestEconomy.content.risks&&latestEconomy.content.risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Key Risks</p><ul className="space-y-1.5">{latestEconomy.content.risks.map((r,i)=><li key={i} className="text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
+                {latestEconomy.content.opportunities&&latestEconomy.content.opportunities.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Opportunities</p><ul className="space-y-1.5">{latestEconomy.content.opportunities.map((o,i)=><li key={i} className="text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{o}</li>)}</ul></div>}
               </div>
             )}
           </div>

@@ -84,8 +84,9 @@ export default function OverviewPage() {
     <div className="space-y-8">
       {/* Header */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
-        <h1 className="text-3xl font-semibold tracking-tight">Finance Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Welcome back, Admin</p>
+        <p className="text-sm font-medium text-primary mb-1">Overview</p>
+        <h1 className="text-3xl font-bold tracking-tight">Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, Admin</h1>
+        <p className="text-muted-foreground mt-1">Here's how your finances are looking today.</p>
       </motion.div>
 
       {/* Top Metric Cards */}

@@ -11,7 +11,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { ChevronLeft, ChevronRight, Calendar, Wallet, PiggyBank, Receipt, Store, CreditCard, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const COLORS = ["#f97316","#007aff","#ff9500","#ff3b30","#af52de","#ff2d55","#5ac8fa","#4cd964"];
+const COLORS = ["#3b82f6","#007aff","#ff9500","#ff3b30","#af52de","#ff2d55","#5ac8fa","#4cd964"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function GlassCard({children,className="",delay=0}:{children:React.ReactNode;className?:string;delay?:number}){
@@ -49,7 +49,7 @@ export default function StatsPage(){
   return (
     <div className="space-y-8">
       <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex items-center justify-between">
-        <h1 className="text-3xl font-semibold tracking-tight">Statistics</h1>
+        <div><p className="text-sm font-medium text-primary mb-1">Statistics</p><h1 className="text-3xl font-bold tracking-tight">Financial Insights</h1></div>
         <div className="flex items-center gap-3">
           <div className="flex gap-1">{["monthly","yearly"].map(t=><button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-xl text-[14px] font-medium transition-all cursor-pointer capitalize ${tab===t?"bg-primary text-primary-foreground":"glass bg-card text-muted-foreground hover:text-foreground"}`}>{t}</button>)}</div>
           <div className="flex items-center gap-2">
@@ -91,7 +91,7 @@ export default function StatsPage(){
           <div className="grid gap-5 lg:grid-cols-2">
             <GlassCard delay={0.25}>
               <h2 className="text-lg font-semibold mb-4">Spending Pace</h2>
-              <div className="h-64">{monthly.spending_velocity.length===0?<p className="text-muted-foreground">No data.</p>:<ResponsiveContainer width="100%" height="100%"><AreaChart data={monthly.spending_velocity}><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:11}} tickFormatter={d=>d.slice(8)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:11}} tickFormatter={v=>`${(v/1000).toFixed(1)}k`} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>formatCurrency(Number(v))}/><Area type="monotone" dataKey="cumulative" stroke="#f97316" fill="#f97316" fillOpacity={0.12} strokeWidth={2}/></AreaChart></ResponsiveContainer>}</div>
+              <div className="h-64">{monthly.spending_velocity.length===0?<p className="text-muted-foreground">No data.</p>:<ResponsiveContainer width="100%" height="100%"><AreaChart data={monthly.spending_velocity}><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:11}} tickFormatter={d=>d.slice(8)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:11}} tickFormatter={v=>`${(v/1000).toFixed(1)}k`} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>formatCurrency(Number(v))}/><Area type="monotone" dataKey="cumulative" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.12} strokeWidth={2}/></AreaChart></ResponsiveContainer>}</div>
             </GlassCard>
             <GlassCard delay={0.3}>
               <h2 className="text-lg font-semibold mb-4">Fixed vs Variable</h2>
