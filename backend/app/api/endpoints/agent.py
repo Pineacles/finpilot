@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_user_by_api_key
 from app.core.database import get_db
 from app.models.account import Account
-from app.models.finance import Transaction, Budget, Category, RecurringExpense
+from app.models.finance import Transaction, Budget, Category, RecurringExpense, SavingsGoal
 from app.models.stock import StockPosition, StockTransaction
 from app.models.user import User
 from app.schemas.finance import TransactionCreate, TransactionResponse
@@ -511,3 +511,213 @@ async def agent_poll_gmail(
     """Poll Gmail for bank notifications."""
     from app.services.gmail_poller import poll_gmail
     return await poll_gmail(db, user.id)
+
+
+# ── Goals & Budget Targets ───────────────────────────────────────
+
+class GoalCreate(BaseModel):
+    name: str
+    type: str  # monthly_limit | monthly_target | savings_goal
+    amount: float
+    category: str | None = None  # category name for monthly_limit/target
+    currency: str = "CHF"
+    target_date: str | None = None  # ISO date for savings_goal
+
+
+@router.post("/goals")
+async def create_goal(
+    body: GoalCreate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a financial goal.
+
+    Types:
+    - monthly_limit: spending cap (e.g. Food: 750 CHF). Alert when exceeded.
+    - monthly_target: amount to reach monthly (e.g. invest 1500 CHF/month)
+    - savings_goal: long-term milestone with optional target date
+    """
+    if body.type not in ("monthly_limit", "monthly_target", "savings_goal"):
+        raise HTTPException(status_code=400, detail="type must be: monthly_limit, monthly_target, savings_goal")
+
+    if body.type in ("monthly_limit", "monthly_target"):
+        # Use Budget table
+        category_id = None
+        if body.category:
+            cat_result = await db.execute(
+                select(Category).where(and_(Category.user_id == user.id, Category.name == body.category))
+            )
+            cat = cat_result.scalar_one_or_none()
+            if cat:
+                category_id = cat.id
+
+        budget = Budget(
+            user_id=user.id, name=body.name, amount=body.amount,
+            period="monthly", category_id=category_id,
+            start_date=date.today().replace(day=1),
+        )
+        db.add(budget)
+        await db.commit()
+        return {"status": "ok", "id": budget.id, "type": body.type, "name": body.name}
+
+    else:  # savings_goal
+        target_dt = date.fromisoformat(body.target_date) if body.target_date else None
+        goal = SavingsGoal(
+            user_id=user.id, name=body.name,
+            target_amount=body.amount, current_amount=0,
+            target_date=target_dt, currency=body.currency,
+        )
+        db.add(goal)
+        await db.commit()
+        return {"status": "ok", "id": goal.id, "type": body.type, "name": body.name}
+
+
+@router.get("/goals")
+async def list_goals(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all goals (budgets + savings goals)."""
+    # Budgets
+    budget_result = await db.execute(select(Budget, Category).outerjoin(Category, Budget.category_id == Category.id).where(Budget.user_id == user.id))
+    goals = []
+    for b, cat in budget_result.all():
+        goals.append({
+            "id": b.id, "name": b.name,
+            "type": "monthly_limit",  # All budgets treated as limits
+            "amount": b.amount, "category": cat.name if cat else None,
+            "currency": "CHF", "target_date": None,
+        })
+
+    # Savings goals
+    sg_result = await db.execute(select(SavingsGoal).where(SavingsGoal.user_id == user.id))
+    for g in sg_result.scalars().all():
+        goals.append({
+            "id": g.id, "name": g.name,
+            "type": "savings_goal",
+            "amount": g.target_amount, "category": None,
+            "currency": g.currency,
+            "target_date": g.target_date.isoformat() if g.target_date else None,
+        })
+
+    return goals
+
+
+@router.delete("/goals/{goal_id}")
+async def delete_goal(
+    goal_id: str,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a goal (budget or savings goal)."""
+    # Try budget first
+    result = await db.execute(select(Budget).where(and_(Budget.id == goal_id, Budget.user_id == user.id)))
+    budget = result.scalar_one_or_none()
+    if budget:
+        await db.delete(budget)
+        await db.commit()
+        return {"status": "ok", "deleted": budget.name}
+
+    # Try savings goal
+    result = await db.execute(select(SavingsGoal).where(and_(SavingsGoal.id == goal_id, SavingsGoal.user_id == user.id)))
+    goal = result.scalar_one_or_none()
+    if goal:
+        await db.delete(goal)
+        await db.commit()
+        return {"status": "ok", "deleted": goal.name}
+
+    raise HTTPException(status_code=404, detail="Goal not found")
+
+
+@router.get("/goals/progress")
+async def goals_progress(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Current month progress for all goals."""
+    today = date.today()
+    month_start = today.replace(day=1)
+    days_in_month = (month_start.replace(month=month_start.month % 12 + 1, day=1) - timedelta(days=1)).day if month_start.month < 12 else 31
+    days_elapsed = (today - month_start).days + 1
+    pct_month_elapsed = days_elapsed / days_in_month * 100
+
+    progress = []
+
+    # Budget goals (monthly_limit)
+    budget_result = await db.execute(
+        select(Budget, Category).outerjoin(Category, Budget.category_id == Category.id)
+        .where(Budget.user_id == user.id)
+    )
+    for b, cat in budget_result.all():
+        # Calculate actual spending for this budget's category
+        conditions = [
+            Transaction.user_id == user.id,
+            Transaction.date >= month_start,
+            Transaction.amount < 0,
+        ]
+        if b.category_id:
+            conditions.append(Transaction.category_id == b.category_id)
+
+        spent_result = await db.execute(
+            select(func.coalesce(func.sum(func.abs(Transaction.amount)), 0)).where(and_(*conditions))
+        )
+        actual = float(spent_result.scalar())
+        remaining = max(b.amount - actual, 0)
+        pct_used = (actual / b.amount * 100) if b.amount else 0
+
+        # Status logic
+        if actual > b.amount:
+            status = "exceeded"
+        elif pct_used > 80 and pct_month_elapsed < 70:
+            status = "at_risk"
+        else:
+            status = "on_track"
+
+        progress.append({
+            "goal_id": b.id, "name": b.name, "type": "monthly_limit",
+            "target": b.amount, "actual": actual, "remaining": remaining,
+            "pct_used": round(pct_used, 1), "status": status,
+            "category": cat.name if cat else None,
+        })
+
+    # Savings goals
+    sg_result = await db.execute(select(SavingsGoal).where(SavingsGoal.user_id == user.id))
+
+    # Get total portfolio + cash for savings goal progress
+    pos_result = await db.execute(select(StockPosition).where(StockPosition.user_id == user.id))
+    positions = pos_result.scalars().all()
+    portfolio_value = sum((p.last_price or p.avg_cost_price) * p.quantity for p in positions if p.symbol != "CASH")
+    cash_in_portfolio = sum(p.quantity for p in positions if p.symbol == "CASH")
+
+    # Bank balance
+    acct_result = await db.execute(select(Account).where(and_(Account.user_id == user.id, Account.type == "bank")))
+    bank_balance = 0
+    for acct in acct_result.scalars().all():
+        bal_result = await db.execute(
+            select(func.coalesce(func.sum(Transaction.amount), 0)).where(and_(
+                Transaction.user_id == user.id, Transaction.account_id == acct.id,
+            ))
+        )
+        bank_balance += float(bal_result.scalar())
+
+    total_wealth = portfolio_value + cash_in_portfolio + bank_balance
+
+    for g in sg_result.scalars().all():
+        pct_used = (total_wealth / g.target_amount * 100) if g.target_amount else 0
+        remaining = max(g.target_amount - total_wealth, 0)
+
+        if total_wealth >= g.target_amount:
+            status = "achieved"
+        elif g.target_date and g.target_date < today:
+            status = "overdue"
+        else:
+            status = "in_progress"
+
+        progress.append({
+            "goal_id": g.id, "name": g.name, "type": "savings_goal",
+            "target": g.target_amount, "actual": total_wealth, "remaining": remaining,
+            "pct_used": round(pct_used, 1), "status": status,
+            "target_date": g.target_date.isoformat() if g.target_date else None,
+        })
+
+    return progress
