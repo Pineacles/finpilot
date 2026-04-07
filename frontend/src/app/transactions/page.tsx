@@ -245,10 +245,10 @@ function TransactionsContent() {
               <AlertCircle className="h-4 w-4" />{importError}
             </div>
           )}
-          <input ref={fileRef} type="file" accept=".csv,.xml" className="hidden" onChange={handleImport} />
+          <input ref={fileRef} type="file" accept=".csv,.xml,.tsv" className="hidden" onChange={handleImport} />
           <Button onClick={() => fileRef.current?.click()} disabled={importing} variant="outline">
             <Upload className="h-4 w-4 mr-2" />
-            {importing ? "Importing..." : "Import CSV / camt.053"}
+            {importing ? "Importing..." : "Import Bank / Viseca"}
           </Button>
         </div>
       </div>

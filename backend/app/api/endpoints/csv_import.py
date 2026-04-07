@@ -25,8 +25,8 @@ async def upload_file(
         raise HTTPException(status_code=400, detail="No file provided")
 
     ext = file.filename.rsplit(".", 1)[-1].lower()
-    if ext not in ("csv", "xml"):
-        raise HTTPException(status_code=400, detail="File must be .csv or .xml")
+    if ext not in ("csv", "xml", "tsv"):
+        raise HTTPException(status_code=400, detail="File must be .csv, .tsv, or .xml")
 
     raw = await file.read()
     # Try multiple encodings for CSV, XML is usually UTF-8
@@ -39,14 +39,21 @@ async def upload_file(
     else:
         raise HTTPException(status_code=400, detail="Could not decode file")
 
-    # Find or create bank account
+    # Detect format to choose correct account type
+    from app.services.csv_import import detect_format
+    fmt = detect_format(content)
+    is_credit_card = fmt == "viseca"
+
+    # Find or create the right account
     if not account_id:
+        acct_type = "credit_card" if is_credit_card else "bank"
+        acct_name = "Viseca Credit Card" if is_credit_card else "Valiant Bank"
         result = await db.execute(
-            select(Account).where(Account.user_id == user.id, Account.type == "bank")
+            select(Account).where(Account.user_id == user.id, Account.type == acct_type)
         )
         account = result.scalar_one_or_none()
         if not account:
-            account = Account(user_id=user.id, name="Bank Account", type="bank", currency="CHF")
+            account = Account(user_id=user.id, name=acct_name, type=acct_type, currency="CHF")
             db.add(account)
             await db.flush()
         account_id = account.id

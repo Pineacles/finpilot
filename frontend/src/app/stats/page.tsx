@@ -43,6 +43,7 @@ import {
   PiggyBank,
   Receipt,
   Store,
+  CreditCard,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -355,6 +356,29 @@ function MonthlyView({ data, year, month }: { data: MonthlyStats; year: number; 
           </CardContent>
         </Card>
       </div>
+
+      {/* Account Breakdown (Debit vs Credit Card) */}
+      {data.account_breakdown && data.account_breakdown.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base flex items-center gap-1"><CreditCard className="h-4 w-4" />Spending by Account</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              {data.account_breakdown.map((a) => (
+                <div key={a.name} className="flex items-center justify-between p-3 rounded-lg border">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${a.type === "credit_card" ? "bg-orange-500" : "bg-blue-500"}`} />
+                    <div>
+                      <p className="text-sm font-medium">{a.name}</p>
+                      <p className="text-xs text-muted-foreground">{a.count} transactions</p>
+                    </div>
+                  </div>
+                  <p className="text-sm font-bold">{formatCurrency(a.total)}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Top Merchants + Budget vs Actual */}
       <div className="grid gap-6 lg:grid-cols-2">

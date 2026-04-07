@@ -161,7 +161,7 @@ export interface Overview {
   portfolio_value: number;
   portfolio_pnl: number;
   portfolio_pnl_pct: number;
-  accounts: { id: string; name: string; type: string; currency: string }[];
+  accounts: { id: string; name: string; type: string; currency: string; balance: number }[];
   recent_transactions: { id: string; date: string; merchant: string; amount: number; currency: string; category_name: string | null }[];
   budget_health: { id: string; name: string; amount: number; period: string; spent: number }[];
 }
@@ -230,6 +230,7 @@ export interface MonthlyStats {
   spending_velocity: { date: string; cumulative: number }[];
   budget_vs_actual: { name: string; category: string; budget: number; spent: number; remaining: number; pct: number }[];
   recurring_vs_discretionary: { recurring: number; discretionary: number };
+  account_breakdown: { name: string; type: string; total: number; count: number }[];
 }
 
 export interface YearlyStats {

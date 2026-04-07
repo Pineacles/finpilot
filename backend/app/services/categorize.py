@@ -80,6 +80,8 @@ DIRECT_CATEGORY_MAP = {
     "setgebuhr": "Bank Fees",
     "kontoführung": "Bank Fees",
     "kontofuhrung": "Bank Fees",
+    "viseca payment services": "Transfer",
+    "viseca card services": "Transfer",
     "steuern": "Taxes",
     "steueramt": "Taxes",
     "serafe": "Utilities",

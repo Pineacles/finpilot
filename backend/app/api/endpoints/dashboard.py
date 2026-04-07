@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
@@ -28,11 +28,32 @@ async def get_overview(
     portfolio_pnl = portfolio_value - portfolio_cost
     portfolio_pnl_pct = (portfolio_pnl / portfolio_cost * 100) if portfolio_cost else 0
 
-    # Accounts
+    # Accounts with computed balances
     result = await db.execute(
         select(Account).where(Account.user_id == user.id)
     )
-    accounts = [AccountBalance.model_validate(a) for a in result.scalars().all()]
+    raw_accounts = result.scalars().all()
+
+    accounts = []
+    bank_balance = 0.0
+    cc_balance = 0.0
+    for acct in raw_accounts:
+        # Compute balance from transactions
+        bal_result = await db.execute(
+            select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+                and_(Transaction.user_id == user.id, Transaction.account_id == acct.id)
+            )
+        )
+        balance = float(bal_result.scalar())
+
+        ab = AccountBalance.model_validate(acct)
+        ab.balance = balance
+        accounts.append(ab)
+
+        if acct.type == "bank":
+            bank_balance += balance
+        elif acct.type == "credit_card":
+            cc_balance += balance  # Will be negative (debt)
 
     # Recent transactions
     result = await db.execute(
@@ -68,7 +89,7 @@ async def get_overview(
             "spent": 0,  # Will be computed properly when transactions exist
         })
 
-    net_worth = portfolio_value  # Will add bank balances when available
+    net_worth = portfolio_value + bank_balance + cc_balance
 
     return OverviewResponse(
         net_worth=net_worth,

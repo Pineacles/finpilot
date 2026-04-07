@@ -75,11 +75,127 @@ def parse_valiant_csv(content: str) -> list[dict]:
     return transactions
 
 
+def parse_viseca_csv(content: str) -> list[dict]:
+    """Parse Viseca One CSV/TSV export from my.viseca.ch."""
+    lines = content.strip().split("\n")
+    if not lines:
+        return []
+
+    # Detect delimiter: tab, semicolon, or comma
+    header = lines[0]
+    if "\t" in header:
+        delimiter = "\t"
+    elif ";" in header:
+        delimiter = ";"
+    elif "," in header and header.count(",") >= 5:
+        delimiter = ","
+    else:
+        # No standard delimiter — log for debugging
+        import logging
+        logging.getLogger(__name__).warning(
+            f"Viseca CSV: no tab/semicolon/comma found in header. "
+            f"First 100 chars: {repr(header[:100])}"
+        )
+        # Last resort: treat multiple spaces as delimiter
+        lines = [re.sub(r"  +", "\t", line) for line in lines]
+        delimiter = "\t"
+
+    reader = csv.DictReader(lines, delimiter=delimiter)
+    transactions = []
+
+    for row in reader:
+        txn_id = row.get("TransactionId", "").strip()
+        date_str = row.get("Date", "").strip()
+        amount_str = row.get("Amount", "").strip()
+        currency = row.get("Currency", "CHF").strip()
+        merchant = row.get("MerchantName", "").strip()
+        place = row.get("MerchantPlace", "").strip()
+        details = row.get("Details", "").strip()
+        state = row.get("StateType", "").strip()
+        orig_amount_str = row.get("OriginalAmount", "").strip()
+        orig_currency = row.get("OriginalCurrency", "").strip()
+        txn_type = row.get("Type", "").strip()
+
+        # Skip non-booked transactions
+        if state and state not in ("BOOKED", "BILLED"):
+            continue
+
+        if not date_str or not amount_str:
+            continue
+
+        # Parse date: "18/02/2026 00:12" or "18/02/2026"
+        try:
+            txn_date = datetime.strptime(date_str.split(" ")[0], "%d/%m/%Y").date()
+        except ValueError:
+            try:
+                txn_date = datetime.strptime(date_str.split(" ")[0], "%Y-%m-%d").date()
+            except ValueError:
+                continue
+
+        try:
+            raw_amount = float(amount_str.replace("'", "").replace(",", "."))
+        except ValueError:
+            continue
+
+        # Negative amounts in Viseca = payments you made to pay off the bill
+        # Positive amounts = purchases (expenses)
+        if raw_amount < 0:
+            # Bill payment ("Ihre Zahlung - Danke") — this is a credit (positive in our system)
+            amount = abs(raw_amount)
+        else:
+            # Purchase — expense (negative in our system)
+            amount = -abs(raw_amount)
+
+        orig_amount = None
+        if orig_amount_str:
+            try:
+                orig_amount = float(orig_amount_str.replace("'", "").replace(",", "."))
+            except ValueError:
+                pass
+
+        # Use Details for richer description, MerchantName as merchant
+        description = details or merchant
+        if place:
+            description = f"{description} - {place}"
+
+        # Determine merchant name and payment type for special rows
+        payment_type = "CCRD"
+        merchant_name = merchant or details or "Unknown"
+
+        # Viseca fees and bill payments (no CardId, no merchant)
+        if "ihre zahlung" in (details or "").lower():
+            merchant_name = "Viseca Bill Payment"
+            payment_type = "transfer"
+        elif "verzugszins" in (details or "").lower():
+            merchant_name = "Viseca Late Interest"
+            payment_type = "fee"
+        elif "bearbeitungsgebühr" in (details or "").lower() or "rechnungsgebühr" in (details or "").lower():
+            merchant_name = "Viseca Fee"
+            payment_type = "fee"
+
+        transactions.append({
+            "date": txn_date,
+            "description": description,
+            "merchant": merchant_name,
+            "amount": amount,
+            "currency": currency,
+            "original_amount": orig_amount,
+            "original_currency": orig_currency if orig_currency != currency else None,
+            "reference": txn_id,
+            "counterparty": merchant_name,
+            "payment_type": payment_type,
+        })
+
+    return transactions
+
+
 def detect_format(content: str) -> str:
     """Detect file format."""
     stripped = content.strip()
     if stripped.startswith("<?xml") or stripped.startswith("<Document") or "<BkToCstmrStmt>" in stripped:
         return "camt053"
+    if "TransactionId" in content and "MerchantName" in content:
+        return "viseca"
     if "Buchungstext" in content and "Betrag" in content:
         return "valiant"
     if "Datum" in content and "Saldo" in content:
@@ -103,7 +219,9 @@ async def import_transactions(
     fmt = detect_format(content)
     _log(f"Detected format: {fmt}")
 
-    if fmt == "camt053":
+    if fmt == "viseca":
+        raw_transactions = parse_viseca_csv(content)
+    elif fmt == "camt053":
         raw_transactions = parse_camt053(content)
     elif fmt == "valiant":
         raw_transactions = parse_valiant_csv(content)
@@ -180,6 +298,8 @@ async def import_transactions(
             merchant=merchant_name,
             amount=raw["amount"],
             currency=raw.get("currency", "CHF"),
+            original_amount=raw.get("original_amount"),
+            original_currency=raw.get("original_currency"),
             category_id=cat_id,
             viseca_transaction_id=ref if ref and ref != "NOTPROVIDED" else None,
             notes=" | ".join(notes_parts) if notes_parts else None,

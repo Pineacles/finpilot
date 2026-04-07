@@ -166,7 +166,7 @@ SWISS_MERCHANTS = {
     "Hochschule Luzern": ("hochschule luzern|hslu", "Tuition"),
     # Finance
     "bob Finance": ("bob finance", "Bank Fees"),
-    "Viseca": ("viseca", "Bank Fees"),
+    "Viseca": ("viseca payment|viseca card", "Transfer"),
     "PostFinance": ("postfinance", "Transfer"),
     "PayPal": ("paypal", "Online Shopping"),
     "Wise": ("wise|money send.*wise", "Transfer"),

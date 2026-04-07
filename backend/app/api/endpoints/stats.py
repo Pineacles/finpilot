@@ -30,13 +30,31 @@ async def monthly_stats(
     prev_start = month_start - relativedelta(months=1)
     prev_end = month_start - timedelta(days=1)
 
+    # Get Transfer category IDs to exclude from income/expense calculations
+    transfer_cats = await db.execute(
+        select(Category.id).where(and_(
+            Category.user_id == user.id,
+            Category.name.in_(["Transfer", "Viseca Bill Payment"]),
+        ))
+    )
+    transfer_cat_ids = {r[0] for r in transfer_cats.all()}
+
     async def _period_totals(start: date, end: date):
+        # Exclude transfers from income/expense totals
+        conditions = [
+            Transaction.user_id == user.id,
+            Transaction.date >= start,
+            Transaction.date <= end,
+        ]
+        if transfer_cat_ids:
+            conditions.append(Transaction.category_id.notin_(transfer_cat_ids))
+
         result = await db.execute(
             select(
                 func.coalesce(func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)), 0).label("income"),
                 func.coalesce(func.sum(case((Transaction.amount < 0, func.abs(Transaction.amount)), else_=0)), 0).label("expenses"),
                 func.count(Transaction.id).label("txn_count"),
-            ).where(and_(Transaction.user_id == user.id, Transaction.date >= start, Transaction.date <= end))
+            ).where(and_(*conditions))
         )
         row = result.one()
         return {"income": float(row.income), "expenses": float(row.expenses), "txn_count": int(row.txn_count)}
@@ -78,6 +96,7 @@ async def monthly_stats(
             Transaction.date >= month_start,
             Transaction.date <= month_end,
             Transaction.amount < 0,
+            Transaction.category_id.notin_(transfer_cat_ids) if transfer_cat_ids else True,
         ))
         .group_by(Category.id, Category.name, Category.color)
         .order_by(func.sum(func.abs(Transaction.amount)).desc())
@@ -159,6 +178,29 @@ async def monthly_stats(
     )
     recurring_total = float(rec_result.scalar())
 
+    # Spending by account (bank vs credit card)
+    acct_result = await db.execute(
+        select(
+            Account.name,
+            Account.type,
+            func.coalesce(func.sum(func.abs(Transaction.amount)), 0).label("total"),
+            func.count(Transaction.id).label("count"),
+        )
+        .join(Account, Transaction.account_id == Account.id)
+        .where(and_(
+            Transaction.user_id == user.id,
+            Transaction.date >= month_start,
+            Transaction.date <= month_end,
+            Transaction.amount < 0,
+            Transaction.category_id.notin_(transfer_cat_ids) if transfer_cat_ids else True,
+        ))
+        .group_by(Account.name, Account.type)
+    )
+    account_breakdown = [
+        {"name": r.name, "type": r.type, "total": float(r.total), "count": int(r.count)}
+        for r in acct_result.all()
+    ]
+
     return {
         "period": {"year": y, "month": m, "start": month_start.isoformat(), "end": month_end.isoformat()},
         "summary": current,
@@ -172,6 +214,7 @@ async def monthly_stats(
             "recurring": recurring_total,
             "discretionary": max(current["expenses"] - recurring_total, 0),
         },
+        "account_breakdown": account_breakdown,
     }
 
 
@@ -187,13 +230,30 @@ async def yearly_stats(
     prev_year_start = date(y - 1, 1, 1)
     prev_year_end = date(y - 1, 12, 31)
 
+    # Get Transfer category IDs to exclude
+    transfer_cats = await db.execute(
+        select(Category.id).where(and_(
+            Category.user_id == user.id,
+            Category.name.in_(["Transfer", "Viseca Bill Payment"]),
+        ))
+    )
+    transfer_cat_ids = {r[0] for r in transfer_cats.all()}
+
     async def _year_totals(start: date, end: date):
+        conditions = [
+            Transaction.user_id == user.id,
+            Transaction.date >= start,
+            Transaction.date <= end,
+        ]
+        if transfer_cat_ids:
+            conditions.append(Transaction.category_id.notin_(transfer_cat_ids))
+
         result = await db.execute(
             select(
                 func.coalesce(func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)), 0).label("income"),
                 func.coalesce(func.sum(case((Transaction.amount < 0, func.abs(Transaction.amount)), else_=0)), 0).label("expenses"),
                 func.count(Transaction.id).label("txn_count"),
-            ).where(and_(Transaction.user_id == user.id, Transaction.date >= start, Transaction.date <= end))
+            ).where(and_(*conditions))
         )
         row = result.one()
         return {"income": float(row.income), "expenses": float(row.expenses), "txn_count": int(row.txn_count)}

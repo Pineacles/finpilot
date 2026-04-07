@@ -5,6 +5,7 @@ import { api, Overview } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Wallet,
@@ -12,6 +13,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   CreditCard,
+  Landmark,
+  CircleDollarSign,
 } from "lucide-react";
 
 export default function OverviewPage() {
@@ -38,11 +41,16 @@ export default function OverviewPage() {
   if (!data) return <p>Failed to load data</p>;
 
   const pnlPositive = data.portfolio_pnl >= 0;
+  const bankAccounts = data.accounts.filter((a) => a.type === "bank");
+  const ccAccounts = data.accounts.filter((a) => a.type === "credit_card");
+  const bankTotal = bankAccounts.reduce((s, a) => s + a.balance, 0);
+  const ccTotal = ccAccounts.reduce((s, a) => s + a.balance, 0);
 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Overview</h1>
 
+      {/* Top KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -51,56 +59,68 @@ export default function OverviewPage() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{formatCurrency(data.net_worth)}</p>
+            <p className="text-xs text-muted-foreground mt-1">Bank + Portfolio + Credit Card</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Portfolio Value</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Bank Balance</CardTitle>
+            <Landmark className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(data.portfolio_value)}</p>
+            <p className="text-2xl font-bold text-green-500">{formatCurrency(bankTotal)}</p>
+            {bankAccounts.map((a) => (
+              <p key={a.id} className="text-xs text-muted-foreground">{a.name}</p>
+            ))}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Portfolio P&L</CardTitle>
-            {pnlPositive ? <ArrowUpRight className="h-4 w-4 text-green-500" /> : <ArrowDownRight className="h-4 w-4 text-red-500" />}
-          </CardHeader>
-          <CardContent>
-            <p className={`text-2xl font-bold ${pnlPositive ? "text-green-500" : "text-red-500"}`}>
-              {formatCurrency(data.portfolio_pnl)}
-            </p>
-            <p className={`text-xs ${pnlPositive ? "text-green-500" : "text-red-500"}`}>
-              {formatPct(data.portfolio_pnl_pct)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Accounts</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Credit Card</CardTitle>
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{data.accounts.length}</p>
-            <div className="flex gap-1 mt-1">
-              {data.accounts.map((a) => (
-                <Badge key={a.id} variant="secondary" className="text-xs">{a.name}</Badge>
-              ))}
-            </div>
+            {ccAccounts.length === 0 ? (
+              <>
+                <p className="text-2xl font-bold text-muted-foreground">-</p>
+                <p className="text-xs text-muted-foreground">No credit card imported</p>
+              </>
+            ) : (
+              <>
+                <p className={`text-2xl font-bold ${ccTotal < 0 ? "text-red-500" : "text-green-500"}`}>
+                  {formatCurrency(Math.abs(ccTotal))}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {ccTotal < 0 ? "Outstanding balance" : "No balance"}
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Portfolio</CardTitle>
+            {pnlPositive ? <ArrowUpRight className="h-4 w-4 text-green-500" /> : <ArrowDownRight className="h-4 w-4 text-red-500" />}
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{formatCurrency(data.portfolio_value)}</p>
+            <p className={`text-xs ${pnlPositive ? "text-green-500" : "text-red-500"}`}>
+              {formatCurrency(data.portfolio_pnl)} ({formatPct(data.portfolio_pnl_pct)})
+            </p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* Recent Transactions */}
         <Card>
           <CardHeader><CardTitle>Recent Transactions</CardTitle></CardHeader>
           <CardContent>
             {data.recent_transactions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No transactions yet. Sync Viseca to import.</p>
+              <p className="text-sm text-muted-foreground">No transactions yet.</p>
             ) : (
               <div className="space-y-3">
                 {data.recent_transactions.map((t) => (
@@ -119,16 +139,16 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
 
+        {/* Budget Health */}
         <Card>
           <CardHeader><CardTitle>Budget Health</CardTitle></CardHeader>
           <CardContent>
             {data.budget_health.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No budgets set. Go to Budgets to create one.</p>
+              <p className="text-sm text-muted-foreground">No budgets set.</p>
             ) : (
               <div className="space-y-4">
                 {data.budget_health.map((b) => {
                   const pct = b.amount ? (b.spent / b.amount) * 100 : 0;
-                  const over = pct > 100;
                   return (
                     <div key={b.id}>
                       <div className="flex items-center justify-between mb-1">
@@ -137,12 +157,7 @@ export default function OverviewPage() {
                           {formatCurrency(b.spent)} / {formatCurrency(b.amount)}
                         </span>
                       </div>
-                      <div className="h-2 rounded-full bg-secondary">
-                        <div
-                          className={`h-full rounded-full ${over ? "bg-red-500" : "bg-primary"}`}
-                          style={{ width: `${Math.min(pct, 100)}%` }}
-                        />
-                      </div>
+                      <Progress value={Math.min(pct, 100)} className={pct > 100 ? "[&>div]:bg-red-500" : ""} />
                     </div>
                   );
                 })}
