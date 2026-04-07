@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const COLORS = ["oklch(0.70 0.12 175)", "oklch(0.72 0.17 155)", "oklch(0.72 0.14 60)", "oklch(0.68 0.2 25)", "oklch(0.65 0.14 280)", "oklch(0.70 0.12 320)", "oklch(0.65 0.10 200)", "oklch(0.72 0.12 100)"];
+const COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function CategoryDrillDown({ open, onClose, categoryName, categoryId, fromDate, toDate }: {
@@ -320,11 +320,11 @@ function MonthlyView({ data, year, month }: { data: MonthlyStats; year: number; 
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.spending_velocity}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(8)} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v))} labelFormatter={(l) => `Day ${l.slice(8)}`} />
-                  <Area type="monotone" dataKey="cumulative" stroke="oklch(0.70 0.12 175)" fill="oklch(0.70 0.12 175)" fillOpacity={0.15} strokeWidth={2} />
+                  <Area type="monotone" dataKey="cumulative" stroke="#22c55e" fill="#22c55e" fillOpacity={0.15} strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -510,13 +510,13 @@ function YearlyView({ data }: { data: YearlyStats }) {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v) => formatCurrency(Number(v))} />
                 <Legend />
-                <Bar dataKey="income" fill="oklch(0.72 0.17 155)" name="Income" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="expenses" fill="oklch(0.68 0.2 25)" name="Expenses" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="income" fill="#3b82f6" name="Income" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="expenses" fill="#ef4444" name="Expenses" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -530,13 +530,13 @@ function YearlyView({ data }: { data: YearlyStats }) {
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} />
                 <Tooltip formatter={(v) => formatCurrency(Number(v))} />
                 <Bar dataKey="net" name="Net" radius={[2, 2, 0, 0]}>
                   {monthlyData.map((entry, i) => (
-                    <Cell key={i} fill={entry.net >= 0 ? "oklch(0.72 0.17 155)" : "oklch(0.68 0.2 25)"} />
+                    <Cell key={i} fill={entry.net >= 0 ? "#3b82f6" : "#ef4444"} />
                   ))}
                 </Bar>
               </BarChart>
@@ -552,11 +552,11 @@ function YearlyView({ data }: { data: YearlyStats }) {
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data.net_worth_history}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v))} />
-                  <Line type="monotone" dataKey="value" stroke="oklch(0.70 0.12 175)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -593,7 +593,7 @@ function YearlyView({ data }: { data: YearlyStats }) {
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v))} />

@@ -51,102 +51,84 @@
 }
 
 /*
- * FinPilot — Warm Dark Theme
- *
- * Design direction: Swiss private banking meets modern fintech.
- * Warm charcoal backgrounds, cream-tinted foregrounds,
- * teal accent, semantic green/red for financial data.
- *
- * All neutrals are tinted warm (toward hue 60-80, low chroma).
- * No pure black, no pure white, no pure gray.
+ * FinPilot — Deep Navy Dark Theme
+ * Design system by UI/UX Pro Max: fintech, professional, OLED dark
+ * Font: IBM Plex Sans (loaded via layout.tsx)
+ * Palette: Deep slate navy + bright green CTA
  */
 
 :root {
-  /* Light mode — warm stone */
-  --background: oklch(0.98 0.004 80);
-  --foreground: oklch(0.18 0.01 60);
-  --card: oklch(0.99 0.003 80);
-  --card-foreground: oklch(0.18 0.01 60);
-  --popover: oklch(0.99 0.003 80);
-  --popover-foreground: oklch(0.18 0.01 60);
-  --primary: oklch(0.52 0.1 175);
-  --primary-foreground: oklch(0.98 0.004 80);
-  --secondary: oklch(0.95 0.005 80);
-  --secondary-foreground: oklch(0.25 0.01 60);
-  --muted: oklch(0.94 0.006 80);
-  --muted-foreground: oklch(0.50 0.01 60);
-  --accent: oklch(0.94 0.006 80);
-  --accent-foreground: oklch(0.25 0.01 60);
-  --destructive: oklch(0.58 0.22 25);
-  --border: oklch(0.90 0.006 80);
-  --input: oklch(0.90 0.006 80);
-  --ring: oklch(0.52 0.1 175);
-  --gain: oklch(0.62 0.17 155);
-  --loss: oklch(0.60 0.2 25);
-  --chart-1: oklch(0.52 0.1 175);
-  --chart-2: oklch(0.62 0.17 155);
-  --chart-3: oklch(0.65 0.15 60);
-  --chart-4: oklch(0.58 0.22 25);
-  --chart-5: oklch(0.55 0.15 280);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.97 0.004 80);
-  --sidebar-foreground: oklch(0.18 0.01 60);
-  --sidebar-primary: oklch(0.52 0.1 175);
-  --sidebar-primary-foreground: oklch(0.98 0.004 80);
-  --sidebar-accent: oklch(0.94 0.006 80);
-  --sidebar-accent-foreground: oklch(0.25 0.01 60);
-  --sidebar-border: oklch(0.90 0.006 80);
-  --sidebar-ring: oklch(0.52 0.1 175);
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #22c55e;
+  --primary-foreground: #020617;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #e2e8f0;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #22c55e;
+  --gain: #22c55e;
+  --loss: #ef4444;
+  --chart-1: #22c55e;
+  --chart-2: #3b82f6;
+  --chart-3: #f59e0b;
+  --chart-4: #ef4444;
+  --chart-5: #8b5cf6;
+  --radius: 0.625rem;
+  --sidebar: #f8fafc;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #22c55e;
+  --sidebar-primary-foreground: #020617;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #22c55e;
 }
 
 .dark {
-  /* Warm charcoal — tinted toward warm brown/amber, never pure gray */
-  --background: oklch(0.14 0.008 60);
-  --foreground: oklch(0.90 0.01 80);
-  --card: oklch(0.17 0.008 60);
-  --card-foreground: oklch(0.90 0.01 80);
-  --popover: oklch(0.17 0.008 60);
-  --popover-foreground: oklch(0.90 0.01 80);
-
-  /* Teal accent — the signature color */
-  --primary: oklch(0.70 0.12 175);
-  --primary-foreground: oklch(0.14 0.008 60);
-
-  --secondary: oklch(0.20 0.008 60);
-  --secondary-foreground: oklch(0.85 0.01 80);
-  --muted: oklch(0.22 0.008 60);
-  --muted-foreground: oklch(0.58 0.01 70);
-  --accent: oklch(0.20 0.01 60);
-  --accent-foreground: oklch(0.90 0.01 80);
-  --destructive: oklch(0.65 0.2 25);
-
-  /* Borders: very subtle, warm-tinted */
-  --border: oklch(0.26 0.008 60);
-  --input: oklch(0.24 0.008 60);
-  --ring: oklch(0.70 0.12 175);
-
-  /* Semantic: financial */
-  --gain: oklch(0.72 0.17 155);
-  --loss: oklch(0.68 0.2 25);
-
-  /* Charts: intentional palette */
-  --chart-1: oklch(0.70 0.12 175);
-  --chart-2: oklch(0.72 0.17 155);
-  --chart-3: oklch(0.72 0.14 60);
-  --chart-4: oklch(0.68 0.2 25);
-  --chart-5: oklch(0.65 0.14 280);
-
-  --radius: 0.5rem;
-
-  /* Sidebar: slightly lighter than background for depth */
-  --sidebar: oklch(0.12 0.008 60);
-  --sidebar-foreground: oklch(0.85 0.01 80);
-  --sidebar-primary: oklch(0.70 0.12 175);
-  --sidebar-primary-foreground: oklch(0.12 0.008 60);
-  --sidebar-accent: oklch(0.18 0.01 60);
-  --sidebar-accent-foreground: oklch(0.90 0.01 80);
-  --sidebar-border: oklch(0.22 0.008 60);
-  --sidebar-ring: oklch(0.70 0.12 175);
+  --background: #020617;
+  --foreground: #f8fafc;
+  --card: #0f172a;
+  --card-foreground: #f8fafc;
+  --popover: #0f172a;
+  --popover-foreground: #f8fafc;
+  --primary: #22c55e;
+  --primary-foreground: #020617;
+  --secondary: #1e293b;
+  --secondary-foreground: #f8fafc;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #1e293b;
+  --accent-foreground: #f8fafc;
+  --destructive: #ef4444;
+  --border: #1e293b;
+  --input: #1e293b;
+  --ring: #22c55e;
+  --gain: #22c55e;
+  --loss: #ef4444;
+  --chart-1: #22c55e;
+  --chart-2: #3b82f6;
+  --chart-3: #f59e0b;
+  --chart-4: #ef4444;
+  --chart-5: #8b5cf6;
+  --radius: 0.625rem;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #22c55e;
+  --sidebar-primary-foreground: #020617;
+  --sidebar-accent: #1e293b;
+  --sidebar-accent-foreground: #f8fafc;
+  --sidebar-border: #1e293b;
+  --sidebar-ring: #22c55e;
 }
 
 @layer base {
@@ -155,24 +137,26 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-size: 16px;
+    line-height: 1.6;
   }
   html {
     @apply font-sans;
   }
 
-  /* Warm scrollbar */
+  /* Scrollbar */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: oklch(0.30 0.008 60);
-    border-radius: 3px;
+    background: #334155;
+    border-radius: 4px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: oklch(0.40 0.008 60);
+    background: #475569;
   }
 }
