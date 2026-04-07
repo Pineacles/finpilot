@@ -1,238 +1,133 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, SyncStatus } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { motion } from "motion/react";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import {
-  RefreshCw,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Save,
-  Brain,
-  Bot,
-  Mail,
-} from "lucide-react";
+import { Save, CheckCircle2, RefreshCw, Brain, Bot, Mail, Clock, XCircle } from "lucide-react";
+
+function GlassCard({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay, ease: [0.25, 0.46, 0.45, 0.94] }} className={`glass bg-card rounded-3xl p-6 ${className}`}>
+      {children}
+    </motion.div>
+  );
+}
 
 const LABELS: Record<string, string> = {
-  anthropic_api_key: "Anthropic API Key",
-  analysis_model: "Analysis Model",
-  analysis_endpoint: "Custom Agent Endpoint",
-  analysis_auth_header: "Agent Auth Header",
-  agent_endpoint: "Agent API Endpoint",
-  agent_auth_header: "Agent Auth Header",
-  gmail_address: "Gmail Address",
-  gmail_app_password: "App Password",
-  gmail_poll_interval: "Auto-poll Interval (minutes)",
-  gmail_sender_filter: "Sender Emails to Monitor",
+  anthropic_api_key: "Anthropic API Key", analysis_model: "Analysis Model",
+  analysis_endpoint: "Custom Agent Endpoint", analysis_auth_header: "Agent Auth Header",
+  agent_endpoint: "Agent API Endpoint", agent_auth_header: "Agent Auth Header",
+  gmail_address: "Gmail Address", gmail_app_password: "App Password",
+  gmail_poll_interval: "Auto-poll Interval (minutes)", gmail_sender_filter: "Sender Emails to Monitor",
 };
-
 const PLACEHOLDERS: Record<string, string> = {
-  anthropic_api_key: "sk-ant-...",
-  analysis_model: "claude-sonnet-4-20250514",
-  analysis_endpoint: "https://your-agent.example.com/analyze",
-  analysis_auth_header: "Bearer sk-your-token",
-  agent_endpoint: "https://your-agent.example.com/api/finpilot",
-  agent_auth_header: "Bearer sk-your-token",
-  gmail_address: "your-email@gmail.com",
-  gmail_app_password: "16-char app password from Google",
-  gmail_poll_interval: "e.g. 15 (minutes), 0 = manual only",
-  gmail_sender_filter: "e.g. noreply@valiant.ch,alerts@bank.com",
+  anthropic_api_key: "sk-ant-...", analysis_model: "claude-sonnet-4-20250514",
+  analysis_endpoint: "https://your-agent.example.com/analyze", analysis_auth_header: "Bearer sk-your-token",
+  agent_endpoint: "https://your-agent.example.com/api/finpilot", agent_auth_header: "Bearer sk-your-token",
+  gmail_address: "your-email@gmail.com", gmail_app_password: "16-char app password",
+  gmail_poll_interval: "15 (minutes), 0 = manual", gmail_sender_filter: "noreply@valiant.ch",
 };
-
-const HINTS: Record<string, string> = {
-  analysis_endpoint: "If set, analysis requests go to this URL instead of Anthropic.",
-  analysis_auth_header: "Sent as Authorization header to your custom endpoint.",
-  analysis_model: "Default: claude-sonnet-4-20250514. Change to any Anthropic model ID.",
-  agent_endpoint: "Your NanoClaw agent API. Can scrape banks, fetch portfolio data, run scheduled tasks.",
-  agent_auth_header: "Auth header for the agent endpoint.",
-  gmail_sender_filter: "Default: noreply@valiant.ch. Add more senders comma-separated.",
-  gmail_poll_interval: "Set to 15 for every 15 min. 0 or empty = manual only.",
-};
-
-const SENSITIVE_KEYS = new Set(["anthropic_api_key", "analysis_auth_header", "agent_auth_header", "gmail_app_password"]);
-
-const GROUP_ICONS: Record<string, typeof Brain> = {
-  analysis: Brain,
-  agent: Bot,
-  gmail: Mail,
-};
+const SENSITIVE = new Set(["anthropic_api_key", "analysis_auth_header", "agent_auth_header", "gmail_app_password"]);
+const GROUP_ICONS: Record<string, typeof Brain> = { analysis: Brain, agent: Bot, gmail: Mail };
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [groups, setGroups] = useState<Record<string, { label: string; keys: string[] }>>({});
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [syncStatus, setSyncStatus] = useState<SyncStatus[]>([]);
-  const [syncing, setSyncing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [syncing, setSyncing] = useState<string | null>(null);
+  const [gmailResult, setGmailResult] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<any[]>([]);
 
   useEffect(() => {
-    api.getSettings().then((data) => {
-      setSettings(data.settings);
-      setGroups(data.groups);
+    Promise.all([api.getSettings(), api.syncStatus()]).then(([s, st]) => {
+      setSettings(s.settings); setGroups(s.groups); setSyncStatus(st);
     });
-    api.syncStatus().then(setSyncStatus);
   }, []);
-
-  const handleChange = (key: string, value: string) => {
-    setEdits({ ...edits, [key]: value });
-    setSaved(false);
-  };
 
   const handleSave = async () => {
     setSaving(true);
-    try {
-      await api.updateSettings(edits);
-      // Refresh settings to get masked values
-      const data = await api.getSettings();
-      setSettings(data.settings);
-      setEdits({});
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } finally {
-      setSaving(false);
-    }
+    try { await api.updateSettings(edits); const d = await api.getSettings(); setSettings(d.settings); setEdits({}); setSaved(true); setTimeout(() => setSaved(false), 3000); }
+    finally { setSaving(false); }
   };
-
-  const [gmailResult, setGmailResult] = useState<string | null>(null);
 
   const handleSync = async (source: "gmail") => {
-    setSyncing(source);
-    setGmailResult(null);
-    // Auto-save any pending edits before syncing
-    if (Object.keys(edits).length > 0) {
-      await api.updateSettings(edits);
-      const data = await api.getSettings();
-      setSettings(data.settings);
-      setEdits({});
-    }
+    setSyncing(source); setGmailResult(null);
+    if (Object.keys(edits).length > 0) { await api.updateSettings(edits); const d = await api.getSettings(); setSettings(d.settings); setEdits({}); }
     try {
-      if (source === "gmail") {
-        const result = await api.syncGmail();
-        setGmailResult(
-          result.balance !== null
-            ? `${result.new_transactions} new transactions. Balance: CHF ${result.balance.toLocaleString("de-CH", { minimumFractionDigits: 2 })}`
-            : `${result.new_transactions} new transactions.${result.errors.length ? " Errors: " + result.errors.join(", ") : ""}`
-        );
-      }
+      const r = await api.syncGmail();
+      setGmailResult(r.balance !== null ? `${r.new_transactions} new. Balance: CHF ${r.balance.toLocaleString("de-CH", { minimumFractionDigits: 2 })}` : `${r.new_transactions} new.${r.errors.length ? " " + r.errors.join(", ") : ""}`);
       setSyncStatus(await api.syncStatus());
-    } catch {
-      setSyncStatus(await api.syncStatus());
-    } finally {
-      setSyncing(null);
-    }
+    } catch { setSyncStatus(await api.syncStatus()); }
+    finally { setSyncing(null); }
   };
 
-  const statusIcon = (status: string) => {
-    if (status === "success") return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-    if (status === "failed") return <XCircle className="h-4 w-4 text-red-500" />;
-    return <Clock className="h-4 w-4 text-muted-foreground" />;
-  };
-
+  const handleChange = (key: string, value: string) => { setEdits({ ...edits, [key]: value }); };
   const hasEdits = Object.keys(edits).length > 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        {hasEdits && (
-          <Button onClick={handleSave} disabled={saving}>
-            <Save className="h-4 w-4 mr-2" />
-            {saving ? "Saving..." : "Save Changes"}
-          </Button>
-        )}
-        {saved && (
-          <Badge variant="secondary" className="text-gain">
-            <CheckCircle2 className="h-3 w-3 mr-1" /> Saved
-          </Badge>
-        )}
-      </div>
+    <div className="space-y-8">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-between">
+        <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
+        <div className="flex items-center gap-3">
+          {saved && <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 rounded-xl"><CheckCircle2 className="h-3 w-3 mr-1" />Saved</Badge>}
+          {hasEdits && <Button onClick={handleSave} disabled={saving} className="rounded-xl"><Save className="h-4 w-4 mr-1.5" />{saving ? "Saving..." : "Save Changes"}</Button>}
+        </div>
+      </motion.div>
 
-      {/* Settings Groups */}
-      {Object.entries(groups).map(([groupKey, group]) => {
+      {Object.entries(groups).map(([groupKey, group], gi) => {
         const Icon = GROUP_ICONS[groupKey] || Brain;
+        const status = syncStatus.find((s: any) => s.source === groupKey);
         return (
-          <Card key={groupKey}>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Icon className="h-5 w-5 text-primary" />
-                <CardTitle>{group.label}</CardTitle>
+          <GlassCard key={groupKey} delay={0.05 + gi * 0.05}>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
+                <Icon className="h-5 w-5 text-muted-foreground" />
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {group.keys.map((key) => {
-                const currentValue = edits[key] ?? "";
-                const savedValue = settings[key] || "";
-                const isEdited = key in edits;
-                const isSensitive = SENSITIVE_KEYS.has(key);
+              <h2 className="text-lg font-semibold">{group.label}</h2>
+            </div>
 
+            <div className="space-y-4">
+              {group.keys.map(key => {
+                const current = edits[key] ?? settings[key] ?? "";
+                const isSensitive = SENSITIVE.has(key);
                 return (
                   <div key={key}>
-                    <Label className="text-sm">{LABELS[key] || key}</Label>
+                    <label className="text-[13px] text-muted-foreground block mb-1.5">{LABELS[key] || key}</label>
                     <Input
-                      type={isSensitive && !isEdited ? "password" : "text"}
+                      type={isSensitive ? "password" : "text"}
+                      value={current}
+                      onChange={e => handleChange(key, e.target.value)}
                       placeholder={PLACEHOLDERS[key] || ""}
-                      value={isEdited ? currentValue : savedValue}
-                      onChange={(e) => handleChange(key, e.target.value)}
-                      className="mt-1 font-mono text-sm"
+                      className="rounded-xl h-11"
                     />
-                    {HINTS[key] && (
-                      <p className="text-xs text-muted-foreground mt-1">{HINTS[key]}</p>
-                    )}
                   </div>
                 );
               })}
+            </div>
 
-              {/* Sync button for gmail */}
-              {groupKey === "gmail" && (
-                <>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {statusIcon(syncStatus.find((s) => s.source === groupKey)?.status || "never")}
-                      <span className="text-sm text-muted-foreground">
-                        {syncStatus.find((s) => s.source === groupKey)?.synced_at
-                          ? `Last sync: ${new Date(syncStatus.find((s) => s.source === groupKey)!.synced_at!).toLocaleString()}`
-                          : "Never synced"}
-                      </span>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleSync("gmail")}
-                      disabled={syncing === groupKey}
-                    >
-                      <RefreshCw className={`h-4 w-4 mr-2 ${syncing === groupKey ? "animate-spin" : ""}`} />
-                      Poll Emails
-                    </Button>
+            {groupKey === "gmail" && (
+              <div className="mt-5 pt-5 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+                    {status?.status === "success" ? <CheckCircle2 className="h-4 w-4 text-gain" /> : status?.status === "failed" ? <XCircle className="h-4 w-4 text-loss" /> : <Clock className="h-4 w-4" />}
+                    {status?.synced_at ? `Last: ${new Date(status.synced_at).toLocaleString()}` : "Never synced"}
                   </div>
-                  {groupKey === "gmail" && gmailResult && (
-                    <p className="text-xs text-green-500 mt-2">{gmailResult}</p>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
+                  <Button variant="outline" onClick={() => handleSync("gmail")} disabled={syncing === "gmail"} className="rounded-xl">
+                    <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing === "gmail" ? "animate-spin" : ""}`} />
+                    Poll Emails
+                  </Button>
+                </div>
+                {gmailResult && <p className="text-[13px] text-gain mt-2">{gmailResult}</p>}
+              </div>
+            )}
+          </GlassCard>
         );
       })}
-
-      {/* Profile */}
-      <Card>
-        <CardHeader><CardTitle>Profile</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-2 text-sm">
-            <p><span className="text-muted-foreground">Email:</span> user@example.com</p>
-            <p><span className="text-muted-foreground">Currency:</span> CHF</p>
-            <p><span className="text-muted-foreground">App:</span> FinPilot v0.1.0</p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

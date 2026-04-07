@@ -1,22 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion } from "motion/react";
 import { api, Category, MerchantRule } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Plus, Trash2, Tag, Store, Search, Pencil, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, Tag, Store, Search, ChevronRight } from "lucide-react";
+
+function GlassCard({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay, ease: [0.25, 0.46, 0.45, 0.94] }} className={`glass bg-card rounded-3xl p-6 ${className}`}>
+      {children}
+    </motion.div>
+  );
+}
 
 function buildCategoryTree(categories: Category[]) {
   const parents = categories.filter((c) => !c.parent_id);
@@ -30,21 +28,31 @@ function buildCategoryTree(categories: Category[]) {
   return { parents, childMap };
 }
 
+function buildCategoryOptions(categories: Category[]) {
+  const { parents, childMap } = buildCategoryTree(categories);
+  const opts: { value: string; label: string }[] = [];
+  for (const p of parents.sort((a, b) => a.name.localeCompare(b.name))) {
+    const kids = (childMap[p.id] || []).sort((a, b) => a.name.localeCompare(b.name));
+    if (kids.length > 0) {
+      opts.push({ value: p.id, label: p.name });
+      for (const k of kids) opts.push({ value: k.id, label: `  ${k.name}` });
+    } else {
+      opts.push({ value: p.id, label: p.name });
+    }
+  }
+  return opts;
+}
+
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [merchants, setMerchants] = useState<MerchantRule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"categories" | "rules">("categories");
   const [merchantSearch, setMerchantSearch] = useState("");
-
-  // New category form
   const [newCatName, setNewCatName] = useState("");
   const [newCatType, setNewCatType] = useState("expense");
   const [newCatParent, setNewCatParent] = useState("");
-
-  // New merchant form
   const [newMerchant, setNewMerchant] = useState({ name: "", patterns: "", category_id: "" });
-
-  // Edit merchant
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", patterns: "", category_id: "" });
 
@@ -53,318 +61,160 @@ export default function CategoriesPage() {
       .then(([c, m]) => { setCategories(c); setMerchants(m); })
       .finally(() => setLoading(false));
   };
-
   useEffect(load, []);
 
   const handleCreateCategory = async () => {
     if (!newCatName.trim()) return;
-    await api.createCategory({
-      name: newCatName.trim(),
-      type: newCatType,
-      parent_id: newCatParent || undefined,
-    });
-    setNewCatName("");
-    setNewCatParent("");
-    load();
+    await api.createCategory({ name: newCatName.trim(), type: newCatType, parent_id: newCatParent || undefined });
+    setNewCatName(""); setNewCatParent(""); load();
   };
-
   const handleCreateMerchant = async () => {
     if (!newMerchant.name.trim() || !newMerchant.patterns.trim()) return;
-    await api.createMerchant({
-      name: newMerchant.name.trim(),
-      patterns: newMerchant.patterns.trim().toLowerCase(),
-      default_category_id: newMerchant.category_id || undefined,
-    });
-    setNewMerchant({ name: "", patterns: "", category_id: "" });
-    load();
+    await api.createMerchant({ name: newMerchant.name.trim(), patterns: newMerchant.patterns.trim().toLowerCase(), default_category_id: newMerchant.category_id || undefined });
+    setNewMerchant({ name: "", patterns: "", category_id: "" }); load();
   };
-
   const handleUpdateMerchant = async (id: string) => {
-    await api.updateMerchant(id, {
-      name: editForm.name || undefined,
-      patterns: editForm.patterns || undefined,
-      default_category_id: editForm.category_id || undefined,
-    });
-    setEditingId(null);
-    load();
+    await api.updateMerchant(id, { name: editForm.name || undefined, patterns: editForm.patterns || undefined, default_category_id: editForm.category_id || undefined });
+    setEditingId(null); load();
   };
-
-  const handleDeleteMerchant = async (id: string) => {
-    await api.deleteMerchant(id);
-    load();
-  };
-
-  const startEdit = (m: MerchantRule) => {
-    setEditingId(m.id);
-    setEditForm({ name: m.name, patterns: m.patterns, category_id: m.default_category_id || "" });
-  };
-
-  const filteredMerchants = merchantSearch
-    ? merchants.filter((m) =>
-        m.name.toLowerCase().includes(merchantSearch.toLowerCase()) ||
-        m.patterns.toLowerCase().includes(merchantSearch.toLowerCase())
-      )
-    : merchants;
+  const handleDeleteMerchant = async (id: string) => { await api.deleteMerchant(id); load(); };
 
   const { parents, childMap } = buildCategoryTree(categories);
-
-  // Grouped select options for category dropdowns
-  const categoryOptions = (() => {
-    const opts: { value: string; label: string; isParent?: boolean }[] = [];
-    for (const p of parents.sort((a, b) => a.name.localeCompare(b.name))) {
-      const kids = childMap[p.id] || [];
-      if (kids.length > 0) {
-        opts.push({ value: p.id, label: p.name, isParent: true });
-        for (const k of kids.sort((a, b) => a.name.localeCompare(b.name))) {
-          opts.push({ value: k.id, label: `  ${k.name}` });
-        }
-      } else {
-        opts.push({ value: p.id, label: p.name });
-      }
-    }
-    return opts;
-  })();
+  const catOptions = buildCategoryOptions(categories);
+  const filteredMerchants = merchantSearch
+    ? merchants.filter(m => m.name.toLowerCase().includes(merchantSearch.toLowerCase()) || m.patterns.toLowerCase().includes(merchantSearch.toLowerCase()))
+    : merchants;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Categories & Rules</h1>
+    <div className="space-y-8">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+        <h1 className="text-3xl font-semibold tracking-tight">Categories & Rules</h1>
+      </motion.div>
 
-      <Tabs defaultValue="categories">
-        <TabsList>
-          <TabsTrigger value="categories"><Tag className="h-4 w-4 mr-1" />Categories ({categories.length})</TabsTrigger>
-          <TabsTrigger value="rules"><Store className="h-4 w-4 mr-1" />Merchant Rules ({merchants.length})</TabsTrigger>
-        </TabsList>
+      {/* Tabs */}
+      <div className="flex gap-2">
+        {(["categories", "rules"] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} className={`px-5 py-2.5 rounded-xl text-[15px] font-medium transition-all cursor-pointer capitalize flex items-center gap-2 ${tab === t ? "bg-primary text-primary-foreground" : "glass bg-card text-muted-foreground hover:text-foreground"}`}>
+            {t === "categories" ? <Tag className="h-4 w-4" /> : <Store className="h-4 w-4" />}
+            {t} ({t === "categories" ? categories.length : merchants.length})
+          </button>
+        ))}
+      </div>
 
-        {/* Categories */}
-        <TabsContent value="categories" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Add Category</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <Label className="text-xs">Name</Label>
-                  <Input
-                    placeholder="e.g. Gym"
-                    value={newCatName}
-                    onChange={(e) => setNewCatName(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-                <div className="w-32">
-                  <Label className="text-xs">Type</Label>
-                  <select
-                    className="w-full rounded-md border bg-background px-2 py-2 text-sm"
-                    value={newCatType}
-                    onChange={(e) => setNewCatType(e.target.value)}
-                  >
-                    <option value="expense">Expense</option>
-                    <option value="income">Income</option>
-                    <option value="transfer">Transfer</option>
-                  </select>
-                </div>
-                <div className="w-40">
-                  <Label className="text-xs">Parent (optional)</Label>
-                  <select
-                    className="w-full rounded-md border bg-background px-2 py-2 text-sm"
-                    value={newCatParent}
-                    onChange={(e) => setNewCatParent(e.target.value)}
-                  >
-                    <option value="">None (top-level)</option>
-                    {parents.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <Button onClick={handleCreateCategory} size="sm">
-                  <Plus className="h-4 w-4 mr-1" />Add
-                </Button>
+      {tab === "categories" ? (
+        <>
+          {/* Add Category */}
+          <GlassCard delay={0.05}>
+            <h2 className="text-lg font-semibold mb-4">Add Category</h2>
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="flex-1 min-w-[150px]">
+                <label className="text-[13px] text-muted-foreground block mb-1.5">Name</label>
+                <Input placeholder="e.g. Gym" value={newCatName} onChange={e => setNewCatName(e.target.value)} className="rounded-xl h-11" />
               </div>
-            </CardContent>
-          </Card>
+              <div className="w-32">
+                <label className="text-[13px] text-muted-foreground block mb-1.5">Type</label>
+                <select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={newCatType} onChange={e => setNewCatType(e.target.value)}>
+                  <option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option>
+                </select>
+              </div>
+              <div className="w-40">
+                <label className="text-[13px] text-muted-foreground block mb-1.5">Parent</label>
+                <select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={newCatParent} onChange={e => setNewCatParent(e.target.value)}>
+                  <option value="">None (top-level)</option>
+                  {parents.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <Button onClick={handleCreateCategory} className="rounded-xl h-11 px-5"><Plus className="h-4 w-4 mr-1" />Add</Button>
+            </div>
+          </GlassCard>
 
-          <Card>
-            <CardHeader><CardTitle className="text-base">Category Hierarchy</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-1">
-                {parents.sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
-                  const kids = (childMap[p.id] || []).sort((a, b) => a.name.localeCompare(b.name));
-                  return (
-                    <div key={p.id}>
-                      <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50">
-                        <div className={`w-3 h-3 rounded-full ${
-                          p.type === "income" ? "bg-gain" : p.type === "transfer" ? "bg-primary" : "bg-loss"
-                        }`} />
-                        <span className="font-medium text-sm">{p.name}</span>
-                        <Badge variant="secondary" className="text-[10px] capitalize">{p.type}</Badge>
-                        {kids.length > 0 && (
-                          <span className="text-xs text-muted-foreground ml-auto">{kids.length} sub</span>
-                        )}
-                      </div>
-                      {kids.length > 0 && (
-                        <div className="ml-6 border-l pl-3 space-y-0.5">
-                          {kids.map((k) => (
-                            <div key={k.id} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-accent/30">
-                              <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-sm">{k.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+          {/* Hierarchy */}
+          <GlassCard delay={0.1}>
+            <h2 className="text-lg font-semibold mb-4">Category Hierarchy</h2>
+            <div className="space-y-1">
+              {parents.sort((a, b) => a.name.localeCompare(b.name)).map(p => {
+                const kids = (childMap[p.id] || []).sort((a, b) => a.name.localeCompare(b.name));
+                return (
+                  <div key={p.id}>
+                    <div className="flex items-center gap-3 p-3 rounded-2xl hover:bg-accent transition-colors">
+                      <div className={`w-3 h-3 rounded-full ${p.type === "income" ? "bg-gain" : p.type === "transfer" ? "bg-blue-500" : "bg-loss"}`} />
+                      <span className="font-medium text-[15px]">{p.name}</span>
+                      <Badge variant="secondary" className="text-[11px] capitalize rounded-lg">{p.type}</Badge>
+                      {kids.length > 0 && <span className="text-[13px] text-muted-foreground ml-auto">{kids.length} sub</span>}
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    {kids.length > 0 && (
+                      <div className="ml-8 border-l border-border pl-4 space-y-0.5">
+                        {kids.map(k => (
+                          <div key={k.id} className="flex items-center gap-2 py-2 px-3 rounded-xl hover:bg-accent transition-colors">
+                            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-[15px]">{k.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </GlassCard>
+        </>
+      ) : (
+        <>
+          {/* Add Merchant Rule */}
+          <GlassCard delay={0.05}>
+            <h2 className="text-lg font-semibold mb-4">Add Merchant Rule</h2>
+            <p className="text-[13px] text-muted-foreground mb-4">When a transaction description contains any pattern, it auto-categorizes.</p>
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="flex-1 min-w-[120px]"><label className="text-[13px] text-muted-foreground block mb-1.5">Name</label><Input placeholder="Starbucks" value={newMerchant.name} onChange={e => setNewMerchant({ ...newMerchant, name: e.target.value })} className="rounded-xl h-11" /></div>
+              <div className="flex-1 min-w-[120px]"><label className="text-[13px] text-muted-foreground block mb-1.5">Patterns (pipe-separated)</label><Input placeholder="starbucks|star bucks" value={newMerchant.patterns} onChange={e => setNewMerchant({ ...newMerchant, patterns: e.target.value })} className="rounded-xl h-11 font-mono text-[13px]" /></div>
+              <div className="w-48"><label className="text-[13px] text-muted-foreground block mb-1.5">Category</label><select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={newMerchant.category_id} onChange={e => setNewMerchant({ ...newMerchant, category_id: e.target.value })}><option value="">Select...</option>{catOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
+              <Button onClick={handleCreateMerchant} className="rounded-xl h-11 px-5"><Plus className="h-4 w-4 mr-1" />Add</Button>
+            </div>
+          </GlassCard>
 
-        {/* Merchant Rules */}
-        <TabsContent value="rules" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Add Merchant Rule</CardTitle>
-              <p className="text-xs text-muted-foreground">
-                When a transaction description contains any of the patterns, it auto-categorizes to the selected category.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <Label className="text-xs">Merchant Name</Label>
-                  <Input
-                    placeholder="e.g. Starbucks"
-                    value={newMerchant.name}
-                    onChange={(e) => setNewMerchant({ ...newMerchant, name: e.target.value })}
-                    className="text-sm"
-                  />
-                </div>
-                <div className="flex-1">
-                  <Label className="text-xs">Match Patterns (pipe-separated)</Label>
-                  <Input
-                    placeholder="e.g. starbucks|star bucks"
-                    value={newMerchant.patterns}
-                    onChange={(e) => setNewMerchant({ ...newMerchant, patterns: e.target.value })}
-                    className="text-sm font-mono"
-                  />
-                </div>
-                <div className="w-48">
-                  <Label className="text-xs">Category</Label>
-                  <select
-                    className="w-full rounded-md border bg-background px-2 py-2 text-sm"
-                    value={newMerchant.category_id}
-                    onChange={(e) => setNewMerchant({ ...newMerchant, category_id: e.target.value })}
-                  >
-                    <option value="">Select...</option>
-                    {categoryOptions.map((o) => (
-                      <option key={o.value} value={o.value} className={o.isParent ? "font-bold" : ""}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <Button onClick={handleCreateMerchant} size="sm">
-                  <Plus className="h-4 w-4 mr-1" />Add
-                </Button>
+          {/* Rules list */}
+          <GlassCard delay={0.1}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">All Rules</h2>
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Search rules..." value={merchantSearch} onChange={e => setMerchantSearch(e.target.value)} className="pl-9 rounded-xl h-10" />
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">All Rules</CardTitle>
-                <div className="relative w-64">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search rules..."
-                    value={merchantSearch}
-                    onChange={(e) => setMerchantSearch(e.target.value)}
-                    className="pl-9 text-sm"
-                  />
+            </div>
+            <div className="space-y-1 max-h-[500px] overflow-y-auto">
+              {filteredMerchants.map(m => (
+                <div key={m.id} className="flex items-center justify-between p-3 rounded-2xl hover:bg-accent transition-colors group">
+                  {editingId === m.id ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="h-9 rounded-xl text-[14px]" />
+                      <Input value={editForm.patterns} onChange={e => setEditForm({ ...editForm, patterns: e.target.value })} className="h-9 rounded-xl text-[14px] font-mono" />
+                      <select className="h-9 rounded-xl bg-accent px-2 text-[14px] border-0" value={editForm.category_id} onChange={e => setEditForm({ ...editForm, category_id: e.target.value })}>
+                        <option value="">--</option>{catOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      <button className="cursor-pointer" onClick={() => handleUpdateMerchant(m.id)}><Check className="h-4 w-4 text-gain" /></button>
+                      <button className="cursor-pointer" onClick={() => setEditingId(null)}><X className="h-4 w-4 text-muted-foreground" /></button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-4">
+                        <span className="font-medium text-[15px]">{m.name}</span>
+                        <code className="text-[12px] text-muted-foreground font-mono">{m.patterns}</code>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {m.category_name ? <Badge variant="secondary" className="rounded-lg">{m.category_name}</Badge> : <span className="text-muted-foreground">--</span>}
+                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button className="cursor-pointer p-1" onClick={() => { setEditingId(m.id); setEditForm({ name: m.name, patterns: m.patterns, category_id: m.default_category_id || "" }); }}><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                          <button className="cursor-pointer p-1" onClick={() => handleDeleteMerchant(m.id)}><Trash2 className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              ) : (
-                <div className="max-h-[500px] overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Merchant</TableHead>
-                        <TableHead>Patterns</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead className="text-right w-24">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredMerchants.map((m) => (
-                        <TableRow key={m.id}>
-                          {editingId === m.id ? (
-                            <>
-                              <TableCell>
-                                <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="text-sm h-8" />
-                              </TableCell>
-                              <TableCell>
-                                <Input value={editForm.patterns} onChange={(e) => setEditForm({ ...editForm, patterns: e.target.value })} className="text-sm h-8 font-mono" />
-                              </TableCell>
-                              <TableCell>
-                                <select
-                                  className="rounded-md border bg-background px-2 py-1 text-sm"
-                                  value={editForm.category_id}
-                                  onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}
-                                >
-                                  <option value="">--</option>
-                                  {categoryOptions.map((o) => (
-                                    <option key={o.value} value={o.value}>{o.label}</option>
-                                  ))}
-                                </select>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-1">
-                                  <Button size="sm" variant="ghost" onClick={() => handleUpdateMerchant(m.id)}>Save</Button>
-                                  <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>
-                                </div>
-                              </TableCell>
-                            </>
-                          ) : (
-                            <>
-                              <TableCell className="font-medium">{m.name}</TableCell>
-                              <TableCell>
-                                <code className="text-xs text-muted-foreground">{m.patterns}</code>
-                              </TableCell>
-                              <TableCell>
-                                {m.category_name ? (
-                                  <Badge variant="secondary">{m.category_name}</Badge>
-                                ) : (
-                                  <span className="text-muted-foreground">--</span>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-1">
-                                  <Button size="icon" variant="ghost" onClick={() => startEdit(m)}>
-                                    <Pencil className="h-3 w-3" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" onClick={() => handleDeleteMerchant(m.id)}>
-                                    <Trash2 className="h-3 w-3 text-muted-foreground" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </>
-                          )}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              ))}
+            </div>
+          </GlassCard>
+        </>
+      )}
     </div>
   );
 }
