@@ -50,139 +50,130 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* FinPilot — Apple Glass + Orange Accent */
+/* FinPilot — Apple Glass + Blue Accent */
 
 :root {
-  --background: #f2f2f7;
-  --foreground: #1c1c1e;
-  --card: rgba(255, 255, 255, 0.72);
-  --card-foreground: #1c1c1e;
-  --popover: rgba(255, 255, 255, 0.9);
-  --popover-foreground: #1c1c1e;
-  --primary: #f97316;
+  --background: #f0f1f5;
+  --foreground: #18181b;
+  --card: rgba(255, 255, 255, 0.7);
+  --card-foreground: #18181b;
+  --popover: rgba(255, 255, 255, 0.92);
+  --popover-foreground: #18181b;
+  --primary: #3b82f6;
   --primary-foreground: #ffffff;
-  --secondary: #e5e5ea;
-  --secondary-foreground: #1c1c1e;
-  --muted: #e5e5ea;
-  --muted-foreground: #8e8e93;
+  --secondary: #e4e4e7;
+  --secondary-foreground: #18181b;
+  --muted: #e4e4e7;
+  --muted-foreground: #71717a;
   --accent: rgba(0, 0, 0, 0.04);
-  --accent-foreground: #1c1c1e;
-  --destructive: #ff3b30;
-  --border: rgba(0, 0, 0, 0.08);
-  --input: rgba(0, 0, 0, 0.06);
-  --ring: #f97316;
-  --gain: #34c759;
-  --loss: #ff3b30;
-  --chart-1: #f97316;
-  --chart-2: #007aff;
-  --chart-3: #34c759;
-  --chart-4: #ff3b30;
-  --chart-5: #af52de;
+  --accent-foreground: #18181b;
+  --destructive: #ef4444;
+  --border: rgba(0, 0, 0, 0.07);
+  --input: rgba(0, 0, 0, 0.05);
+  --ring: #3b82f6;
+  --gain: #22c55e;
+  --loss: #ef4444;
+  --chart-1: #3b82f6;
+  --chart-2: #22c55e;
+  --chart-3: #f59e0b;
+  --chart-4: #ef4444;
+  --chart-5: #8b5cf6;
   --radius: 1rem;
-  --sidebar: rgba(255, 255, 255, 0.6);
-  --sidebar-foreground: #1c1c1e;
-  --sidebar-primary: #f97316;
+  --sidebar: rgba(255, 255, 255, 0.55);
+  --sidebar-foreground: #18181b;
+  --sidebar-primary: #3b82f6;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: rgba(0, 0, 0, 0.04);
-  --sidebar-accent-foreground: #1c1c1e;
-  --sidebar-border: rgba(0, 0, 0, 0.06);
-  --sidebar-ring: #f97316;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: rgba(0, 0, 0, 0.05);
+  --sidebar-ring: #3b82f6;
 }
 
 .dark {
   --background: #09090b;
   --foreground: #fafafa;
-  --card: rgba(24, 24, 27, 0.72);
+  --card: rgba(24, 24, 27, 0.65);
   --card-foreground: #fafafa;
   --popover: rgba(24, 24, 27, 0.92);
   --popover-foreground: #fafafa;
-  --primary: #fb923c;
+  --primary: #60a5fa;
   --primary-foreground: #09090b;
-  --secondary: rgba(255, 255, 255, 0.08);
+  --secondary: rgba(255, 255, 255, 0.07);
   --secondary-foreground: #fafafa;
-  --muted: rgba(255, 255, 255, 0.06);
+  --muted: rgba(255, 255, 255, 0.05);
   --muted-foreground: #a1a1aa;
-  --accent: rgba(255, 255, 255, 0.06);
+  --accent: rgba(255, 255, 255, 0.05);
   --accent-foreground: #fafafa;
-  --destructive: #ff453a;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.08);
-  --ring: #fb923c;
+  --destructive: #f87171;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.07);
+  --ring: #60a5fa;
   --gain: #4ade80;
   --loss: #f87171;
-  --chart-1: #fb923c;
-  --chart-2: #60a5fa;
-  --chart-3: #4ade80;
+  --chart-1: #60a5fa;
+  --chart-2: #4ade80;
+  --chart-3: #fbbf24;
   --chart-4: #f87171;
   --chart-5: #c084fc;
   --radius: 1rem;
-  --sidebar: rgba(24, 24, 27, 0.6);
+  --sidebar: rgba(24, 24, 27, 0.55);
   --sidebar-foreground: #fafafa;
-  --sidebar-primary: #fb923c;
+  --sidebar-primary: #60a5fa;
   --sidebar-primary-foreground: #09090b;
-  --sidebar-accent: rgba(255, 255, 255, 0.06);
+  --sidebar-accent: rgba(255, 255, 255, 0.05);
   --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #fb923c;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-ring: #60a5fa;
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  html {
-    @apply font-sans;
-  }
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; -webkit-font-smoothing: antialiased; }
+  html { @apply font-sans; }
 
-  /* Scrollbar — styled for both modes */
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
-  .dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
-  .dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+  ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
 }
 
-/* Glass utility */
+/* Dark scrollbar */
+.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+/* Glass card */
 .glass {
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--border);
-  box-shadow:
-    0 0 0 0.5px rgba(255,255,255,0.12) inset,
-    0 8px 40px -12px rgba(0,0,0,0.08);
+  box-shadow: 0 0 0 0.5px rgba(255,255,255,0.1) inset, 0 8px 40px -12px rgba(0,0,0,0.06);
 }
 .dark .glass {
-  box-shadow:
-    0 0 0 0.5px rgba(255,255,255,0.06) inset,
-    0 8px 40px -12px rgba(0,0,0,0.5);
+  box-shadow: 0 0 0 0.5px rgba(255,255,255,0.05) inset, 0 8px 40px -12px rgba(0,0,0,0.5);
 }
 
-/* Background gradient mesh for glassmorphism */
+/* Background gradient mesh — light */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
-  background:
-    radial-gradient(ellipse 80% 60% at 10% 20%, rgba(249,115,22,0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 90% 80%, rgba(59,130,246,0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(168,85,247,0.04) 0%, transparent 60%);
   pointer-events: none;
-}
-.dark body::before {
   background:
-    radial-gradient(ellipse 80% 60% at 10% 20%, rgba(251,146,60,0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 90% 80%, rgba(96,165,250,0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(192,132,252,0.03) 0%, transparent 60%);
+    radial-gradient(ellipse 70% 50% at 15% 15%, rgba(59,130,246,0.07) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 85% 75%, rgba(139,92,246,0.05) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 30% at 50% 40%, rgba(34,197,94,0.03) 0%, transparent 45%);
 }
 
-/* Recharts tooltip fix for dark mode */
+/* Background gradient mesh — dark */
+.dark body::before {
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 15%, rgba(96,165,250,0.06) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 85% 75%, rgba(192,132,252,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 30% at 50% 40%, rgba(74,222,128,0.02) 0%, transparent 45%);
+}
+
+/* Recharts tooltip — dark mode fix */
 .dark .recharts-tooltip-wrapper .recharts-default-tooltip {
   background-color: rgba(24, 24, 27, 0.95) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
@@ -194,5 +185,5 @@ body::before {
 }
 .recharts-default-tooltip {
   border-radius: 12px !important;
-  box-shadow: 0 8px 32px -8px rgba(0,0,0,0.12) !important;
+  box-shadow: 0 4px 24px -4px rgba(0,0,0,0.1) !important;
 }
