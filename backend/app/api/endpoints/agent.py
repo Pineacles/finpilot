@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_user_by_api_key
 from app.core.database import get_db
 from app.models.account import Account
-from app.models.finance import Transaction, Budget, Category, RecurringExpense, SavingsGoal
+from app.models.finance import Transaction, Budget, Category, RecurringExpense, SavingsGoal, Milestone
 from app.models.stock import StockPosition, StockTransaction
 from app.models.user import User
 from app.schemas.finance import TransactionCreate, TransactionResponse
@@ -721,3 +721,108 @@ async def goals_progress(
         })
 
     return progress
+
+
+# ── Milestones ───────────────────────────────────────────────────
+
+class MilestoneCreate(BaseModel):
+    name: str
+    description: str | None = None
+    target_date: str | None = None  # ISO date
+    target_net_worth: float | None = None
+    target_savings: float | None = None
+
+
+@router.post("/milestones")
+async def create_milestone(
+    body: MilestoneCreate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a milestone (life event / financial target).
+
+    Examples:
+    - "Emergency fund: 10k CHF" (target_savings=10000)
+    - "Buy a car by 2027" (target_date=2027-01-01, target_savings=25000)
+    - "Net worth 100k" (target_net_worth=100000)
+    """
+    target_dt = date.fromisoformat(body.target_date) if body.target_date else None
+    m = Milestone(
+        user_id=user.id, name=body.name,
+        description=body.description, target_date=target_dt,
+        target_net_worth=body.target_net_worth,
+        target_savings=body.target_savings,
+    )
+    db.add(m)
+    await db.commit()
+    return {"status": "ok", "id": m.id, "name": m.name}
+
+
+@router.get("/milestones")
+async def list_milestones(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all milestones with achievement status."""
+    result = await db.execute(
+        select(Milestone).where(Milestone.user_id == user.id)
+        .order_by(Milestone.target_date.nulls_last(), Milestone.name)
+    )
+    return [
+        {
+            "id": m.id, "name": m.name, "description": m.description,
+            "target_date": m.target_date.isoformat() if m.target_date else None,
+            "target_net_worth": m.target_net_worth,
+            "target_savings": m.target_savings,
+            "achieved": m.achieved,
+            "achieved_at": m.achieved_at.isoformat() if m.achieved_at else None,
+        }
+        for m in result.scalars().all()
+    ]
+
+
+@router.patch("/milestones/{milestone_id}")
+async def update_milestone(
+    milestone_id: str,
+    achieved: bool | None = None,
+    description: str | None = None,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a milestone. Set achieved=true to mark as completed."""
+    result = await db.execute(
+        select(Milestone).where(and_(Milestone.id == milestone_id, Milestone.user_id == user.id))
+    )
+    m = result.scalar_one_or_none()
+    if not m:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+
+    if achieved is not None:
+        m.achieved = achieved
+        if achieved and not m.achieved_at:
+            m.achieved_at = datetime.now(timezone.utc)
+        elif not achieved:
+            m.achieved_at = None
+    if description is not None:
+        m.description = description
+
+    await db.commit()
+    return {"status": "ok", "name": m.name, "achieved": m.achieved}
+
+
+@router.delete("/milestones/{milestone_id}")
+async def delete_milestone(
+    milestone_id: str,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a milestone."""
+    result = await db.execute(
+        select(Milestone).where(and_(Milestone.id == milestone_id, Milestone.user_id == user.id))
+    )
+    m = result.scalar_one_or_none()
+    if not m:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    await db.delete(m)
+    await db.commit()
+    return {"status": "ok", "deleted": m.name}
