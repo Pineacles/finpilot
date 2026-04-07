@@ -238,7 +238,7 @@ function TransactionsContent() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Transactions</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Transactions</h1>
         <div className="flex items-center gap-3">
           {!importing && importError && (
             <div className="flex items-center gap-2 text-sm text-red-500">
@@ -270,7 +270,7 @@ function TransactionsContent() {
                   <CheckCircle2 className="h-4 w-4" />
                   {importResult.imported} imported, {importResult.categorized} categorized
                   {importResult.skipped > 0 && <span className="text-muted-foreground">({importResult.skipped} skipped)</span>}
-                  {importResult.uncategorized > 0 && <span className="text-yellow-500">({importResult.uncategorized} uncategorized)</span>}
+                  {importResult.uncategorized > 0 && <span className="text-amber-500">({importResult.uncategorized} uncategorized)</span>}
                 </div>
               )}
             </div>
@@ -280,14 +280,14 @@ function TransactionsContent() {
 
       {/* Import Console */}
       {importLog.length > 0 && (
-        <Card className="border-zinc-700/50 bg-zinc-950">
+        <Card className="border-border bg-secondary">
           <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowConsole(!showConsole)}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-zinc-300">
+              <div className="flex items-center gap-2 text-foreground">
                 <Terminal className="h-4 w-4" />
                 <CardTitle className="text-sm font-mono">Import Log</CardTitle>
               </div>
-              {showConsole ? <ChevronUp className="h-4 w-4 text-zinc-500" /> : <ChevronDown className="h-4 w-4 text-zinc-500" />}
+              {showConsole ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
             </div>
           </CardHeader>
           {showConsole && (
@@ -295,9 +295,9 @@ function TransactionsContent() {
               <div className="font-mono text-xs leading-relaxed max-h-64 overflow-y-auto space-y-0.5">
                 {importLog.map((entry, i) => (
                   <div key={i} className="flex gap-2">
-                    <span className="text-zinc-600 select-none shrink-0">{String(i + 1).padStart(2, "0")}</span>
-                    <span className={entry.msg.startsWith("  ") ? "text-zinc-400" : "text-green-400"}>{entry.msg}</span>
-                    {entry.detail && <span className="text-zinc-600">{entry.detail}</span>}
+                    <span className="text-muted-foreground/60 select-none shrink-0">{String(i + 1).padStart(2, "0")}</span>
+                    <span className={entry.msg.startsWith("  ") ? "text-foreground/80" : "text-green-400"}>{entry.msg}</span>
+                    {entry.detail && <span className="text-muted-foreground/60">{entry.detail}</span>}
                   </div>
                 ))}
               </div>
@@ -308,7 +308,7 @@ function TransactionsContent() {
 
       {/* Uncategorized Panel */}
       {uncategorized.length > 0 && (
-        <Card className="border-yellow-500/30">
+        <Card className="border-amber-500/20">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -405,7 +405,7 @@ function TransactionsContent() {
                           <td className="py-2">
                             <CategoryCell txn={t} categories={categories} onCategorize={handleManualCategorize} />
                           </td>
-                          <td className={`py-2 text-right font-medium whitespace-nowrap ${t.amount < 0 ? "text-red-500" : "text-green-500"}`}>
+                          <td className={`py-2 text-right font-medium whitespace-nowrap ${t.amount < 0 ? "text-loss" : "text-gain"}`}>
                             {formatCurrency(t.amount, t.currency)}
                           </td>
                           <td className="py-2">
@@ -420,7 +420,7 @@ function TransactionsContent() {
                           </td>
                         </tr>
                       ) : (
-                        <tr key={t.id} id={`txn-${t.id}`} className={`border-b border-border/50 ${selected.has(t.id) ? "bg-primary/5" : ""} ${highlightId === t.id ? "bg-yellow-500/10 ring-1 ring-yellow-500/30" : ""}`}>
+                        <tr key={t.id} id={`txn-${t.id}`} className={`border-b border-border/50 ${selected.has(t.id) ? "bg-primary/5" : ""} ${highlightId === t.id ? "bg-primary/8 ring-1 ring-primary/30" : ""}`}>
                           {filter === "uncategorized" && (
                             <td className="py-2"><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} /></td>
                           )}
@@ -444,7 +444,7 @@ function TransactionsContent() {
                               <CategoryCell txn={t} categories={categories} onCategorize={handleManualCategorize} />
                             </div>
                           </td>
-                          <td className={`py-2 text-right font-medium whitespace-nowrap ${t.amount < 0 ? "text-red-500" : "text-green-500"}`}>
+                          <td className={`py-2 text-right font-medium whitespace-nowrap ${t.amount < 0 ? "text-loss" : "text-gain"}`}>
                             {formatCurrency(t.amount, t.currency)}
                           </td>
                           <td className="py-2">
