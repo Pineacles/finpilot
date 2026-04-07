@@ -39,6 +39,8 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,73 +50,103 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * FinPilot — Warm Dark Theme
+ *
+ * Design direction: Swiss private banking meets modern fintech.
+ * Warm charcoal backgrounds, cream-tinted foregrounds,
+ * teal accent, semantic green/red for financial data.
+ *
+ * All neutrals are tinted warm (toward hue 60-80, low chroma).
+ * No pure black, no pure white, no pure gray.
+ */
+
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Light mode — warm stone */
+  --background: oklch(0.98 0.004 80);
+  --foreground: oklch(0.18 0.01 60);
+  --card: oklch(0.99 0.003 80);
+  --card-foreground: oklch(0.18 0.01 60);
+  --popover: oklch(0.99 0.003 80);
+  --popover-foreground: oklch(0.18 0.01 60);
+  --primary: oklch(0.52 0.1 175);
+  --primary-foreground: oklch(0.98 0.004 80);
+  --secondary: oklch(0.95 0.005 80);
+  --secondary-foreground: oklch(0.25 0.01 60);
+  --muted: oklch(0.94 0.006 80);
+  --muted-foreground: oklch(0.50 0.01 60);
+  --accent: oklch(0.94 0.006 80);
+  --accent-foreground: oklch(0.25 0.01 60);
+  --destructive: oklch(0.58 0.22 25);
+  --border: oklch(0.90 0.006 80);
+  --input: oklch(0.90 0.006 80);
+  --ring: oklch(0.52 0.1 175);
+  --gain: oklch(0.62 0.17 155);
+  --loss: oklch(0.60 0.2 25);
+  --chart-1: oklch(0.52 0.1 175);
+  --chart-2: oklch(0.62 0.17 155);
+  --chart-3: oklch(0.65 0.15 60);
+  --chart-4: oklch(0.58 0.22 25);
+  --chart-5: oklch(0.55 0.15 280);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.97 0.004 80);
+  --sidebar-foreground: oklch(0.18 0.01 60);
+  --sidebar-primary: oklch(0.52 0.1 175);
+  --sidebar-primary-foreground: oklch(0.98 0.004 80);
+  --sidebar-accent: oklch(0.94 0.006 80);
+  --sidebar-accent-foreground: oklch(0.25 0.01 60);
+  --sidebar-border: oklch(0.90 0.006 80);
+  --sidebar-ring: oklch(0.52 0.1 175);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Warm charcoal — tinted toward warm brown/amber, never pure gray */
+  --background: oklch(0.14 0.008 60);
+  --foreground: oklch(0.90 0.01 80);
+  --card: oklch(0.17 0.008 60);
+  --card-foreground: oklch(0.90 0.01 80);
+  --popover: oklch(0.17 0.008 60);
+  --popover-foreground: oklch(0.90 0.01 80);
+
+  /* Teal accent — the signature color */
+  --primary: oklch(0.70 0.12 175);
+  --primary-foreground: oklch(0.14 0.008 60);
+
+  --secondary: oklch(0.20 0.008 60);
+  --secondary-foreground: oklch(0.85 0.01 80);
+  --muted: oklch(0.22 0.008 60);
+  --muted-foreground: oklch(0.58 0.01 70);
+  --accent: oklch(0.20 0.01 60);
+  --accent-foreground: oklch(0.90 0.01 80);
+  --destructive: oklch(0.65 0.2 25);
+
+  /* Borders: very subtle, warm-tinted */
+  --border: oklch(0.26 0.008 60);
+  --input: oklch(0.24 0.008 60);
+  --ring: oklch(0.70 0.12 175);
+
+  /* Semantic: financial */
+  --gain: oklch(0.72 0.17 155);
+  --loss: oklch(0.68 0.2 25);
+
+  /* Charts: intentional palette */
+  --chart-1: oklch(0.70 0.12 175);
+  --chart-2: oklch(0.72 0.17 155);
+  --chart-3: oklch(0.72 0.14 60);
+  --chart-4: oklch(0.68 0.2 25);
+  --chart-5: oklch(0.65 0.14 280);
+
+  --radius: 0.5rem;
+
+  /* Sidebar: slightly lighter than background for depth */
+  --sidebar: oklch(0.12 0.008 60);
+  --sidebar-foreground: oklch(0.85 0.01 80);
+  --sidebar-primary: oklch(0.70 0.12 175);
+  --sidebar-primary-foreground: oklch(0.12 0.008 60);
+  --sidebar-accent: oklch(0.18 0.01 60);
+  --sidebar-accent-foreground: oklch(0.90 0.01 80);
+  --sidebar-border: oklch(0.22 0.008 60);
+  --sidebar-ring: oklch(0.70 0.12 175);
 }
 
 @layer base {
@@ -126,5 +158,21 @@
   }
   html {
     @apply font-sans;
+  }
+
+  /* Warm scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.30 0.008 60);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.40 0.008 60);
   }
 }

@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#a855f7"];
+const COLORS = ["oklch(0.70 0.12 175)", "oklch(0.72 0.17 155)", "oklch(0.72 0.14 60)", "oklch(0.68 0.2 25)", "oklch(0.65 0.14 280)", "oklch(0.70 0.12 320)", "oklch(0.65 0.10 200)", "oklch(0.72 0.12 100)"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function CategoryDrillDown({ open, onClose, categoryName, categoryId, fromDate, toDate }: {
@@ -110,7 +110,7 @@ function CategoryDrillDown({ open, onClose, categoryName, categoryId, fromDate, 
                         </span>
                       ) : <span className="text-xs text-muted-foreground">-</span>}
                     </td>
-                    <td className={`py-1.5 text-right font-medium whitespace-nowrap ${t.amount < 0 ? "text-red-500" : "text-green-500"}`}>
+                    <td className={`py-1.5 text-right font-medium whitespace-nowrap ${t.amount < 0 ? "text-loss" : "text-gain"}`}>
                       {formatCurrency(t.amount, t.currency)}
                     </td>
                   </tr>
@@ -128,7 +128,7 @@ function ChangeIndicator({ value, pct }: { value: number; pct: number }) {
   if (Math.abs(pct) < 0.5) return <span className="text-xs text-muted-foreground flex items-center gap-1"><Minus className="h-3 w-3" />No change</span>;
   const up = value > 0;
   return (
-    <span className={`text-xs flex items-center gap-1 ${up ? "text-green-500" : "text-red-500"}`}>
+    <span className={`text-xs flex items-center gap-1 ${up ? "text-gain" : "text-loss"}`}>
       {up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
       {formatCurrency(Math.abs(value))} ({formatPct(pct)})
     </span>
@@ -139,7 +139,7 @@ function ExpenseChangeIndicator({ value, pct }: { value: number; pct: number }) 
   if (Math.abs(pct) < 0.5) return <span className="text-xs text-muted-foreground flex items-center gap-1"><Minus className="h-3 w-3" />No change</span>;
   const up = value > 0;
   return (
-    <span className={`text-xs flex items-center gap-1 ${up ? "text-red-500" : "text-green-500"}`}>
+    <span className={`text-xs flex items-center gap-1 ${up ? "text-loss" : "text-gain"}`}>
       {up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
       {formatCurrency(Math.abs(value))} ({formatPct(pct)})
     </span>
@@ -175,7 +175,7 @@ export default function StatsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Statistics</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Statistics</h1>
 
       <Tabs value={tab} onValueChange={setTab}>
         <div className="flex items-center justify-between">
@@ -238,14 +238,14 @@ function MonthlyView({ data, year, month }: { data: MonthlyStats; year: number; 
         <Card>
           <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground flex items-center gap-1"><Receipt className="h-3 w-3" />Expenses</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-xl font-bold text-red-500">{formatCurrency(s.expenses)}</p>
+            <p className="text-xl font-bold text-loss">{formatCurrency(s.expenses)}</p>
             {data.comparison.expenses && <ExpenseChangeIndicator value={data.comparison.expenses.change} pct={data.comparison.expenses.change_pct} />}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground flex items-center gap-1"><PiggyBank className="h-3 w-3" />Net / Saved</CardTitle></CardHeader>
           <CardContent>
-            <p className={`text-xl font-bold ${s.net >= 0 ? "text-green-500" : "text-red-500"}`}>{formatCurrency(s.net)}</p>
+            <p className={`text-xl font-bold ${s.net >= 0 ? "text-gain" : "text-loss"}`}>{formatCurrency(s.net)}</p>
             <span className="text-xs text-muted-foreground">{s.savings_rate.toFixed(1)}% savings rate</span>
           </CardContent>
         </Card>
@@ -320,11 +320,11 @@ function MonthlyView({ data, year, month }: { data: MonthlyStats; year: number; 
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.spending_velocity}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(8)} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v))} labelFormatter={(l) => `Day ${l.slice(8)}`} />
-                  <Area type="monotone" dataKey="cumulative" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} />
+                  <Area type="monotone" dataKey="cumulative" stroke="oklch(0.70 0.12 175)" fill="oklch(0.70 0.12 175)" fillOpacity={0.15} strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -340,14 +340,14 @@ function MonthlyView({ data, year, month }: { data: MonthlyStats; year: number; 
                   <span>Recurring / Fixed</span>
                   <span className="font-medium">{formatCurrency(recDisc.recurring)}</span>
                 </div>
-                <Progress value={s.expenses ? (recDisc.recurring / s.expenses) * 100 : 0} className="h-3 [&>div]:bg-blue-500" />
+                <Progress value={s.expenses ? (recDisc.recurring / s.expenses) * 100 : 0} className="h-3 [&>div]:bg-primary" />
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span>Discretionary</span>
                   <span className="font-medium">{formatCurrency(recDisc.discretionary)}</span>
                 </div>
-                <Progress value={s.expenses ? (recDisc.discretionary / s.expenses) * 100 : 0} className="h-3 [&>div]:bg-orange-500" />
+                <Progress value={s.expenses ? (recDisc.discretionary / s.expenses) * 100 : 0} className="h-3 [&>div]:bg-amber-500" />
               </div>
               <p className="text-xs text-muted-foreground">
                 {s.expenses ? ((recDisc.recurring / s.expenses) * 100).toFixed(0) : 0}% of spending is fixed costs
@@ -366,7 +366,7 @@ function MonthlyView({ data, year, month }: { data: MonthlyStats; year: number; 
               {data.account_breakdown.map((a) => (
                 <div key={a.name} className="flex items-center justify-between p-3 rounded-lg border">
                   <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${a.type === "credit_card" ? "bg-orange-500" : "bg-blue-500"}`} />
+                    <div className={`w-3 h-3 rounded-full ${a.type === "credit_card" ? "bg-amber-500" : "bg-primary"}`} />
                     <div>
                       <p className="text-sm font-medium">{a.name}</p>
                       <p className="text-xs text-muted-foreground">{a.count} transactions</p>
@@ -417,11 +417,11 @@ function MonthlyView({ data, year, month }: { data: MonthlyStats; year: number; 
                   <div key={b.name}>
                     <div className="flex justify-between text-sm mb-1">
                       <span>{b.name}</span>
-                      <span className={b.pct > 100 ? "text-red-500 font-medium" : "text-muted-foreground"}>
+                      <span className={b.pct > 100 ? "text-loss font-medium" : "text-muted-foreground"}>
                         {formatCurrency(b.spent)} / {formatCurrency(b.budget)}
                       </span>
                     </div>
-                    <Progress value={Math.min(b.pct, 100)} className={b.pct > 100 ? "[&>div]:bg-red-500" : ""} />
+                    <Progress value={Math.min(b.pct, 100)} className={b.pct > 100 ? "[&>div]:bg-loss" : ""} />
                   </div>
                 ))}
               </div>
@@ -480,7 +480,7 @@ function YearlyView({ data }: { data: YearlyStats }) {
         <Card>
           <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Total Expenses</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-xl font-bold text-red-500">{formatCurrency(s.expenses)}</p>
+            <p className="text-xl font-bold text-loss">{formatCurrency(s.expenses)}</p>
             {data.comparison.expenses && <ExpenseChangeIndicator value={data.comparison.expenses.change} pct={data.comparison.expenses.change_pct} />}
             <span className="text-xs text-muted-foreground block mt-1">Avg {formatCurrency(s.avg_monthly_spend)}/mo</span>
           </CardContent>
@@ -488,7 +488,7 @@ function YearlyView({ data }: { data: YearlyStats }) {
         <Card>
           <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground">Net Saved</CardTitle></CardHeader>
           <CardContent>
-            <p className={`text-xl font-bold ${s.net >= 0 ? "text-green-500" : "text-red-500"}`}>{formatCurrency(s.net)}</p>
+            <p className={`text-xl font-bold ${s.net >= 0 ? "text-gain" : "text-loss"}`}>{formatCurrency(s.net)}</p>
             <span className="text-xs text-muted-foreground">{s.savings_rate.toFixed(1)}% savings rate</span>
           </CardContent>
         </Card>
@@ -510,13 +510,13 @@ function YearlyView({ data }: { data: YearlyStats }) {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v) => formatCurrency(Number(v))} />
                 <Legend />
-                <Bar dataKey="income" fill="#10b981" name="Income" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="expenses" fill="#ef4444" name="Expenses" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="income" fill="oklch(0.72 0.17 155)" name="Income" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="expenses" fill="oklch(0.68 0.2 25)" name="Expenses" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -530,13 +530,13 @@ function YearlyView({ data }: { data: YearlyStats }) {
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} />
                 <Tooltip formatter={(v) => formatCurrency(Number(v))} />
                 <Bar dataKey="net" name="Net" radius={[2, 2, 0, 0]}>
                   {monthlyData.map((entry, i) => (
-                    <Cell key={i} fill={entry.net >= 0 ? "#10b981" : "#ef4444"} />
+                    <Cell key={i} fill={entry.net >= 0 ? "oklch(0.72 0.17 155)" : "oklch(0.68 0.2 25)"} />
                   ))}
                 </Bar>
               </BarChart>
@@ -552,11 +552,11 @@ function YearlyView({ data }: { data: YearlyStats }) {
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data.net_worth_history}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v))} />
-                  <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="value" stroke="oklch(0.70 0.12 175)" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -593,7 +593,7 @@ function YearlyView({ data }: { data: YearlyStats }) {
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v))} />

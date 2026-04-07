@@ -6,9 +6,6 @@ import {
   LayoutDashboard,
   TrendingUp,
   Receipt,
-  PiggyBank,
-  Target,
-  ArrowLeftRight,
   BarChart3,
   Tag,
   Settings,
@@ -20,9 +17,6 @@ const nav = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/portfolio", label: "Portfolio", icon: TrendingUp },
   { href: "/transactions", label: "Transactions", icon: Receipt },
-  { href: "/budgets", label: "Budgets", icon: PiggyBank },
-  { href: "/goals", label: "Goals", icon: Target },
-  { href: "/cashflow", label: "Cash Flow", icon: ArrowLeftRight },
   { href: "/stats", label: "Statistics", icon: BarChart3 },
   { href: "/categories", label: "Categories", icon: Tag },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -33,36 +27,42 @@ export function Sidebar() {
   const { logout } = useAuth();
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r bg-card">
-      <div className="flex h-16 items-center gap-2 border-b px-6">
-        <TrendingUp className="h-6 w-6 text-primary" />
-        <span className="text-xl font-bold">FinPilot</span>
+    <aside className="flex h-screen w-56 flex-col bg-sidebar">
+      {/* Brand */}
+      <div className="px-5 pt-6 pb-8">
+        <span className="text-lg font-semibold tracking-tight text-foreground">
+          fin<span className="text-primary">pilot</span>
+        </span>
       </div>
-      <nav className="flex-1 space-y-1 p-4">
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 space-y-0.5">
         {nav.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+              className={`flex items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium transition-colors ${
                 active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  ? "text-primary bg-primary/8"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4 shrink-0" strokeWidth={active ? 2 : 1.5} />
               {label}
             </Link>
           );
         })}
       </nav>
-      <div className="border-t p-4">
+
+      {/* Footer */}
+      <div className="px-3 pb-4">
         <button
           onClick={logout}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         >
-          <LogOut className="h-4 w-4" />
+          <LogOut className="h-4 w-4" strokeWidth={1.5} />
           Logout
         </button>
       </div>

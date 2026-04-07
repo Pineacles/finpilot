@@ -3,18 +3,13 @@
 import { useEffect, useState } from "react";
 import { api, Overview } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import {
-  Wallet,
   TrendingUp,
+  TrendingDown,
   ArrowUpRight,
   ArrowDownRight,
-  CreditCard,
-  Landmark,
-  CircleDollarSign,
 } from "lucide-react";
 
 export default function OverviewPage() {
@@ -27,144 +22,143 @@ export default function OverviewPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Overview</h1>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i}><CardContent className="p-6"><Skeleton className="h-20" /></CardContent></Card>
-          ))}
+      <div className="space-y-10">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}
         </div>
+        <Skeleton className="h-64" />
       </div>
     );
   }
 
-  if (!data) return <p>Failed to load data</p>;
+  if (!data) return <p className="text-muted-foreground">Failed to load data.</p>;
 
-  const pnlPositive = data.portfolio_pnl >= 0;
+  const pnlUp = data.portfolio_pnl >= 0;
   const bankAccounts = data.accounts.filter((a) => a.type === "bank");
   const ccAccounts = data.accounts.filter((a) => a.type === "credit_card");
   const bankTotal = bankAccounts.reduce((s, a) => s + a.balance, 0);
   const ccTotal = ccAccounts.reduce((s, a) => s + a.balance, 0);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Overview</h1>
-
-      {/* Top KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Net Worth</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(data.net_worth)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Bank + Portfolio + Credit Card</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Bank Balance</CardTitle>
-            <Landmark className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-green-500">{formatCurrency(bankTotal)}</p>
-            {bankAccounts.map((a) => (
-              <p key={a.id} className="text-xs text-muted-foreground">{a.name}</p>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Credit Card</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {ccAccounts.length === 0 ? (
-              <>
-                <p className="text-2xl font-bold text-muted-foreground">-</p>
-                <p className="text-xs text-muted-foreground">No credit card imported</p>
-              </>
-            ) : (
-              <>
-                <p className={`text-2xl font-bold ${ccTotal < 0 ? "text-red-500" : "text-green-500"}`}>
-                  {formatCurrency(Math.abs(ccTotal))}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {ccTotal < 0 ? "Outstanding balance" : "No balance"}
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Portfolio</CardTitle>
-            {pnlPositive ? <ArrowUpRight className="h-4 w-4 text-green-500" /> : <ArrowDownRight className="h-4 w-4 text-red-500" />}
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(data.portfolio_value)}</p>
-            <p className={`text-xs ${pnlPositive ? "text-green-500" : "text-red-500"}`}>
-              {formatCurrency(data.portfolio_pnl)} ({formatPct(data.portfolio_pnl_pct)})
-            </p>
-          </CardContent>
-        </Card>
+    <div className="space-y-10">
+      {/* Page header — left-aligned, no icon clutter */}
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+        <p className="text-sm text-muted-foreground mt-1">Your financial snapshot</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* Net worth hero — large, prominent, no card wrapper */}
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Net Worth</p>
+        <p className="text-4xl font-bold tracking-tight">{formatCurrency(data.net_worth)}</p>
+      </div>
+
+      {/* Account balances — clean grid, no heavy cards */}
+      <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">Bank</p>
+          <p className="text-2xl font-semibold text-gain">{formatCurrency(bankTotal)}</p>
+          {bankAccounts.map((a) => (
+            <p key={a.id} className="text-xs text-muted-foreground mt-1">{a.name}</p>
+          ))}
+        </div>
+
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">Credit Card</p>
+          {ccAccounts.length === 0 ? (
+            <p className="text-2xl font-semibold text-muted-foreground">--</p>
+          ) : (
+            <>
+              <p className={`text-2xl font-semibold ${ccTotal < 0 ? "text-loss" : "text-gain"}`}>
+                {formatCurrency(Math.abs(ccTotal))}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {ccTotal < 0 ? "Outstanding" : "Paid"}
+              </p>
+            </>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">Portfolio</p>
+          <p className="text-2xl font-semibold">{formatCurrency(data.portfolio_value)}</p>
+          <p className={`text-xs mt-1 flex items-center gap-1 ${pnlUp ? "text-gain" : "text-loss"}`}>
+            {pnlUp ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+            {formatCurrency(Math.abs(data.portfolio_pnl))} ({formatPct(data.portfolio_pnl_pct)})
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">Accounts</p>
+          <p className="text-2xl font-semibold">{data.accounts.length}</p>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {data.accounts.map((a) => (
+              <span key={a.id} className="text-[11px] px-2 py-0.5 rounded-md bg-muted text-muted-foreground">{a.name}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Divider — subtle breathing room */}
+      <div className="border-t border-border" />
+
+      {/* Two columns: Recent transactions + Budget health */}
+      <div className="grid gap-10 lg:grid-cols-2">
         {/* Recent Transactions */}
-        <Card>
-          <CardHeader><CardTitle>Recent Transactions</CardTitle></CardHeader>
-          <CardContent>
-            {data.recent_transactions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No transactions yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {data.recent_transactions.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{t.merchant}</p>
-                      <p className="text-xs text-muted-foreground">{t.date} {t.category_name && `· ${t.category_name}`}</p>
-                    </div>
-                    <p className={`text-sm font-medium ${t.amount < 0 ? "text-red-500" : "text-green-500"}`}>
-                      {formatCurrency(t.amount, t.currency)}
+        <div>
+          <h2 className="text-sm font-semibold mb-4">Recent Transactions</h2>
+          {data.recent_transactions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No transactions yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {data.recent_transactions.map((t) => (
+                <div key={t.id} className="flex items-center justify-between py-1">
+                  <div>
+                    <p className="text-sm font-medium">{t.merchant}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t.date}{t.category_name && ` \u00B7 ${t.category_name}`}
                     </p>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <p className={`text-sm font-semibold tabular-nums ${t.amount < 0 ? "text-loss" : "text-gain"}`}>
+                    {formatCurrency(t.amount, t.currency)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Budget Health */}
-        <Card>
-          <CardHeader><CardTitle>Budget Health</CardTitle></CardHeader>
-          <CardContent>
-            {data.budget_health.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No budgets set.</p>
-            ) : (
-              <div className="space-y-4">
-                {data.budget_health.map((b) => {
-                  const pct = b.amount ? (b.spent / b.amount) * 100 : 0;
-                  return (
-                    <div key={b.id}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium">{b.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatCurrency(b.spent)} / {formatCurrency(b.amount)}
-                        </span>
-                      </div>
-                      <Progress value={Math.min(pct, 100)} className={pct > 100 ? "[&>div]:bg-red-500" : ""} />
+        <div>
+          <h2 className="text-sm font-semibold mb-4">Budget Health</h2>
+          {data.budget_health.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No budgets set.</p>
+          ) : (
+            <div className="space-y-4">
+              {data.budget_health.map((b) => {
+                const pct = b.amount ? (b.spent / b.amount) * 100 : 0;
+                const over = pct > 100;
+                return (
+                  <div key={b.id}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-medium">{b.name}</span>
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {formatCurrency(b.spent)} / {formatCurrency(b.amount)}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${over ? "bg-loss" : "bg-primary"}`}
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

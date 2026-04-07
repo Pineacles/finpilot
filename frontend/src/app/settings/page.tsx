@@ -140,7 +140,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Settings</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         {hasEdits && (
           <Button onClick={handleSave} disabled={saving}>
             <Save className="h-4 w-4 mr-2" />
@@ -148,7 +148,7 @@ export default function SettingsPage() {
           </Button>
         )}
         {saved && (
-          <Badge variant="secondary" className="text-green-500">
+          <Badge variant="secondary" className="text-gain">
             <CheckCircle2 className="h-3 w-3 mr-1" /> Saved
           </Badge>
         )}

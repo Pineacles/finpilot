@@ -127,7 +127,7 @@ export default function CategoriesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Categories & Rules</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Categories & Rules</h1>
 
       <Tabs defaultValue="categories">
         <TabsList>
@@ -194,7 +194,7 @@ export default function CategoriesPage() {
                     <div key={p.id}>
                       <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50">
                         <div className={`w-3 h-3 rounded-full ${
-                          p.type === "income" ? "bg-green-500" : p.type === "transfer" ? "bg-blue-500" : "bg-red-500"
+                          p.type === "income" ? "bg-gain" : p.type === "transfer" ? "bg-primary" : "bg-loss"
                         }`} />
                         <span className="font-medium text-sm">{p.name}</span>
                         <Badge variant="secondary" className="text-[10px] capitalize">{p.type}</Badge>

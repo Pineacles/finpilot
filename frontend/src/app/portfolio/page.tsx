@@ -18,7 +18,8 @@ import {
   Shield, Zap, AlertTriangle,
 } from "lucide-react";
 
-const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
+// Warm chart palette matching the theme
+const COLORS = ["oklch(0.70 0.12 175)", "oklch(0.72 0.17 155)", "oklch(0.72 0.14 60)", "oklch(0.68 0.2 25)", "oklch(0.65 0.14 280)", "oklch(0.70 0.12 320)", "oklch(0.65 0.10 200)", "oklch(0.72 0.12 100)"];
 const RANGES = [
   { value: "1mo", label: "1M" }, { value: "3mo", label: "3M" },
   { value: "6mo", label: "6M" }, { value: "1y", label: "1Y" },
@@ -36,7 +37,7 @@ function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
   const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`).join(" ");
   return (
     <svg width={w} height={h} className="shrink-0">
-      <polyline fill="none" stroke={positive ? "#10b981" : "#ef4444"} strokeWidth="1.5" points={points} />
+      <polyline fill="none" stroke={positive ? "oklch(0.72 0.17 155)" : "oklch(0.68 0.2 25)"} strokeWidth="1.5" points={points} />
     </svg>
   );
 }
@@ -46,7 +47,7 @@ function PnlBadge({ value, pct, size = "md" }: { value: number; pct?: number; si
   const positive = value >= 0;
   const cls = size === "sm" ? "text-[11px] px-1.5 py-0.5" : "text-xs px-2 py-1";
   return (
-    <span className={`${cls} rounded-md font-medium inline-flex items-center gap-1 ${positive ? "bg-green-500/15 text-green-500" : "bg-red-500/15 text-red-500"}`}>
+    <span className={`${cls} rounded-md font-medium inline-flex items-center gap-1 ${positive ? "bg-gain/12 text-gain" : "bg-loss/12 text-loss"}`}>
       {positive ? "+" : ""}{formatCurrency(value)}
       {pct !== undefined && <span className="opacity-75">({positive ? "+" : ""}{pct.toFixed(1)}%)</span>}
     </span>
@@ -83,7 +84,7 @@ function AnalysisCard({ title, analysis, olderList, showOlder, onLoadOlder, onCl
               <div key={a.id} className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors text-xs ${analysis?.id === a.id ? "bg-accent" : "hover:bg-accent/50"}`}
                 onClick={() => onViewOlder(a.id)}>
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${a.market_sentiment === "bullish" ? "bg-green-500" : a.market_sentiment === "bearish" ? "bg-red-500" : "bg-yellow-500"}`} />
+                  <div className={`w-2 h-2 rounded-full ${a.market_sentiment === "bullish" ? "bg-gain" : a.market_sentiment === "bearish" ? "bg-loss" : "bg-amber-500"}`} />
                   <span className="capitalize">{a.market_sentiment || "neutral"}</span>
                 </div>
                 <span className="text-muted-foreground">{new Date(a.created_at).toLocaleDateString("en-CH", { day: "numeric", month: "short", year: "numeric" })}</span>
@@ -98,9 +99,9 @@ function AnalysisCard({ title, analysis, olderList, showOlder, onLoadOlder, onCl
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                analysis.content.market_sentiment === "bullish" ? "bg-green-500/15 text-green-500" :
-                analysis.content.market_sentiment === "bearish" ? "bg-red-500/15 text-red-500" :
-                "bg-yellow-500/15 text-yellow-500"
+                analysis.content.market_sentiment === "bullish" ? "bg-gain/15 text-green-500" :
+                analysis.content.market_sentiment === "bearish" ? "bg-loss/15 text-red-500" :
+                "bg-amber-500/15 text-amber-500"
               }`}>{analysis.content.market_sentiment}</span>
               <span className="text-xs text-muted-foreground">{new Date(analysis.created_at).toLocaleString()}</span>
             </div>
@@ -118,16 +119,16 @@ function AnalysisCard({ title, analysis, olderList, showOlder, onLoadOlder, onCl
                       <div className="flex items-center gap-2">
                         <span className="font-bold">{s.symbol}</span>
                         <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                          s.action === "ADD" ? "bg-green-500/15 text-green-500" :
-                          s.action === "SELL" ? "bg-red-500/15 text-red-500" :
-                          "bg-blue-500/15 text-blue-500"
+                          s.action === "ADD" ? "bg-gain/15 text-green-500" :
+                          s.action === "SELL" ? "bg-loss/15 text-red-500" :
+                          "bg-primary/12 text-primary"
                         }`}>{s.action}</span>
                       </div>
                       <div className="text-right text-xs">
                         <span className="text-muted-foreground">Entry: {s.entry_price.toFixed(2)}</span>
                         <span className="mx-1.5 text-muted-foreground">/</span>
                         <span>Now: {s.current_price.toFixed(2)}</span>
-                        <span className={`ml-2 ${s.unrealized_pnl_pct >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        <span className={`ml-2 ${s.unrealized_pnl_pct >= 0 ? "text-gain" : "text-loss"}`}>
                           {s.unrealized_pnl_pct >= 0 ? "+" : ""}{s.unrealized_pnl_pct.toFixed(1)}%
                         </span>
                       </div>
@@ -136,13 +137,13 @@ function AnalysisCard({ title, analysis, olderList, showOlder, onLoadOlder, onCl
                     <div className="flex gap-4 text-xs">
                       {s.key_risks.length > 0 && (
                         <div className="flex-1">
-                          <p className="font-medium text-red-400 flex items-center gap-1 mb-1"><AlertTriangle className="h-3 w-3" />Risks</p>
+                          <p className="font-medium text-loss flex items-center gap-1 mb-1"><AlertTriangle className="h-3 w-3" />Risks</p>
                           <ul className="space-y-0.5 text-muted-foreground">{s.key_risks.map((r, i) => <li key={i}>- {r}</li>)}</ul>
                         </div>
                       )}
                       {s.key_catalysts.length > 0 && (
                         <div className="flex-1">
-                          <p className="font-medium text-green-400 flex items-center gap-1 mb-1"><Zap className="h-3 w-3" />Catalysts</p>
+                          <p className="font-medium text-gain flex items-center gap-1 mb-1"><Zap className="h-3 w-3" />Catalysts</p>
                           <ul className="space-y-0.5 text-muted-foreground">{s.key_catalysts.map((c, i) => <li key={i}>- {c}</li>)}</ul>
                         </div>
                       )}
@@ -159,7 +160,7 @@ function AnalysisCard({ title, analysis, olderList, showOlder, onLoadOlder, onCl
                   <div key={i} className="p-3 rounded-lg border text-center">
                     <p className="text-[11px] text-muted-foreground">{ind.name}</p>
                     <p className="text-lg font-bold">{ind.value}</p>
-                    <p className={`text-[10px] ${ind.trend === "up" ? "text-green-500" : ind.trend === "down" ? "text-red-500" : "text-muted-foreground"}`}>
+                    <p className={`text-[10px] ${ind.trend === "up" ? "text-gain" : ind.trend === "down" ? "text-loss" : "text-muted-foreground"}`}>
                       {ind.trend === "up" ? "Trending up" : ind.trend === "down" ? "Trending down" : "Stable"}
                     </p>
                   </div>
@@ -177,14 +178,14 @@ function AnalysisCard({ title, analysis, olderList, showOlder, onLoadOlder, onCl
             <div className="grid gap-4 md:grid-cols-2">
               {analysis.content.risks && analysis.content.risks.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-red-400 flex items-center gap-1 mb-2"><AlertTriangle className="h-3 w-3" />Key Risks</p>
-                  <ul className="space-y-1 text-xs text-muted-foreground">{analysis.content.risks.map((r, i) => <li key={i} className="flex gap-1.5"><span className="text-red-400">-</span>{r}</li>)}</ul>
+                  <p className="text-xs font-medium text-loss flex items-center gap-1 mb-2"><AlertTriangle className="h-3 w-3" />Key Risks</p>
+                  <ul className="space-y-1 text-xs text-muted-foreground">{analysis.content.risks.map((r, i) => <li key={i} className="flex gap-1.5"><span className="text-loss">-</span>{r}</li>)}</ul>
                 </div>
               )}
               {analysis.content.opportunities && analysis.content.opportunities.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-green-400 flex items-center gap-1 mb-2"><Zap className="h-3 w-3" />Opportunities</p>
-                  <ul className="space-y-1 text-xs text-muted-foreground">{analysis.content.opportunities.map((o, i) => <li key={i} className="flex gap-1.5"><span className="text-green-400">-</span>{o}</li>)}</ul>
+                  <p className="text-xs font-medium text-gain flex items-center gap-1 mb-2"><Zap className="h-3 w-3" />Opportunities</p>
+                  <ul className="space-y-1 text-xs text-muted-foreground">{analysis.content.opportunities.map((o, i) => <li key={i} className="flex gap-1.5"><span className="text-gain">-</span>{o}</li>)}</ul>
                 </div>
               )}
             </div>
@@ -316,24 +317,27 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-6">
-      {/* Hero Section — Portfolio Value + P&L */}
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm text-muted-foreground mb-1">Portfolio Value</p>
+          <div className="flex items-center gap-4 mb-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Portfolio</h1>
+            <div className="flex gap-1.5">
+              <button onClick={load} disabled={loading} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+          </div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">Total Value</p>
           <p className="text-4xl font-bold tracking-tight">{formatCurrency(p?.total_value ?? 0)}</p>
           <div className="flex items-center gap-3 mt-2">
             <PnlBadge value={p?.total_pnl ?? 0} pct={p?.total_pnl_pct ?? 0} />
-            <span className="text-sm text-muted-foreground">All time</span>
+            <span className="text-xs text-muted-foreground">all time</span>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />Refresh
-          </Button>
-          <Button size="sm" onClick={() => setShowTrade(true)}>
-            <Plus className="h-4 w-4 mr-1" />Trade
-          </Button>
-        </div>
+        <Button size="sm" onClick={() => setShowTrade(true)} className="mt-2">
+          <Plus className="h-4 w-4 mr-1" />Trade
+        </Button>
       </div>
 
       {/* Portfolio History Chart */}
@@ -355,8 +359,8 @@ export default function PortfolioPage() {
                       <stop offset="100%" stopColor={pnlPositive ? "#10b981" : "#ef4444"} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} stroke="#555" />
-                  <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} stroke="#555" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} stroke="oklch(0.26 0.008 60)" />
+                  <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} stroke="oklch(0.26 0.008 60)" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v))} />
                   <Area type="monotone" dataKey="value" stroke={pnlPositive ? "#10b981" : "#ef4444"} strokeWidth={2} fill="url(#portfolioGrad)" />
                 </AreaChart>
@@ -366,32 +370,24 @@ export default function PortfolioPage() {
         </Card>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-1">Invested</p>
-            <p className="text-lg font-bold">{formatCurrency(p?.total_cost ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-1">Cash</p>
-            <p className="text-lg font-bold">{formatCurrency(p?.cash_balance ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-1">Positions</p>
-            <p className="text-lg font-bold">{p?.positions_count ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-1">Total (incl. cash)</p>
-            <p className="text-lg font-bold">{formatCurrency((p?.total_value ?? 0) + (p?.cash_balance ?? 0))}</p>
-          </CardContent>
-        </Card>
+      {/* Summary row — flat, no cards */}
+      <div className="grid gap-8 grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Invested</p>
+          <p className="text-lg font-semibold">{formatCurrency(p?.total_cost ?? 0)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Cash</p>
+          <p className="text-lg font-semibold">{formatCurrency(p?.cash_balance ?? 0)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Positions</p>
+          <p className="text-lg font-semibold">{p?.positions_count ?? 0}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Total</p>
+          <p className="text-lg font-semibold">{formatCurrency((p?.total_value ?? 0) + (p?.cash_balance ?? 0))}</p>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
@@ -448,7 +444,7 @@ export default function PortfolioPage() {
                       {/* Price + day change */}
                       <div className="text-right min-w-[90px]">
                         <p className="text-sm font-medium">{pos.last_price?.toFixed(2)}</p>
-                        <p className={`text-[11px] ${pos.change >= 0 ? "text-green-500" : "text-red-500"}`}>
+                        <p className={`text-[11px] ${pos.change >= 0 ? "text-gain" : "text-loss"}`}>
                           {pos.change >= 0 ? "+" : ""}{pos.change.toFixed(2)} ({pos.change_pct >= 0 ? "+" : ""}{pos.change_pct.toFixed(1)}%)
                         </p>
                       </div>
@@ -503,7 +499,7 @@ export default function PortfolioPage() {
                   return pos ? (
                     <div className="flex items-center gap-3 mb-3 flex-wrap">
                       <span className="text-lg font-bold">{pos.last_price?.toFixed(2)}</span>
-                      <span className={`text-xs ${pos.change >= 0 ? "text-green-500" : "text-red-500"}`}>
+                      <span className={`text-xs ${pos.change >= 0 ? "text-gain" : "text-loss"}`}>
                         {pos.change >= 0 ? "+" : ""}{pos.change.toFixed(2)} ({pos.change_pct >= 0 ? "+" : ""}{pos.change_pct.toFixed(1)}%)
                       </span>
                       <span className="text-xs text-muted-foreground">{pos.quantity} shares</span>
@@ -526,15 +522,15 @@ export default function PortfolioPage() {
                       <AreaChart data={chartData}>
                         <defs>
                           <linearGradient id="stockGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2} />
-                            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                            <stop offset="0%" stopColor="oklch(0.70 0.12 175)" stopOpacity={0.2} />
+                            <stop offset="100%" stopColor="oklch(0.70 0.12 175)" stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                        <XAxis dataKey="date" tick={{ fontSize: 9 }} tickFormatter={(d) => d.slice(5)} stroke="#555" />
-                        <YAxis tick={{ fontSize: 9 }} domain={["auto", "auto"]} stroke="#555" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.22 0.008 60)" />
+                        <XAxis dataKey="date" tick={{ fontSize: 9 }} tickFormatter={(d) => d.slice(5)} stroke="oklch(0.26 0.008 60)" />
+                        <YAxis tick={{ fontSize: 9 }} domain={["auto", "auto"]} stroke="oklch(0.26 0.008 60)" />
                         <Tooltip formatter={(v) => Number(v).toFixed(2)} />
-                        <Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#stockGrad)" />
+                        <Area type="monotone" dataKey="close" stroke="oklch(0.70 0.12 175)" strokeWidth={2} fill="url(#stockGrad)" />
                       </AreaChart>
                     </ResponsiveContainer>
                   )}
