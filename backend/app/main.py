@@ -1,13 +1,24 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.endpoints import auth, health, dashboard, portfolio, sync, transactions, finance, agent, analysis, user_settings, stats, csv_import, categorize, merchants
 from app.core.config import settings
+from app.services.gmail_scheduler import start_scheduler, stop_scheduler
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    yield
+    stop_scheduler()
 
 app = FastAPI(
     title="FinPilot",
     description="Finance & Stock Dashboard API",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

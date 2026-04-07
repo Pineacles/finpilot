@@ -7,27 +7,24 @@ from app.models.settings import UserSetting
 
 # Setting keys and their env var fallbacks
 SETTING_KEYS = {
-    # Analysis
+    # Analysis / AI
     "anthropic_api_key": "ANTHROPIC_API_KEY",
     "analysis_model": "ANALYSIS_MODEL",
-    "analysis_endpoint": None,  # Custom endpoint for user's own AI agent
-    # Saxo Bank
-    "saxo_app_key": "SAXO_APP_KEY",
-    "saxo_app_secret": "SAXO_APP_SECRET",
-    "saxo_account_key": "SAXO_ACCOUNT_KEY",
-    "saxo_token_url": "SAXO_TOKEN_URL",
-    "saxo_api_url": "SAXO_API_URL",
-    "saxo_access_token": None,
-    "saxo_refresh_token": None,
-    # Viseca
-    "viseca_cookie": None,
-    "viseca_card_id": None,
-    # Custom agent
-    "analysis_auth_header": None,  # e.g. "Bearer redacted-example-token"
+    "analysis_endpoint": None,
+    "analysis_auth_header": None,
+    # Agent (NanoClaw) — can scrape banks, fetch data, run tasks
+    "agent_endpoint": None,  # e.g. https://assistant.example.ch/api/finpilot
+    "agent_auth_header": None,
+    # Gmail (for bank email notifications)
+    "gmail_address": None,
+    "gmail_app_password": None,
+    "gmail_last_uid": None,
+    "gmail_poll_interval": None,
+    "gmail_sender_filter": None,
 }
 
 # Keys that should be masked in API responses
-SENSITIVE_KEYS = {"anthropic_api_key", "saxo_app_secret", "saxo_access_token", "saxo_refresh_token", "viseca_cookie", "analysis_auth_header"}
+SENSITIVE_KEYS = {"anthropic_api_key", "analysis_auth_header", "agent_auth_header", "gmail_app_password"}
 
 
 async def get_setting(db: AsyncSession, user_id: str, key: str) -> str:

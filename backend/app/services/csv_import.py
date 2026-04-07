@@ -13,7 +13,7 @@ import io
 import re
 from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.finance import Transaction
@@ -290,24 +290,47 @@ async def import_transactions(
         addr = raw.get("counterparty_address", "")
         if addr:
             notes_parts.append(addr)
+        notes = " | ".join(notes_parts) if notes_parts else None
 
-        txn = Transaction(
-            user_id=user_id,
-            account_id=account_id,
-            date=raw["date"],
-            merchant=merchant_name,
-            amount=raw["amount"],
-            currency=raw.get("currency", "CHF"),
-            original_amount=raw.get("original_amount"),
-            original_currency=raw.get("original_currency"),
-            category_id=cat_id,
-            viseca_transaction_id=ref if ref and ref != "NOTPROVIDED" else None,
-            notes=" | ".join(notes_parts) if notes_parts else None,
+        # Check for pending transaction from email notification (match by date + amount)
+        pending_result = await db.execute(
+            select(Transaction).where(and_(
+                Transaction.user_id == user_id,
+                Transaction.account_id == account_id,
+                Transaction.date == raw["date"],
+                Transaction.amount == raw["amount"],
+                Transaction.merchant == "Pending",
+            ))
         )
-        db.add(txn)
-        await db.flush()
-        imported += 1
-        imported_txns.append(txn)
+        pending_txn = pending_result.scalar_one_or_none()
+
+        if pending_txn:
+            # Upgrade pending transaction with real details
+            pending_txn.merchant = merchant_name
+            pending_txn.category_id = cat_id
+            pending_txn.viseca_transaction_id = ref if ref and ref != "NOTPROVIDED" else None
+            pending_txn.notes = notes
+            imported += 1
+            imported_txns.append(pending_txn)
+            method_counts["upgraded"] = method_counts.get("upgraded", 0) + 1
+        else:
+            txn = Transaction(
+                user_id=user_id,
+                account_id=account_id,
+                date=raw["date"],
+                merchant=merchant_name,
+                amount=raw["amount"],
+                currency=raw.get("currency", "CHF"),
+                original_amount=raw.get("original_amount"),
+                original_currency=raw.get("original_currency"),
+                category_id=cat_id,
+                viseca_transaction_id=ref if ref and ref != "NOTPROVIDED" else None,
+                notes=notes,
+            )
+            db.add(txn)
+            await db.flush()
+            imported += 1
+            imported_txns.append(txn)
 
         if not cat_id:
             uncategorized_txns.append({
@@ -324,7 +347,7 @@ async def import_transactions(
 
     # Log categorization breakdown
     for method, count in sorted(method_counts.items(), key=lambda x: -x[1]):
-        label = {"keyword": "Keyword match", "merchant_db": "Merchant DB", "history": "History", "classifier": "ML Classifier", "unmatched": "Unmatched"}.get(method, method)
+        label = {"keyword": "Keyword match", "merchant_db": "Merchant DB", "history": "History", "classifier": "ML Classifier", "unmatched": "Unmatched", "upgraded": "Upgraded from email"}.get(method, method)
         _log(f"  {label}: {count}", "categorized" if method != "unmatched" else "pending")
 
     # Batch AI categorization for unknowns — deduplicated by merchant

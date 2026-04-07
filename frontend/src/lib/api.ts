@@ -41,6 +41,16 @@ export const api = {
   overview: () => request<Overview>("/api/dashboard/overview"),
   portfolio: () => request<PortfolioSummary>("/api/dashboard/portfolio"),
   portfolioHistory: (days = 90) => request<PortfolioSnapshot[]>(`/api/dashboard/portfolio/history?days=${days}`),
+  trade: (data: { symbol: string; type: string; quantity: number; price?: number; currency?: string; date?: string; fees?: number; deduct_from_cash?: boolean }) =>
+    request<{ status: string }>("/api/dashboard/portfolio/trade", { method: "POST", body: JSON.stringify(data) }),
+  trades: (symbol?: string) =>
+    request<{ id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; date: string; total: number }[]>(`/api/dashboard/portfolio/trades${symbol ? `?symbol=${symbol}` : ""}`),
+  updatePosition: (id: string, data: { quantity?: number; avg_cost_price?: number }) =>
+    request<{ status: string }>(`/api/dashboard/portfolio/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deletePosition: (id: string) =>
+    request<{ status: string }>(`/api/dashboard/portfolio/${id}`, { method: "DELETE" }),
+  priceChart: (ticker: string, range = "1y") =>
+    request<{ ticker: string; range: string; data: { date: string; close: number }[] }>(`/api/dashboard/portfolio/chart/${ticker}?range=${range}`),
   stockTransactions: (symbol?: string) =>
     request<StockTransaction[]>(`/api/dashboard/portfolio/transactions${symbol ? `?symbol=${symbol}` : ""}`),
 
@@ -150,8 +160,7 @@ export const api = {
     request<{ status: string; updated: string[] }>("/api/settings", { method: "PUT", body: JSON.stringify({ settings }) }),
 
   // Sync
-  syncSaxo: () => request<SyncResult>("/api/sync/saxo", { method: "POST" }),
-  syncViseca: () => request<SyncResult>("/api/sync/viseca", { method: "POST" }),
+  syncGmail: () => request<{ status: string; new_transactions: number; balance: number | null; errors: string[] }>("/api/sync/gmail", { method: "POST" }),
   syncStatus: () => request<SyncStatus[]>("/api/sync/status"),
 };
 
@@ -171,6 +180,7 @@ export interface PortfolioSummary {
   total_cost: number;
   total_pnl: number;
   total_pnl_pct: number;
+  cash_balance: number;
   positions_count: number;
   positions: Position[];
 }
@@ -183,10 +193,14 @@ export interface Position {
   avg_cost_price: number;
   currency: string;
   last_price: number | null;
-  last_price_at: string | null;
-  unrealized_pnl: number | null;
-  market_value: number | null;
-  weight_pct: number | null;
+  change: number;
+  change_pct: number;
+  unrealized_pnl: number;
+  pnl_pct: number;
+  market_value: number;
+  weight_pct: number;
+  first_bought: string | null;
+  trade_count: number;
 }
 
 export interface PortfolioSnapshot { snapshot_date: string; total_value: number; total_cost: number; total_pnl: number }

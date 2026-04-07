@@ -15,8 +15,8 @@ import {
   Clock,
   Save,
   Brain,
-  TrendingUp,
-  CreditCard,
+  Bot,
+  Mail,
 } from "lucide-react";
 
 const LABELS: Record<string, string> = {
@@ -24,15 +24,12 @@ const LABELS: Record<string, string> = {
   analysis_model: "Analysis Model",
   analysis_endpoint: "Custom Agent Endpoint",
   analysis_auth_header: "Agent Auth Header",
-  saxo_app_key: "App Key",
-  saxo_app_secret: "App Secret",
-  saxo_account_key: "Account Key",
-  saxo_access_token: "Access Token",
-  saxo_refresh_token: "Refresh Token",
-  saxo_token_url: "Token URL",
-  saxo_api_url: "API URL",
-  viseca_cookie: "Session Cookie (AL_SESS-S)",
-  viseca_card_id: "Card ID",
+  agent_endpoint: "Agent API Endpoint",
+  agent_auth_header: "Agent Auth Header",
+  gmail_address: "Gmail Address",
+  gmail_app_password: "App Password",
+  gmail_poll_interval: "Auto-poll Interval (minutes)",
+  gmail_sender_filter: "Sender Emails to Monitor",
 };
 
 const PLACEHOLDERS: Record<string, string> = {
@@ -40,27 +37,30 @@ const PLACEHOLDERS: Record<string, string> = {
   analysis_model: "claude-sonnet-4-20250514",
   analysis_endpoint: "https://your-agent.example.com/analyze",
   analysis_auth_header: "Bearer sk-your-token",
-  saxo_app_key: "From developer.saxobank.com",
-  saxo_access_token: "Paste OAuth token here",
-  saxo_token_url: "https://live.logonvalidation.net/token",
-  saxo_api_url: "https://gateway.saxobank.com/openapi",
-  viseca_cookie: "From browser DevTools",
-  viseca_card_id: "Your Viseca card ID",
+  agent_endpoint: "https://your-agent.example.com/api/finpilot",
+  agent_auth_header: "Bearer sk-your-token",
+  gmail_address: "your-email@gmail.com",
+  gmail_app_password: "16-char app password from Google",
+  gmail_poll_interval: "e.g. 15 (minutes), 0 = manual only",
+  gmail_sender_filter: "e.g. noreply@valiant.ch,alerts@bank.com",
 };
 
 const HINTS: Record<string, string> = {
-  analysis_endpoint: "If set, analysis requests go to this URL instead of Anthropic. Your agent receives market_data + prompts as JSON.",
-  analysis_auth_header: "Sent as the Authorization header to your custom endpoint.",
+  analysis_endpoint: "If set, analysis requests go to this URL instead of Anthropic.",
+  analysis_auth_header: "Sent as Authorization header to your custom endpoint.",
   analysis_model: "Default: claude-sonnet-4-20250514. Change to any Anthropic model ID.",
-  saxo_access_token: "Get a 24h token from developer.saxobank.com or complete OAuth flow.",
+  agent_endpoint: "Your NanoClaw agent API. Can scrape banks, fetch portfolio data, run scheduled tasks.",
+  agent_auth_header: "Auth header for the agent endpoint.",
+  gmail_sender_filter: "Default: noreply@valiant.ch. Add more senders comma-separated.",
+  gmail_poll_interval: "Set to 15 for every 15 min. 0 or empty = manual only.",
 };
 
-const SENSITIVE_KEYS = new Set(["anthropic_api_key", "saxo_app_secret", "saxo_access_token", "saxo_refresh_token", "viseca_cookie"]);
+const SENSITIVE_KEYS = new Set(["anthropic_api_key", "analysis_auth_header", "agent_auth_header", "gmail_app_password"]);
 
 const GROUP_ICONS: Record<string, typeof Brain> = {
   analysis: Brain,
-  saxo: TrendingUp,
-  viseca: CreditCard,
+  agent: Bot,
+  gmail: Mail,
 };
 
 export default function SettingsPage() {
@@ -100,11 +100,27 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSync = async (source: "saxo" | "viseca") => {
+  const [gmailResult, setGmailResult] = useState<string | null>(null);
+
+  const handleSync = async (source: "gmail") => {
     setSyncing(source);
+    setGmailResult(null);
+    // Auto-save any pending edits before syncing
+    if (Object.keys(edits).length > 0) {
+      await api.updateSettings(edits);
+      const data = await api.getSettings();
+      setSettings(data.settings);
+      setEdits({});
+    }
     try {
-      if (source === "saxo") await api.syncSaxo();
-      else await api.syncViseca();
+      if (source === "gmail") {
+        const result = await api.syncGmail();
+        setGmailResult(
+          result.balance !== null
+            ? `${result.new_transactions} new transactions. Balance: CHF ${result.balance.toLocaleString("de-CH", { minimumFractionDigits: 2 })}`
+            : `${result.new_transactions} new transactions.${result.errors.length ? " Errors: " + result.errors.join(", ") : ""}`
+        );
+      }
       setSyncStatus(await api.syncStatus());
     } catch {
       setSyncStatus(await api.syncStatus());
@@ -173,8 +189,8 @@ export default function SettingsPage() {
                 );
               })}
 
-              {/* Sync button for saxo/viseca */}
-              {(groupKey === "saxo" || groupKey === "viseca") && (
+              {/* Sync button for gmail */}
+              {groupKey === "gmail" && (
                 <>
                   <Separator />
                   <div className="flex items-center justify-between">
@@ -189,13 +205,16 @@ export default function SettingsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleSync(groupKey as "saxo" | "viseca")}
+                      onClick={() => handleSync("gmail")}
                       disabled={syncing === groupKey}
                     >
                       <RefreshCw className={`h-4 w-4 mr-2 ${syncing === groupKey ? "animate-spin" : ""}`} />
-                      Sync Now
+                      Poll Emails
                     </Button>
                   </div>
+                  {groupKey === "gmail" && gmailResult && (
+                    <p className="text-xs text-green-500 mt-2">{gmailResult}</p>
+                  )}
                 </>
               )}
             </CardContent>

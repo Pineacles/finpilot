@@ -27,13 +27,13 @@ async def get_settings(
                 "label": "AI Analysis",
                 "keys": ["anthropic_api_key", "analysis_model", "analysis_endpoint", "analysis_auth_header"],
             },
-            "saxo": {
-                "label": "Saxo Bank",
-                "keys": ["saxo_app_key", "saxo_app_secret", "saxo_account_key", "saxo_access_token", "saxo_refresh_token", "saxo_token_url", "saxo_api_url"],
+            "agent": {
+                "label": "Agent (NanoClaw)",
+                "keys": ["agent_endpoint", "agent_auth_header"],
             },
-            "viseca": {
-                "label": "Viseca One",
-                "keys": ["viseca_cookie", "viseca_card_id"],
+            "gmail": {
+                "label": "Gmail (Bank Notifications)",
+                "keys": ["gmail_address", "gmail_app_password", "gmail_sender_filter", "gmail_poll_interval"],
             },
         },
     }
