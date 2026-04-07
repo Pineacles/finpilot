@@ -149,8 +149,8 @@ export const api = {
     request<YearlyStats>(`/api/dashboard/stats/yearly${year ? `?year=${year}` : ""}`),
 
   // Analysis
-  analysisLatest: () => request<PortfolioAnalysis>("/api/dashboard/analysis/latest"),
-  analysisList: (limit = 10) => request<AnalysisListItem[]>(`/api/dashboard/analysis?limit=${limit}`),
+  analysisLatest: (type?: string) => request<PortfolioAnalysis>(`/api/dashboard/analysis/latest${type ? `?analysis_type=${type}` : ""}`),
+  analysisList: (type?: string, limit = 20) => request<AnalysisListItem[]>(`/api/dashboard/analysis?limit=${limit}${type ? `&analysis_type=${type}` : ""}`),
   analysisDetail: (id: string) => request<PortfolioAnalysis>(`/api/dashboard/analysis/${id}`),
 
   // Settings
@@ -271,10 +271,15 @@ export interface StockAnalysis {
 
 export interface PortfolioAnalysis {
   id: string;
+  analysis_type: string;
   content: {
     market_summary: string;
     market_sentiment: string;
-    stocks: StockAnalysis[];
+    stocks?: StockAnalysis[];
+    key_indicators?: { name: string; value: string; trend: string }[];
+    outlook?: string;
+    risks?: string[];
+    opportunities?: string[];
     analyzed_at: string;
   };
   created_at: string;
@@ -282,6 +287,7 @@ export interface PortfolioAnalysis {
 
 export interface AnalysisListItem {
   id: string;
+  analysis_type: string;
   market_sentiment: string | null;
   stocks_count: number;
   created_at: string;

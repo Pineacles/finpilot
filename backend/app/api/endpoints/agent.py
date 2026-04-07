@@ -455,10 +455,16 @@ class StockAnalysis(BaseModel):
 
 
 class AnalysisCreate(BaseModel):
+    analysis_type: str = "portfolio"  # portfolio | economy
     market_summary: str
     market_sentiment: str  # bullish | bearish | neutral
     stocks: list[StockAnalysis] = []
-    analyzed_at: str | None = None  # ISO timestamp
+    # Economy-specific fields
+    key_indicators: list[dict] | None = None  # [{"name": "GDP", "value": "2.1%", "trend": "up"}]
+    outlook: str | None = None
+    risks: list[str] | None = None
+    opportunities: list[str] | None = None
+    analyzed_at: str | None = None
 
 
 @router.post("/analysis")
@@ -467,49 +473,63 @@ async def store_analysis(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Store a portfolio analysis run.
+    """Store an analysis.
 
-    The agent performs its own analysis and stores the structured result here.
+    analysis_type: "portfolio" (per-stock actions) or "economy" (macro outlook)
     """
     from app.models.stock import MarketAnalysis
+
+    if body.analysis_type not in ("portfolio", "economy"):
+        raise HTTPException(status_code=400, detail="analysis_type must be: portfolio, economy")
 
     content = {
         "market_summary": body.market_summary,
         "market_sentiment": body.market_sentiment,
-        "stocks": [s.model_dump() for s in body.stocks],
         "analyzed_at": body.analyzed_at or datetime.now(timezone.utc).isoformat(),
     }
 
+    if body.analysis_type == "portfolio":
+        content["stocks"] = [s.model_dump() for s in body.stocks]
+    else:
+        content["key_indicators"] = body.key_indicators or []
+        content["outlook"] = body.outlook or ""
+        content["risks"] = body.risks or []
+        content["opportunities"] = body.opportunities or []
+
     analysis = MarketAnalysis(
         user_id=user.id,
-        analysis_type="portfolio",
+        analysis_type=body.analysis_type,
         content=content,
         model_used="agent",
     )
     db.add(analysis)
     await db.commit()
 
-    return {"status": "ok", "id": analysis.id, "stocks_analyzed": len(body.stocks)}
+    return {"status": "ok", "id": analysis.id, "type": body.analysis_type}
 
 
 @router.get("/analysis/latest")
 async def get_latest_analysis(
+    analysis_type: str | None = None,
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get the most recent portfolio analysis."""
+    """Get the most recent analysis. Optional filter by type (portfolio|economy)."""
     from app.models.stock import MarketAnalysis
 
-    result = await db.execute(
-        select(MarketAnalysis).where(MarketAnalysis.user_id == user.id)
-        .order_by(desc(MarketAnalysis.created_at)).limit(1)
-    )
+    query = select(MarketAnalysis).where(MarketAnalysis.user_id == user.id)
+    if analysis_type:
+        query = query.where(MarketAnalysis.analysis_type == analysis_type)
+    query = query.order_by(desc(MarketAnalysis.created_at)).limit(1)
+
+    result = await db.execute(query)
     analysis = result.scalar_one_or_none()
     if not analysis:
         return {"status": "none", "message": "No analysis stored yet."}
 
     return {
         "id": analysis.id,
+        "analysis_type": analysis.analysis_type,
         "content": analysis.content,
         "created_at": analysis.created_at.isoformat(),
     }
@@ -517,28 +537,30 @@ async def get_latest_analysis(
 
 @router.get("/analysis")
 async def list_analyses(
+    analysis_type: str | None = None,
     limit: int = 10,
     offset: int = 0,
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """List analysis history (paginated)."""
+    """List analysis history. Optional filter by type (portfolio|economy)."""
     from app.models.stock import MarketAnalysis
 
-    result = await db.execute(
-        select(MarketAnalysis).where(MarketAnalysis.user_id == user.id)
-        .order_by(desc(MarketAnalysis.created_at))
-        .limit(limit).offset(offset)
-    )
-    analyses = result.scalars().all()
+    query = select(MarketAnalysis).where(MarketAnalysis.user_id == user.id)
+    if analysis_type:
+        query = query.where(MarketAnalysis.analysis_type == analysis_type)
+    query = query.order_by(desc(MarketAnalysis.created_at)).limit(limit).offset(offset)
+
+    result = await db.execute(query)
     return [
         {
             "id": a.id,
+            "analysis_type": a.analysis_type,
             "market_sentiment": a.content.get("market_sentiment") if isinstance(a.content, dict) else None,
             "stocks_count": len(a.content.get("stocks", [])) if isinstance(a.content, dict) else 0,
             "created_at": a.created_at.isoformat(),
         }
-        for a in analyses
+        for a in result.scalars().all()
     ]
 
 

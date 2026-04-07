@@ -13,19 +13,22 @@ router = APIRouter(prefix="/api/dashboard/analysis", tags=["analysis"])
 
 @router.get("/latest")
 async def get_latest(
+    analysis_type: str | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get the most recent portfolio analysis."""
-    result = await db.execute(
-        select(MarketAnalysis).where(MarketAnalysis.user_id == user.id)
-        .order_by(desc(MarketAnalysis.created_at)).limit(1)
-    )
+    """Get the most recent analysis. Optional filter by type."""
+    query = select(MarketAnalysis).where(MarketAnalysis.user_id == user.id)
+    if analysis_type:
+        query = query.where(MarketAnalysis.analysis_type == analysis_type)
+    query = query.order_by(desc(MarketAnalysis.created_at)).limit(1)
+    result = await db.execute(query)
     analysis = result.scalar_one_or_none()
     if not analysis:
         return {"status": "none", "message": "No analysis yet."}
     return {
         "id": analysis.id,
+        "analysis_type": analysis.analysis_type,
         "content": analysis.content,
         "created_at": analysis.created_at.isoformat(),
     }
@@ -33,20 +36,22 @@ async def get_latest(
 
 @router.get("")
 async def list_analyses(
+    analysis_type: str | None = None,
     limit: int = 10,
     offset: int = 0,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List analysis history."""
-    result = await db.execute(
-        select(MarketAnalysis).where(MarketAnalysis.user_id == user.id)
-        .order_by(desc(MarketAnalysis.created_at))
-        .limit(limit).offset(offset)
-    )
+    """List analysis history. Optional filter by type."""
+    query = select(MarketAnalysis).where(MarketAnalysis.user_id == user.id)
+    if analysis_type:
+        query = query.where(MarketAnalysis.analysis_type == analysis_type)
+    query = query.order_by(desc(MarketAnalysis.created_at)).limit(limit).offset(offset)
+    result = await db.execute(query)
     return [
         {
             "id": a.id,
+            "analysis_type": a.analysis_type,
             "market_sentiment": a.content.get("market_sentiment") if isinstance(a.content, dict) else None,
             "stocks_count": len(a.content.get("stocks", [])) if isinstance(a.content, dict) else 0,
             "created_at": a.created_at.isoformat(),

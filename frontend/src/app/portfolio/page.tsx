@@ -68,20 +68,25 @@ export default function PortfolioPage() {
   const [chartLoading, setChartLoading] = useState(false);
   const [historyData, setHistoryData] = useState<{ date: string; value: number }[]>([]);
   const [historyRange, setHistoryRange] = useState("3mo");
-  const [analysisList, setAnalysisList] = useState<AnalysisListItem[]>([]);
+  const [analysisTab, setAnalysisTab] = useState<"portfolio" | "economy">("portfolio");
+  const [latestPortfolio, setLatestPortfolio] = useState<PortfolioAnalysis | null>(null);
+  const [latestEconomy, setLatestEconomy] = useState<PortfolioAnalysis | null>(null);
   const [activeAnalysis, setActiveAnalysis] = useState<PortfolioAnalysis | null>(null);
-  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [olderList, setOlderList] = useState<AnalysisListItem[]>([]);
+  const [showOlder, setShowOlder] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       api.portfolio(),
       api.portfolioHistory(historyRange === "1mo" ? 30 : historyRange === "3mo" ? 90 : historyRange === "1y" ? 365 : 180),
-      api.analysisList(20),
-    ]).then(([p, h, a]) => {
+      api.analysisLatest("portfolio"),
+      api.analysisLatest("economy"),
+    ]).then(([p, h, ap, ae]) => {
       setPortfolio(p);
       setHistoryData(h);
-      setAnalysisList(a);
+      if (ap && !("status" in ap && ap.status === "none")) { setLatestPortfolio(ap); setActiveAnalysis(ap); }
+      if (ae && !("status" in ae && ae.status === "none")) setLatestEconomy(ae);
     }).finally(() => setLoading(false));
   }, [historyRange]);
 
@@ -127,9 +132,23 @@ export default function PortfolioPage() {
     try {
       const a = await api.analysisDetail(id);
       setActiveAnalysis(a);
-      setAnalysisOpen(true);
+      setShowOlder(false);
     } catch { /* ignore */ }
   };
+
+  const loadOlder = async () => {
+    const list = await api.analysisList(analysisTab, 20);
+    setOlderList(list);
+    setShowOlder(true);
+  };
+
+  // Switch active analysis when tab changes
+  useEffect(() => {
+    if (analysisTab === "portfolio" && latestPortfolio) setActiveAnalysis(latestPortfolio);
+    else if (analysisTab === "economy" && latestEconomy) setActiveAnalysis(latestEconomy);
+    else setActiveAnalysis(null);
+    setShowOlder(false);
+  }, [analysisTab, latestPortfolio, latestEconomy]);
 
   const openChart = async (ticker: string, range = chartRange) => {
     setChartTicker(ticker); setChartRange(range); setChartLoading(true);
@@ -384,69 +403,67 @@ export default function PortfolioPage() {
         </Card>
       </div>
 
-      {/* Analysis History */}
+      {/* Analysis Section — Inline, Tabbed */}
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm flex items-center gap-1.5"><Brain className="h-4 w-4" />Portfolio Analysis</CardTitle>
-            <span className="text-xs text-muted-foreground">{analysisList.length} reports</span>
+            <div className="flex items-center gap-3">
+              <Brain className="h-4 w-4" />
+              <div className="flex gap-1">
+                <Button variant={analysisTab === "portfolio" ? "default" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setAnalysisTab("portfolio")}>Portfolio</Button>
+                <Button variant={analysisTab === "economy" ? "default" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setAnalysisTab("economy")}>Economy</Button>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={loadOlder}>View older</Button>
           </div>
         </CardHeader>
         <CardContent>
-          {analysisList.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No analyses yet. Your agent will store reports here.</p>
-          ) : (
-            <div className="space-y-2">
-              {analysisList.map((a) => (
-                <div key={a.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/40 cursor-pointer transition-colors"
-                  onClick={() => viewAnalysis(a.id)}>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-2.5 h-2.5 rounded-full ${
-                      a.market_sentiment === "bullish" ? "bg-green-500" :
-                      a.market_sentiment === "bearish" ? "bg-red-500" : "bg-yellow-500"
-                    }`} />
-                    <div>
-                      <p className="text-sm font-medium capitalize">{a.market_sentiment || "neutral"} outlook</p>
-                      <p className="text-[11px] text-muted-foreground">{new Date(a.created_at).toLocaleDateString("en-CH", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+          {/* Older reports list */}
+          {showOlder && (
+            <div className="mb-4 space-y-1.5 p-3 rounded-lg bg-accent/20">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium">Previous Reports</span>
+                <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setShowOlder(false)}><X className="h-3 w-3" /></Button>
+              </div>
+              {olderList.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No older reports.</p>
+              ) : (
+                olderList.map((a) => (
+                  <div key={a.id} className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors text-xs ${activeAnalysis?.id === a.id ? "bg-accent" : "hover:bg-accent/50"}`}
+                    onClick={() => viewAnalysis(a.id)}>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${a.market_sentiment === "bullish" ? "bg-green-500" : a.market_sentiment === "bearish" ? "bg-red-500" : "bg-yellow-500"}`} />
+                      <span className="capitalize">{a.market_sentiment || "neutral"}</span>
                     </div>
+                    <span className="text-muted-foreground">{new Date(a.created_at).toLocaleDateString("en-CH", { day: "numeric", month: "short" })}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground">{a.stocks_count} stocks analyzed</span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           )}
-        </CardContent>
-      </Card>
 
-      {/* Analysis Detail Dialog */}
-      <Dialog open={analysisOpen} onOpenChange={setAnalysisOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
-          {activeAnalysis && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Brain className="h-5 w-5" />
-                  Portfolio Analysis
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    activeAnalysis.content.market_sentiment === "bullish" ? "bg-green-500/15 text-green-500" :
-                    activeAnalysis.content.market_sentiment === "bearish" ? "bg-red-500/15 text-red-500" :
-                    "bg-yellow-500/15 text-yellow-500"
-                  }`}>
-                    {activeAnalysis.content.market_sentiment}
-                  </span>
-                </DialogTitle>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(activeAnalysis.created_at).toLocaleString()}
-                </p>
-              </DialogHeader>
+          {/* Active Analysis Content */}
+          {!activeAnalysis ? (
+            <p className="text-sm text-muted-foreground py-4">No {analysisTab} analysis yet. Your agent will store reports here.</p>
+          ) : (
+            <div className="space-y-4">
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  activeAnalysis.content.market_sentiment === "bullish" ? "bg-green-500/15 text-green-500" :
+                  activeAnalysis.content.market_sentiment === "bearish" ? "bg-red-500/15 text-red-500" :
+                  "bg-yellow-500/15 text-yellow-500"
+                }`}>{activeAnalysis.content.market_sentiment}</span>
+                <span className="text-xs text-muted-foreground">{new Date(activeAnalysis.created_at).toLocaleString()}</span>
+              </div>
 
-              <div className="overflow-y-auto flex-1 space-y-4 -mx-6 px-6">
-                {/* Market Summary */}
-                <div className="p-3 rounded-lg bg-accent/30">
-                  <p className="text-sm">{activeAnalysis.content.market_summary}</p>
-                </div>
+              {/* Market Summary */}
+              <div className="p-3 rounded-lg bg-accent/30">
+                <p className="text-sm">{activeAnalysis.content.market_summary}</p>
+              </div>
 
-                {/* Per-Stock Analysis */}
+              {/* Portfolio: Per-Stock Analysis */}
+              {activeAnalysis.content.stocks && activeAnalysis.content.stocks.length > 0 && (
                 <div className="space-y-3">
                   {activeAnalysis.content.stocks.map((s) => (
                     <div key={s.symbol} className="p-4 rounded-lg border">
@@ -490,11 +507,52 @@ export default function PortfolioPage() {
                     </div>
                   ))}
                 </div>
+              )}
+
+              {/* Economy: Indicators, Outlook, Risks, Opportunities */}
+              {activeAnalysis.content.key_indicators && activeAnalysis.content.key_indicators.length > 0 && (
+                <div className="grid gap-2 grid-cols-2 md:grid-cols-4">
+                  {activeAnalysis.content.key_indicators.map((ind, i) => (
+                    <div key={i} className="p-3 rounded-lg border text-center">
+                      <p className="text-[11px] text-muted-foreground">{ind.name}</p>
+                      <p className="text-lg font-bold">{ind.value}</p>
+                      <p className={`text-[10px] ${ind.trend === "up" ? "text-green-500" : ind.trend === "down" ? "text-red-500" : "text-muted-foreground"}`}>
+                        {ind.trend === "up" ? "Trending up" : ind.trend === "down" ? "Trending down" : "Stable"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeAnalysis.content.outlook && (
+                <div className="p-3 rounded-lg border">
+                  <p className="text-xs font-medium mb-1">Outlook</p>
+                  <p className="text-sm text-muted-foreground">{activeAnalysis.content.outlook}</p>
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {activeAnalysis.content.risks && activeAnalysis.content.risks.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-red-400 flex items-center gap-1 mb-2"><AlertTriangle className="h-3 w-3" />Key Risks</p>
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      {activeAnalysis.content.risks.map((r, i) => <li key={i} className="flex gap-1.5"><span className="text-red-400">-</span>{r}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {activeAnalysis.content.opportunities && activeAnalysis.content.opportunities.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-green-400 flex items-center gap-1 mb-2"><Zap className="h-3 w-3" />Opportunities</p>
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      {activeAnalysis.content.opportunities.map((o, i) => <li key={i} className="flex gap-1.5"><span className="text-green-400">-</span>{o}</li>)}
+                    </ul>
+                  </div>
+                )}
               </div>
-            </>
+            </div>
           )}
-        </DialogContent>
-      </Dialog>
+        </CardContent>
+      </Card>
 
       {/* Trade Dialog */}
       <Dialog open={showTrade} onOpenChange={setShowTrade}>
