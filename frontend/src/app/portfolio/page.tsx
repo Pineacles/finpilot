@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight } from "lucide-react";
 
-const COLORS = ["#34c759","#007aff","#ff9500","#ff3b30","#af52de","#ff2d55","#5ac8fa","#4cd964"];
+const COLORS = ["#f97316","#007aff","#ff9500","#ff3b30","#af52de","#ff2d55","#5ac8fa","#4cd964"];
 const RANGES = [{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
 
 function GlassCard({children,className="",delay=0}:{children:React.ReactNode;className?:string;delay?:number}){
@@ -19,7 +19,7 @@ function Sparkline({data,positive}:{data:number[];positive:boolean}){
   if(!data||data.length<2)return null;
   const min=Math.min(...data),max=Math.max(...data),range=max-min||1,h=36,w=90;
   const points=data.map((v,i)=>`${(i/(data.length-1))*w},${h-((v-min)/range)*h}`).join(" ");
-  return <svg width={w} height={h} className="shrink-0"><polyline fill="none" stroke={positive?"#34c759":"#ff3b30"} strokeWidth="2" points={points}/></svg>;
+  return <svg width={w} height={h} className="shrink-0"><polyline fill="none" stroke={positive?"#f97316":"#ff3b30"} strokeWidth="2" points={points}/></svg>;
 }
 function PnlBadge({value,pct}:{value:number;pct?:number}){
   const pos=value>=0;
@@ -42,16 +42,14 @@ export default function PortfolioPage(){
   const [historyData,setHistoryData]=useState<{date:string;value:number}[]>([]);
   const [latestPortfolio,setLP]=useState<PortfolioAnalysis|null>(null);
   const [latestEconomy,setLE]=useState<PortfolioAnalysis|null>(null);
-  const [activeAnalysis,setAA]=useState<PortfolioAnalysis|null>(null);
   const [olderList,setOL]=useState<AnalysisListItem[]>([]);
   const [showOlder,setShowOlder]=useState(false);
-  const [analysisType,setAnalysisType]=useState<"portfolio"|"economy">("portfolio");
 
   const load=useCallback(()=>{
     setLoading(true);
     Promise.all([api.portfolio(),api.portfolioHistory(90),api.analysisLatest("portfolio"),api.analysisLatest("economy")]).then(([port,h,ap,ae])=>{
       setP(port);setHistoryData(h);
-      if(ap&&!("status" in ap&&(ap as any).status==="none")){setLP(ap);setAA(ap);}
+      if(ap&&!("status" in ap&&(ap as any).status==="none"))setLP(ap);
       if(ae&&!("status" in ae&&(ae as any).status==="none"))setLE(ae);
     }).finally(()=>setLoading(false));
   },[]);
@@ -75,14 +73,8 @@ export default function PortfolioPage(){
   };
   const handleUpdate=async(id:string)=>{await api.updatePosition(id,{quantity:editForm.quantity?parseFloat(editForm.quantity):undefined,avg_cost_price:editForm.avg_cost_price?parseFloat(editForm.avg_cost_price):undefined});setEditingId(null);load();};
   const handleDelete=async(id:string)=>{await api.deletePosition(id);load();};
-  const viewAnalysis=async(id:string)=>{try{const a=await api.analysisDetail(id);setAA(a);setShowOlder(false);}catch{}};
-  const loadOlder=async()=>{const l=await api.analysisList(analysisType,20);setOL(l);setShowOlder(true);};
-
-  useEffect(()=>{
-    if(analysisType==="portfolio"&&latestPortfolio)setAA(latestPortfolio);
-    else if(analysisType==="economy"&&latestEconomy)setAA(latestEconomy);
-    else setAA(null);setShowOlder(false);
-  },[analysisType,latestPortfolio,latestEconomy]);
+  const viewAnalysis=async(id:string)=>{try{const a=await api.analysisDetail(id);setLP(a);setShowOlder(false);}catch{}};
+  const loadOlder=async()=>{const l=await api.analysisList(undefined,20);setOL(l);setShowOlder(true);};
 
   const pnlUp=(p?.total_pnl??0)>=0;
 
@@ -151,30 +143,95 @@ export default function PortfolioPage(){
               {(()=>{const pos=p?.positions.find(pp=>pp.symbol===chartTicker);return pos?<div className="flex items-center gap-3 mb-3"><span className="text-2xl font-bold tabular-nums">{pos.last_price?.toFixed(2)}</span><span className={`text-sm font-medium ${pos.change>=0?"text-gain":"text-loss"}`}>{pos.change>=0?"+":""}{pos.change.toFixed(2)} ({pos.change_pct>=0?"+":""}{pos.change_pct.toFixed(1)}%)</span></div>:null;})()}
               <div className="flex gap-1 mb-2">{RANGES.map(r=><button key={r.value} onClick={()=>setChartRange(r.value)} className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${chartRange===r.value?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}>{r.label}</button>)}</div>
               <div className="h-52">{chartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:chartData.length===0?<p className="text-sm text-muted-foreground">No data</p>:(
-                <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34c759" stopOpacity={0.2}/><stop offset="100%" stopColor="#34c759" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#34c759" strokeWidth={2} fill="url(#sg)"/></AreaChart></ResponsiveContainer>
+                <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f97316" stopOpacity={0.2}/><stop offset="100%" stopColor="#f97316" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#f97316" strokeWidth={2} fill="url(#sg)"/></AreaChart></ResponsiveContainer>
               )}</div>
             </>
           )}
         </GlassCard>
       </div>
 
-      {/* Analysis */}
+      {/* Portfolio Analysis */}
       <GlassCard delay={0.35}>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
-            <Brain className="h-5 w-5 text-muted-foreground"/>
-            <div className="flex gap-1">{(["portfolio","economy"] as const).map(t=><button key={t} onClick={()=>setAnalysisType(t)} className={`px-4 py-1.5 rounded-xl text-[13px] font-medium transition-all cursor-pointer capitalize ${analysisType===t?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}>{t}</button>)}</div>
+            <div className="h-10 w-10 rounded-2xl bg-orange-100 dark:bg-orange-500/15 flex items-center justify-center"><Brain className="h-5 w-5 text-orange-600 dark:text-orange-400" strokeWidth={1.8}/></div>
+            <h2 className="text-lg font-semibold">Portfolio Analysis</h2>
           </div>
-          <button onClick={loadOlder} className="text-[13px] text-muted-foreground hover:text-foreground cursor-pointer">View older</button>
+          {latestPortfolio && <span className="text-[13px] text-muted-foreground">{new Date(latestPortfolio.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</span>}
         </div>
-        {showOlder&&<div className="mb-4 p-3 rounded-2xl bg-accent space-y-1">{olderList.map(a=><div key={a.id} onClick={()=>viewAnalysis(a.id)} className="flex items-center justify-between p-2 rounded-xl cursor-pointer hover:bg-muted text-[13px]"><span className="capitalize">{a.market_sentiment||"neutral"}</span><span className="text-muted-foreground">{new Date(a.created_at).toLocaleDateString()}</span></div>)}</div>}
-        {!activeAnalysis?<p className="text-muted-foreground py-8 text-center">No analysis yet. Your agent will store reports here.</p>:(
-          <div className="space-y-4">
-            <div className="flex items-center gap-3"><span className={`text-[13px] px-3 py-1 rounded-xl font-medium capitalize ${activeAnalysis.content.market_sentiment==="bullish"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":activeAnalysis.content.market_sentiment==="bearish"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"}`}>{activeAnalysis.content.market_sentiment}</span><span className="text-[13px] text-muted-foreground">{new Date(activeAnalysis.created_at).toLocaleString()}</span></div>
-            <div className="p-4 rounded-2xl bg-accent"><p className="text-[15px] leading-relaxed">{activeAnalysis.content.market_summary}</p></div>
-            {activeAnalysis.content.stocks?.map(s=><div key={s.symbol} className="p-4 rounded-2xl border border-border"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><span className="font-bold text-[15px]">{s.symbol}</span><span className={`text-[12px] px-2 py-0.5 rounded-lg font-medium ${s.action==="ADD"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":s.action==="SELL"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400"}`}>{s.action}</span></div><div className="text-right text-[13px]"><span className="text-muted-foreground">Entry: {s.entry_price.toFixed(2)} / Now: {s.current_price.toFixed(2)}</span><span className={`ml-2 font-medium ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span></div></div><p className="text-[14px] text-muted-foreground mb-2">{s.rationale}</p><div className="flex gap-4 text-[13px]">{s.key_risks.length>0&&<div className="flex-1"><p className="font-medium text-loss flex items-center gap-1 mb-1"><AlertTriangle className="h-3 w-3"/>Risks</p>{s.key_risks.map((r,i)=><p key={i} className="text-muted-foreground">- {r}</p>)}</div>}{s.key_catalysts.length>0&&<div className="flex-1"><p className="font-medium text-gain flex items-center gap-1 mb-1"><Zap className="h-3 w-3"/>Catalysts</p>{s.key_catalysts.map((c,i)=><p key={i} className="text-muted-foreground">- {c}</p>)}</div>}</div></div>)}
-            {activeAnalysis.content.key_indicators&&activeAnalysis.content.key_indicators.length>0&&<div className="grid gap-3 grid-cols-2 md:grid-cols-4">{activeAnalysis.content.key_indicators.map((ind,i)=><div key={i} className="p-3 rounded-2xl bg-accent text-center"><p className="text-[12px] text-muted-foreground">{ind.name}</p><p className="text-xl font-bold">{ind.value}</p><p className={`text-[11px] ${ind.trend==="up"?"text-gain":ind.trend==="down"?"text-loss":"text-muted-foreground"}`}>{ind.trend==="up"?"Trending up":ind.trend==="down"?"Trending down":"Stable"}</p></div>)}</div>}
-            {activeAnalysis.content.outlook&&<div className="p-4 rounded-2xl border border-border"><p className="text-[13px] font-medium mb-1">Outlook</p><p className="text-[14px] text-muted-foreground">{activeAnalysis.content.outlook}</p></div>}
+        {!latestPortfolio?<p className="text-muted-foreground py-6 text-center">No portfolio analysis yet. Your agent will store reports here.</p>:(
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <span className={`text-[13px] px-3 py-1.5 rounded-xl font-semibold capitalize ${latestPortfolio.content.market_sentiment==="bullish"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":latestPortfolio.content.market_sentiment==="bearish"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"}`}>{latestPortfolio.content.market_sentiment}</span>
+            </div>
+            <div className="p-5 rounded-2xl bg-accent/60">
+              <p className="text-[15px] leading-[1.8]">{latestPortfolio.content.market_summary}</p>
+            </div>
+            {latestPortfolio.content.stocks?.map(s=>(
+              <div key={s.symbol} className="p-5 rounded-2xl border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-bold">{s.symbol}</span>
+                    <span className={`text-[13px] px-3 py-1 rounded-xl font-semibold ${s.action==="ADD"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":s.action==="SELL"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400"}`}>{s.action}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[14px] text-muted-foreground">Entry {s.entry_price.toFixed(2)} / Now {s.current_price.toFixed(2)}</span>
+                    <span className={`ml-3 text-[15px] font-bold ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
+                  </div>
+                </div>
+                <p className="text-[15px] leading-[1.75] text-muted-foreground">{s.rationale}</p>
+                <div className="grid gap-5 md:grid-cols-2">
+                  {s.key_risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Risks</p><ul className="space-y-1.5">{s.key_risks.map((r,i)=><li key={i} className="text-[14px] text-muted-foreground leading-relaxed pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
+                  {s.key_catalysts.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Catalysts</p><ul className="space-y-1.5">{s.key_catalysts.map((c,i)=><li key={i} className="text-[14px] text-muted-foreground leading-relaxed pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{c}</li>)}</ul></div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </GlassCard>
+
+      {/* Economy Analysis */}
+      <GlassCard delay={0.4}>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-blue-100 dark:bg-blue-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" strokeWidth={1.8}/></div>
+            <h2 className="text-lg font-semibold">Economy & Market</h2>
+          </div>
+          {latestEconomy && <span className="text-[13px] text-muted-foreground">{new Date(latestEconomy.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</span>}
+        </div>
+        {!latestEconomy?<p className="text-muted-foreground py-6 text-center">No economy analysis yet.</p>:(
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <span className={`text-[13px] px-3 py-1.5 rounded-xl font-semibold capitalize ${latestEconomy.content.market_sentiment==="bullish"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":latestEconomy.content.market_sentiment==="bearish"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"}`}>{latestEconomy.content.market_sentiment}</span>
+            </div>
+            <div className="p-5 rounded-2xl bg-accent/60">
+              <p className="text-[15px] leading-[1.8]">{latestEconomy.content.market_summary}</p>
+            </div>
+            {latestEconomy.content.key_indicators&&latestEconomy.content.key_indicators.length>0&&(
+              <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+                {latestEconomy.content.key_indicators.map((ind,i)=>(
+                  <div key={i} className="p-4 rounded-2xl bg-accent/60 text-center">
+                    <p className="text-[13px] text-muted-foreground mb-1">{ind.name}</p>
+                    <p className="text-2xl font-bold">{ind.value}</p>
+                    <p className={`text-[12px] font-medium mt-1 ${ind.trend==="up"?"text-gain":ind.trend==="down"?"text-loss":"text-muted-foreground"}`}>
+                      {ind.trend==="up"?"Trending up":ind.trend==="down"?"Trending down":"Stable"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {latestEconomy.content.outlook&&(
+              <div className="p-5 rounded-2xl border border-border">
+                <p className="text-[14px] font-semibold mb-2">Outlook</p>
+                <p className="text-[15px] leading-[1.75] text-muted-foreground">{latestEconomy.content.outlook}</p>
+              </div>
+            )}
+            {(latestEconomy.content.risks?.length||latestEconomy.content.opportunities?.length)&&(
+              <div className="grid gap-5 md:grid-cols-2">
+                {latestEconomy.content.risks&&latestEconomy.content.risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Key Risks</p><ul className="space-y-1.5">{latestEconomy.content.risks.map((r,i)=><li key={i} className="text-[14px] text-muted-foreground leading-relaxed pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
+                {latestEconomy.content.opportunities&&latestEconomy.content.opportunities.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Opportunities</p><ul className="space-y-1.5">{latestEconomy.content.opportunities.map((o,i)=><li key={i} className="text-[14px] text-muted-foreground leading-relaxed pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{o}</li>)}</ul></div>}
+              </div>
+            )}
           </div>
         )}
       </GlassCard>

@@ -1,195 +1,922 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
-import { motion } from "motion/react";
-import { api, TransactionItem, Category, ImportResult, ImportLogEntry } from "@/lib/api";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Search, Upload, CheckCircle2, AlertCircle, Brain, Tag, Loader2, Terminal, ChevronDown, ChevronUp, Pencil, X, Check } from "lucide-react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  api,
+  TransactionItem,
+  Category,
+  ImportResult,
+  ImportLogEntry,
+} from "@/lib/api";
+import { formatCurrency, formatDate, cn } from "@/lib/format";
+import {
+  Upload,
+  Sparkles,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  X,
+  Pencil,
+  Tag,
+  ArrowUpRight,
+  ArrowDownLeft,
+  FileText,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  ReceiptText,
+  ListChecks,
+} from "lucide-react";
 
+/* ------------------------------------------------------------------ */
+/*  GlassCard                                                          */
+/* ------------------------------------------------------------------ */
+function GlassCard({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn("glass bg-card rounded-3xl p-6", className)}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 const PAGE_SIZE = 50;
+const ACCEPTED_EXTENSIONS = ".csv,.xml,.tsv";
 
-function GlassCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`glass bg-card rounded-3xl p-6 ${className}`}>{children}</div>;
-}
-
-function buildCategoryOptions(categories: Category[]) {
-  const parents = categories.filter(c => !c.parent_id).sort((a, b) => a.name.localeCompare(b.name));
-  const childMap: Record<string, Category[]> = {};
-  for (const c of categories) { if (c.parent_id) { if (!childMap[c.parent_id]) childMap[c.parent_id] = []; childMap[c.parent_id].push(c); } }
-  const opts: { value: string; label: string }[] = [];
-  for (const p of parents) { const kids = (childMap[p.id] || []).sort((a, b) => a.name.localeCompare(b.name)); if (kids.length) { opts.push({ value: p.id, label: p.name }); for (const k of kids) opts.push({ value: k.id, label: `  ${k.name}` }); } else opts.push({ value: p.id, label: p.name }); }
-  return opts;
-}
-
-function CategoryCell({ txn, categories, onCategorize }: { txn: TransactionItem; categories: Category[]; onCategorize: (id: string, catId: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const options = buildCategoryOptions(categories);
-  if (editing) return <select autoFocus className="rounded-xl border-0 bg-accent px-2 py-1.5 text-[13px] w-40" value={txn.category_id || ""} onChange={e => { if (e.target.value) { onCategorize(txn.id, e.target.value); setEditing(false); } }} onBlur={() => setEditing(false)}><option value="">--</option>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
-  return <button onClick={() => setEditing(true)} className="text-left cursor-pointer">{txn.category_name ? <Badge variant="secondary" className="cursor-pointer hover:bg-accent rounded-lg">{txn.category_name}</Badge> : <span className="text-[13px] text-muted-foreground hover:text-foreground cursor-pointer">+ Set</span>}</button>;
-}
-
-const IMPORT_STEPS = [{ label: "Uploading", pct: 10 }, { label: "Parsing", pct: 25 }, { label: "Matching", pct: 50 }, { label: "AI categorizing", pct: 75 }, { label: "Saving", pct: 90 }, { label: "Done", pct: 100 }];
-
-export default function TransactionsPage() { return <Suspense><TransactionsContent /></Suspense>; }
-
-function TransactionsContent() {
+/* ------------------------------------------------------------------ */
+/*  Inner page (needs useSearchParams inside Suspense)                 */
+/* ------------------------------------------------------------------ */
+function TransactionsInner() {
   const searchParams = useSearchParams();
-  const highlightId = searchParams.get("highlight") || "";
+  const router = useRouter();
+
+  // URL params
+  const urlSearch = searchParams.get("search") ?? "";
+  const urlHighlight = searchParams.get("highlight") ?? "";
+
+  // Data
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [search, setSearch] = useState(searchParams.get("search") || "");
-  const [filter, setFilter] = useState<"all" | "uncategorized">("all");
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+
+  // Search
+  const [search, setSearch] = useState(urlSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(urlSearch);
+
+  // Pagination
+  const [page, setPage] = useState(0);
+
+  // Import
   const [importing, setImporting] = useState(false);
-  const [importStep, setImportStep] = useState(0);
+  const [importProgress, setImportProgress] = useState(0);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
-  const [importError, setImportError] = useState("");
-  const [importLog, setImportLog] = useState<ImportLogEntry[]>([]);
+  const [importLogs, setImportLogs] = useState<ImportLogEntry[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiRunning, setAiRunning] = useState(false);
-  const [aiResult, setAiResult] = useState<string | null>(null);
-  const [editingTxn, setEditingTxn] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ merchant: "", notes: "" });
-  const fileRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const consoleRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(() => { Promise.all([api.transactions({ limit: 2000 }), api.categories()]).then(([t, c]) => { setTransactions(t); setCategories(c); }).finally(() => setLoading(false)); }, []);
-  useEffect(() => { load(); }, [load]);
+  // Uncategorized panel
+  const [selectedUncategorized, setSelectedUncategorized] = useState<Set<string>>(
+    new Set(),
+  );
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
-  useEffect(() => { if (!highlightId || loading || !transactions.length) return; const idx = filtered.findIndex(t => t.id === highlightId); if (idx >= 0) { setPage(Math.floor(idx / PAGE_SIZE) + 1); setTimeout(() => document.getElementById(`txn-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100); } }, [highlightId, loading, transactions.length]);
+  // Inline editing
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editMerchant, setEditMerchant] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    setImporting(true); setImportResult(null); setImportError(""); setImportLog([]); setShowConsole(true); setImportStep(0);
-    const timer = setInterval(() => setImportStep(prev => prev < IMPORT_STEPS.length - 2 ? prev + 1 : prev), 2000);
-    try { const result = await api.importFile(file); clearInterval(timer); setImportStep(IMPORT_STEPS.length - 1); setImportResult(result); if (result.log) setImportLog(result.log); load(); setTimeout(() => setImporting(false), 3000); }
-    catch (err) { clearInterval(timer); setImportError(err instanceof Error ? err.message : "Import failed"); setImporting(false); }
-    finally { if (fileRef.current) fileRef.current.value = ""; }
+  // Category dropdown
+  const [categoryDropdownId, setCategoryDropdownId] = useState<string | null>(null);
+  const [categoryLoading, setCategoryLoading] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Highlight
+  const highlightRef = useRef<HTMLTableRowElement>(null);
+
+  /* ---- Load data ------------------------------------------------- */
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [txns, cats] = await Promise.all([
+        api.transactions({ limit: 2000 }),
+        api.categories(),
+      ]);
+      setTransactions(txns);
+      setCategories(cats);
+    } catch {
+      // silently handle -- user sees empty state
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  /* ---- Debounce search ------------------------------------------- */
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(0);
+      const params = new URLSearchParams(searchParams.toString());
+      if (search) params.set("search", search);
+      else params.delete("search");
+      if (urlHighlight) params.set("highlight", urlHighlight);
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : "?", { scroll: false });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  /* ---- Scroll to highlighted -------------------------------------- */
+  useEffect(() => {
+    if (urlHighlight && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [urlHighlight, transactions, page]);
+
+  /* ---- Close category dropdown on outside click ------------------- */
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setCategoryDropdownId(null);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  /* ---- Filtered + paginated data --------------------------------- */
+  const filtered = useMemo(() => {
+    if (!debouncedSearch) return transactions;
+    const q = debouncedSearch.toLowerCase();
+    return transactions.filter(
+      (t) =>
+        t.merchant.toLowerCase().includes(q) ||
+        (t.notes ?? "").toLowerCase().includes(q) ||
+        (t.category_name ?? "").toLowerCase().includes(q) ||
+        (t.parent_category_name ?? "").toLowerCase().includes(q),
+    );
+  }, [transactions, debouncedSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // If highlight is set, jump to correct page
+  useEffect(() => {
+    if (!urlHighlight) return;
+    const idx = filtered.findIndex((t) => t.id === urlHighlight);
+    if (idx >= 0) {
+      const targetPage = Math.floor(idx / PAGE_SIZE);
+      if (targetPage !== page) setPage(targetPage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlHighlight, filtered]);
+
+  const uncategorized = useMemo(
+    () => transactions.filter((t) => !t.category_id),
+    [transactions],
+  );
+
+  /* ---- Category helpers ------------------------------------------ */
+  const groupedCategories = useMemo(() => {
+    const parents = categories
+      .filter((c) => !c.parent_id)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const children = categories.filter((c) => c.parent_id);
+    return parents.map((p) => ({
+      ...p,
+      children: children
+        .filter((c) => c.parent_id === p.id)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+  }, [categories]);
+
+  /* ---- Import ---------------------------------------------------- */
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    setImportProgress(0);
+    setImportResult(null);
+    setImportLogs([]);
+    setImportError(null);
+    setShowConsole(true);
+
+    // Simulate progress during the network request
+    const progressInterval = setInterval(() => {
+      setImportProgress((p) => Math.min(p + 5, 85));
+    }, 200);
+
+    try {
+      const result = await api.importFile(file);
+      clearInterval(progressInterval);
+      setImportProgress(100);
+      setImportResult(result);
+      if (result.log) setImportLogs(result.log);
+      await load();
+    } catch (err) {
+      clearInterval(progressInterval);
+      setImportProgress(0);
+      setImportError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
   };
 
-  const handleManualCategorize = async (txnId: string, categoryId: string) => { await api.manualCategorize(txnId, categoryId); load(); };
-  const handleBulkCategorize = async (categoryId: string) => { if (!selected.size) return; await api.bulkManualCategorize([...selected], categoryId); setSelected(new Set()); load(); };
-  const handleAiCategorize = async () => { const ids = selected.size > 0 ? [...selected] : uncategorized.map(t => t.id); if (!ids.length) return; setAiRunning(true); setAiResult(null); try { const r = await api.aiCategorize(ids, aiPrompt || undefined); setAiResult(`${r.categorized}/${r.sent} categorized`); setSelected(new Set()); setAiPrompt(""); load(); } catch { setAiResult("Failed"); } finally { setAiRunning(false); } };
-  const saveEditTxn = async () => { if (!editingTxn) return; await api.updateTransaction(editingTxn, { merchant: editForm.merchant, notes: editForm.notes || undefined } as any); setEditingTxn(null); load(); };
-  const toggleSelect = (id: string) => { const next = new Set(selected); if (next.has(id)) next.delete(id); else next.add(id); setSelected(next); };
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleImport(file);
+    e.target.value = "";
+  };
 
-  const uncategorized = transactions.filter(t => !t.category_name || t.category_name === "Other");
-  const filtered = (() => { let list = filter === "uncategorized" ? uncategorized : transactions; if (search) { const q = search.toLowerCase(); list = list.filter(t => t.merchant.toLowerCase().includes(q) || (t.notes && t.notes.toLowerCase().includes(q)) || (t.category_name && t.category_name.toLowerCase().includes(q))); } return list; })();
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const displayed = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  useEffect(() => { setPage(1); }, [filter, search]);
+  /* ---- Auto-scroll console --------------------------------------- */
+  useEffect(() => {
+    if (consoleRef.current) {
+      consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+    }
+  }, [importLogs, importError, importResult]);
 
-  const catOptions = buildCategoryOptions(categories);
+  /* ---- Uncategorized bulk ---------------------------------------- */
+  const toggleUncategorized = (id: string) => {
+    setSelectedUncategorized((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
+  const toggleAllUncategorized = () => {
+    if (selectedUncategorized.size === uncategorized.length) {
+      setSelectedUncategorized(new Set());
+    } else {
+      setSelectedUncategorized(new Set(uncategorized.map((t) => t.id)));
+    }
+  };
+
+  const handleBulkCategorize = async () => {
+    if (!bulkCategoryId || selectedUncategorized.size === 0) return;
+    setBulkLoading(true);
+    try {
+      await api.bulkManualCategorize(Array.from(selectedUncategorized), bulkCategoryId);
+      setSelectedUncategorized(new Set());
+      setBulkCategoryId("");
+      await load();
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleAiCategorize = async () => {
+    const ids =
+      selectedUncategorized.size > 0
+        ? Array.from(selectedUncategorized)
+        : uncategorized.map((t) => t.id);
+    if (ids.length === 0) return;
+    setAiLoading(true);
+    try {
+      await api.aiCategorize(ids);
+      setSelectedUncategorized(new Set());
+      await load();
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  /* ---- Inline editing -------------------------------------------- */
+  const startEditing = (txn: TransactionItem) => {
+    setEditingId(txn.id);
+    setEditMerchant(txn.merchant);
+    setEditNotes(txn.notes ?? "");
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditMerchant("");
+    setEditNotes("");
+  };
+
+  const saveEditing = async () => {
+    if (!editingId) return;
+    setSavingEdit(true);
+    try {
+      await api.updateTransaction(editingId, {
+        merchant: editMerchant,
+        notes: editNotes || undefined,
+      } as Partial<TransactionItem>);
+      await load();
+      cancelEditing();
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  /* ---- Category cell --------------------------------------------- */
+  const handleCategoryChange = async (txnId: string, categoryId: string) => {
+    setCategoryLoading(txnId);
+    setCategoryDropdownId(null);
+    try {
+      await api.manualCategorize(txnId, categoryId);
+      await load();
+    } finally {
+      setCategoryLoading(null);
+    }
+  };
+
+  /* ================================================================ */
+  /*  RENDER                                                           */
+  /* ================================================================ */
   return (
     <div className="space-y-6">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-between">
-        <h1 className="text-3xl font-semibold tracking-tight">Transactions</h1>
+      {/* ---- Header ------------------------------------------------ */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold tracking-tight">Transactions</h1>
+
         <div className="flex items-center gap-3">
-          {!importing && importError && <div className="flex items-center gap-2 text-[13px] text-loss"><AlertCircle className="h-4 w-4" />{importError}</div>}
-          <input ref={fileRef} type="file" accept=".csv,.xml,.tsv" className="hidden" onChange={handleImport} />
-          <Button onClick={() => fileRef.current?.click()} disabled={importing} className="rounded-xl"><Upload className="h-4 w-4 mr-1.5" />{importing ? "Importing..." : "Import"}</Button>
-        </div>
-      </motion.div>
-
-      {/* Import Progress */}
-      {importing && (
-        <GlassCard>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-[14px]"><span className="font-medium">{IMPORT_STEPS[importStep].label}...</span><span className="text-muted-foreground">{IMPORT_STEPS[importStep].pct}%</span></div>
-            <div className="h-2.5 rounded-full bg-secondary overflow-hidden"><motion.div initial={{ width: 0 }} animate={{ width: `${IMPORT_STEPS[importStep].pct}%` }} transition={{ duration: 0.7 }} className="h-full rounded-full bg-primary" /></div>
-            {importResult && <div className="flex items-center gap-2 text-[13px] text-gain pt-1"><CheckCircle2 className="h-4 w-4" />{importResult.imported} imported, {importResult.categorized} categorized{importResult.skipped > 0 && <span className="text-muted-foreground">({importResult.skipped} skipped)</span>}</div>}
-          </div>
-        </GlassCard>
-      )}
-
-      {/* Console */}
-      {importLog.length > 0 && (
-        <GlassCard className="!p-0 overflow-hidden">
-          <button onClick={() => setShowConsole(!showConsole)} className="flex items-center justify-between w-full px-6 py-3 cursor-pointer hover:bg-accent/50 transition-colors">
-            <div className="flex items-center gap-2 text-[14px]"><Terminal className="h-4 w-4" /><span className="font-medium font-mono">Import Log</span></div>
-            {showConsole ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPTED_EXTENSIONS}
+            onChange={onFileChange}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className={cn(
+              "flex items-center gap-2 rounded-xl bg-primary px-4 h-11 text-[15px] font-medium text-primary-foreground",
+              "active:scale-[0.98] cursor-pointer transition-all",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+            )}
+          >
+            {importing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            Import
           </button>
-          {showConsole && <div className="px-6 pb-4 font-mono text-[13px] leading-relaxed max-h-64 overflow-y-auto space-y-0.5">{importLog.map((entry, i) => <div key={i} className="flex gap-2"><span className="text-muted-foreground select-none shrink-0 w-6 text-right">{String(i + 1).padStart(2, "0")}</span><span className={entry.msg.startsWith("  ") ? "text-muted-foreground" : "text-gain"}>{entry.msg}</span>{entry.detail && <span className="text-muted-foreground/60">{entry.detail}</span>}</div>)}</div>}
-        </GlassCard>
-      )}
+        </div>
+      </div>
 
-      {/* Uncategorized */}
+      {/* ---- Import Console ---------------------------------------- */}
+      <AnimatePresence>
+        {showConsole && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <GlassCard className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="text-[15px] font-semibold">Import Console</h3>
+                </div>
+                <button
+                  onClick={() => setShowConsole(false)}
+                  className="rounded-xl p-1.5 hover:bg-accent active:scale-[0.98] cursor-pointer transition-all"
+                >
+                  <X className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </div>
+
+              {/* Progress bar */}
+              {importing && (
+                <div className="space-y-2">
+                  <div className="h-2 rounded-full bg-accent overflow-hidden">
+                    <motion.div
+                      className="h-full bg-primary rounded-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${importProgress}%` }}
+                      transition={{ ease: "easeOut" }}
+                    />
+                  </div>
+                  <p className="text-[13px] text-muted-foreground">
+                    Processing... {importProgress}%
+                  </p>
+                </div>
+              )}
+
+              {/* Result summary */}
+              {importResult && (
+                <div className="flex items-center gap-4 text-[13px]">
+                  <span className="flex items-center gap-1 text-gain">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {importResult.imported} imported
+                  </span>
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Tag className="h-3.5 w-3.5" />
+                    {importResult.categorized} categorized
+                  </span>
+                  {importResult.skipped > 0 && (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      {importResult.skipped} skipped
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Error */}
+              {importError && (
+                <div className="flex items-center gap-2 text-[13px] text-loss">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {importError}
+                </div>
+              )}
+
+              {/* Log output */}
+              <div
+                ref={consoleRef}
+                className="bg-card rounded-2xl p-4 max-h-48 overflow-y-auto font-mono text-[13px] space-y-1"
+              >
+                {importLogs.length === 0 && !importError && (
+                  <p className="text-muted-foreground">
+                    {importing ? "Waiting for server response..." : "No log entries."}
+                  </p>
+                )}
+                {importLogs.map((entry, i) => (
+                  <div key={i} className="text-muted-foreground">
+                    <span className="text-foreground">{entry.msg}</span>
+                    {entry.detail && (
+                      <span className="ml-2 opacity-60">{entry.detail}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </GlassCard>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ---- Uncategorized Panel ----------------------------------- */}
       {uncategorized.length > 0 && (
-        <GlassCard className="border-amber-500/20 border">
+        <GlassCard>
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2"><Tag className="h-5 w-5 text-amber-500" /><h2 className="text-lg font-semibold">{uncategorized.length} Uncategorized</h2></div>
-            <button onClick={() => setFilter(filter === "uncategorized" ? "all" : "uncategorized")} className="text-[13px] text-muted-foreground hover:text-foreground cursor-pointer">{filter === "uncategorized" ? "Show All" : "Show Only Uncategorized"}</button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-amber-500/10">
+                <AlertCircle className="h-4 w-4 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="text-[15px] font-semibold">Uncategorized</h3>
+                <p className="text-[13px] text-muted-foreground">
+                  {uncategorized.length} transaction
+                  {uncategorized.length !== 1 ? "s" : ""} need categorization
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Select all */}
+              <button
+                onClick={toggleAllUncategorized}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-xl px-3 h-9 text-[13px] font-medium",
+                  "bg-accent hover:bg-accent/80 active:scale-[0.98] cursor-pointer transition-all",
+                )}
+              >
+                <ListChecks className="h-3.5 w-3.5" />
+                {selectedUncategorized.size === uncategorized.length
+                  ? "Deselect All"
+                  : "Select All"}
+              </button>
+
+              {/* Bulk category picker */}
+              <select
+                value={bulkCategoryId}
+                onChange={(e) => setBulkCategoryId(e.target.value)}
+                className="h-9 rounded-xl bg-accent px-3 text-[13px] border-none outline-none cursor-pointer"
+              >
+                <option value="">Category...</option>
+                {groupedCategories.map((g) => (
+                  <optgroup key={g.id} label={g.name}>
+                    {g.children.length > 0 ? (
+                      g.children.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value={g.id}>{g.name}</option>
+                    )}
+                  </optgroup>
+                ))}
+              </select>
+
+              <button
+                onClick={handleBulkCategorize}
+                disabled={!bulkCategoryId || selectedUncategorized.size === 0 || bulkLoading}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-xl px-3 h-9 text-[13px] font-medium",
+                  "bg-primary text-primary-foreground active:scale-[0.98] cursor-pointer transition-all",
+                  "disabled:opacity-40 disabled:cursor-not-allowed",
+                )}
+              >
+                {bulkLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Tag className="h-3.5 w-3.5" />
+                )}
+                Apply
+              </button>
+
+              <button
+                onClick={handleAiCategorize}
+                disabled={aiLoading}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-xl px-4 h-9 text-[13px] font-medium",
+                  "bg-chart-2 text-white active:scale-[0.98] cursor-pointer transition-all",
+                  "disabled:opacity-50 disabled:cursor-not-allowed",
+                )}
+              >
+                {aiLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                AI Categorize
+                {selectedUncategorized.size > 0
+                  ? ` (${selectedUncategorized.size})`
+                  : ` (${uncategorized.length})`}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-3 flex-wrap mb-3">
-            <Button variant="outline" size="sm" onClick={() => setSelected(new Set(uncategorized.map(t => t.id)))} className="rounded-xl">Select All ({uncategorized.length})</Button>
-            {selected.size > 0 && <><span className="text-[13px] text-muted-foreground">{selected.size} selected</span><select className="rounded-xl border-0 bg-accent px-3 py-2 text-[14px]" defaultValue="" onChange={e => { if (e.target.value) handleBulkCategorize(e.target.value); e.target.value = ""; }}><option value="">Set category...</option>{catOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></>}
+
+          {/* Uncategorized pill previews */}
+          <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+            {uncategorized.slice(0, 20).map((txn) => (
+              <button
+                key={txn.id}
+                onClick={() => toggleUncategorized(txn.id)}
+                className={cn(
+                  "flex items-center gap-2 rounded-xl px-3 py-1.5 text-[13px] transition-all cursor-pointer",
+                  "active:scale-[0.98]",
+                  selectedUncategorized.has(txn.id)
+                    ? "bg-primary/15 text-primary ring-1 ring-primary/30"
+                    : "bg-accent hover:bg-accent/80",
+                )}
+              >
+                <span className="truncate max-w-[140px]">{txn.merchant}</span>
+                <span
+                  className={cn(
+                    "font-medium tabular-nums",
+                    txn.amount >= 0 ? "text-gain" : "text-loss",
+                  )}
+                >
+                  {formatCurrency(txn.amount, txn.currency)}
+                </span>
+              </button>
+            ))}
+            {uncategorized.length > 20 && (
+              <span className="text-[13px] text-muted-foreground self-center ml-1">
+                +{uncategorized.length - 20} more
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <Brain className="h-5 w-5 text-primary shrink-0" />
-            <Input placeholder="e.g. 'Person names = Transfer'" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} className="rounded-xl h-10" />
-            <Button size="sm" onClick={handleAiCategorize} disabled={aiRunning} className="rounded-xl shrink-0">{aiRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4 mr-1" />}{aiRunning ? "Running..." : `AI Categorize${selected.size > 0 ? ` (${selected.size})` : ""}`}</Button>
-          </div>
-          {aiResult && <p className="text-[13px] text-gain flex items-center gap-1 mt-2"><CheckCircle2 className="h-3 w-3" />{aiResult}</p>}
         </GlassCard>
       )}
 
-      {/* Transactions Table */}
-      <GlassCard>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">{filter === "uncategorized" ? "Uncategorized" : "All"} ({filtered.length})</h2>
-          <div className="relative w-72"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Search merchant, description, category..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 rounded-xl h-10" /></div>
+      {/* ---- Search + Table ---------------------------------------- */}
+      <GlassCard className="space-y-4">
+        {/* Search bar */}
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search merchant, description, category..."
+            className={cn(
+              "w-full h-11 rounded-xl bg-accent pl-10 pr-4 text-[15px] outline-none",
+              "placeholder:text-muted-foreground/60 transition-all",
+              "focus:ring-2 focus:ring-primary/30",
+            )}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
+            >
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
+          )}
         </div>
 
-        {loading ? <p className="text-muted-foreground">Loading...</p> : displayed.length === 0 ? <div className="text-center py-16"><Search className="h-12 w-12 text-muted-foreground/20 mx-auto mb-3" /><p className="text-muted-foreground">No transactions found.</p></div> : (
+        {/* Loading */}
+        {loading && (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!loading && filtered.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <ReceiptText className="h-16 w-16 text-muted-foreground/20 mb-4" />
+            {transactions.length === 0 ? (
+              <>
+                <p className="text-[15px] font-medium text-muted-foreground">
+                  No transactions yet
+                </p>
+                <p className="text-[13px] text-muted-foreground/60 mt-1">
+                  Import a CSV, XML, or TSV file to get started
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[15px] font-medium text-muted-foreground">
+                  No matching transactions
+                </p>
+                <p className="text-[13px] text-muted-foreground/60 mt-1">
+                  Try adjusting your search terms
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Transaction table */}
+        {!loading && filtered.length > 0 && (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-[14px]">
-                <thead><tr className="border-b text-left text-muted-foreground text-[13px]">{filter === "uncategorized" && <th className="pb-3 w-8" />}<th className="pb-3 font-medium">Date</th><th className="pb-3 font-medium">Merchant</th><th className="pb-3 font-medium">Description</th><th className="pb-3 font-medium">Category</th><th className="pb-3 font-medium text-right">Amount</th><th className="pb-3 w-10" /></tr></thead>
+            <div className="overflow-x-auto -mx-6 px-6">
+              <table className="w-full text-[15px]">
+                <thead>
+                  <tr className="border-b border-border text-[13px] text-muted-foreground">
+                    <th className="text-left font-medium pb-3 pr-4">Date</th>
+                    <th className="text-left font-medium pb-3 pr-4">Merchant</th>
+                    <th className="text-left font-medium pb-3 pr-4">Description</th>
+                    <th className="text-left font-medium pb-3 pr-4">Category</th>
+                    <th className="text-right font-medium pb-3 pr-4">Amount</th>
+                    <th className="pb-3 w-10" />
+                  </tr>
+                </thead>
                 <tbody>
-                  {displayed.map(t => editingTxn === t.id ? (
-                    <tr key={t.id} className="border-b border-primary/20 bg-accent/50">
-                      {filter === "uncategorized" && <td />}
-                      <td className="py-3 text-muted-foreground whitespace-nowrap">{formatDate(t.date)}</td>
-                      <td className="py-3"><Input value={editForm.merchant} onChange={e => setEditForm({ ...editForm, merchant: e.target.value })} className="h-8 rounded-xl text-[14px]" /></td>
-                      <td className="py-3"><Input value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} className="h-8 rounded-xl text-[13px]" placeholder="Notes" /></td>
-                      <td className="py-3"><CategoryCell txn={t} categories={categories} onCategorize={handleManualCategorize} /></td>
-                      <td className={`py-3 text-right font-medium tabular-nums ${t.amount < 0 ? "text-loss" : "text-gain"}`}>{formatCurrency(t.amount, t.currency)}</td>
-                      <td className="py-3"><div className="flex gap-0.5"><button className="cursor-pointer p-1" onClick={saveEditTxn}><Check className="h-4 w-4 text-gain" /></button><button className="cursor-pointer p-1" onClick={() => setEditingTxn(null)}><X className="h-4 w-4 text-muted-foreground" /></button></div></td>
-                    </tr>
-                  ) : (
-                    <tr key={t.id} id={`txn-${t.id}`} className={`border-b border-border/50 hover:bg-accent/30 transition-colors ${selected.has(t.id) ? "bg-accent/50" : ""} ${highlightId === t.id ? "bg-primary/8 ring-1 ring-primary/20" : ""}`}>
-                      {filter === "uncategorized" && <td className="py-3"><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} className="rounded cursor-pointer" /></td>}
-                      <td className="py-3 text-muted-foreground whitespace-nowrap">{formatDate(t.date)}</td>
-                      <td className="py-3 font-medium">{t.merchant}</td>
-                      <td className="py-3 max-w-[250px]">{t.notes ? <span className="text-[13px] text-muted-foreground truncate block" title={t.notes}>{t.notes.split("|")[0].trim().substring(0, 60)}{t.notes.split("|")[0].trim().length > 60 ? "..." : ""}</span> : <span className="text-[13px] text-muted-foreground">-</span>}</td>
-                      <td className="py-3"><div className="flex flex-col gap-0.5">{t.parent_category_name && <span className="text-[11px] text-muted-foreground leading-none">{t.parent_category_name}</span>}<CategoryCell txn={t} categories={categories} onCategorize={handleManualCategorize} /></div></td>
-                      <td className={`py-3 text-right font-medium tabular-nums whitespace-nowrap ${t.amount < 0 ? "text-loss" : "text-gain"}`}>{formatCurrency(t.amount, t.currency)}</td>
-                      <td className="py-3"><button className="cursor-pointer p-1 opacity-0 group-hover:opacity-100" onClick={() => { setEditingTxn(t.id); setEditForm({ merchant: t.merchant, notes: t.notes || "" }); }}><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></button></td>
-                    </tr>
-                  ))}
+                  {paginated.map((txn) => {
+                    const isEditing = editingId === txn.id;
+                    const isHighlighted = txn.id === urlHighlight;
+                    const isIncome = txn.amount >= 0;
+
+                    return (
+                      <tr
+                        key={txn.id}
+                        ref={isHighlighted ? highlightRef : undefined}
+                        className={cn(
+                          "group border-b border-border/50 transition-colors hover:bg-accent/30",
+                          isHighlighted && "bg-primary/5 ring-1 ring-primary/20",
+                        )}
+                      >
+                        {/* Date */}
+                        <td className="py-3 pr-4 whitespace-nowrap text-[13px] text-muted-foreground tabular-nums">
+                          {formatDate(txn.date)}
+                        </td>
+
+                        {/* Merchant */}
+                        <td className="py-3 pr-4">
+                          {isEditing ? (
+                            <input
+                              value={editMerchant}
+                              onChange={(e) => setEditMerchant(e.target.value)}
+                              className="h-9 w-full rounded-xl bg-accent px-3 text-[15px] outline-none focus:ring-2 focus:ring-primary/30"
+                              autoFocus
+                            />
+                          ) : (
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={cn(
+                                  "flex items-center justify-center h-7 w-7 rounded-lg shrink-0",
+                                  isIncome ? "bg-emerald-500/10" : "bg-rose-500/10",
+                                )}
+                              >
+                                {isIncome ? (
+                                  <ArrowDownLeft className="h-3.5 w-3.5 text-emerald-500" />
+                                ) : (
+                                  <ArrowUpRight className="h-3.5 w-3.5 text-rose-500" />
+                                )}
+                              </div>
+                              <span className="font-medium truncate max-w-[200px]">
+                                {txn.merchant}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Notes / Description */}
+                        <td className="py-3 pr-4">
+                          {isEditing ? (
+                            <input
+                              value={editNotes}
+                              onChange={(e) => setEditNotes(e.target.value)}
+                              placeholder="Notes..."
+                              className="h-9 w-full rounded-xl bg-accent px-3 text-[15px] outline-none placeholder:text-muted-foreground/40 focus:ring-2 focus:ring-primary/30"
+                            />
+                          ) : (
+                            <span className="text-[13px] text-muted-foreground truncate block max-w-[220px]">
+                              {txn.notes || "\u2014"}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Category */}
+                        <td className="py-3 pr-4 relative">
+                          {categoryLoading === txn.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          ) : (
+                            <>
+                              <button
+                                onClick={() =>
+                                  setCategoryDropdownId(
+                                    categoryDropdownId === txn.id ? null : txn.id,
+                                  )
+                                }
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[13px] transition-all cursor-pointer",
+                                  "active:scale-[0.98]",
+                                  txn.category_name
+                                    ? "bg-primary/10 text-primary hover:bg-primary/15"
+                                    : "bg-accent text-muted-foreground hover:bg-accent/80",
+                                )}
+                              >
+                                <Tag className="h-3 w-3" />
+                                {txn.category_name ?? "Uncategorized"}
+                              </button>
+                              {txn.parent_category_name && txn.parent_category_name !== txn.category_name && (
+                                <span className="block text-[11px] text-muted-foreground/60 mt-0.5 pl-1">
+                                  {txn.parent_category_name}
+                                </span>
+                              )}
+                            </>
+                          )}
+
+                          {/* Category dropdown */}
+                          {categoryDropdownId === txn.id && (
+                            <div
+                              ref={dropdownRef}
+                              className="absolute z-50 top-full left-0 mt-1 w-56 bg-popover rounded-2xl border border-border shadow-lg p-2 max-h-64 overflow-y-auto"
+                            >
+                              {groupedCategories.map((g) => (
+                                <div key={g.id}>
+                                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 pt-2 pb-1">
+                                    {g.name}
+                                  </div>
+                                  {g.children.length > 0 ? (
+                                    g.children.map((c) => (
+                                      <button
+                                        key={c.id}
+                                        onClick={() => handleCategoryChange(txn.id, c.id)}
+                                        className={cn(
+                                          "w-full text-left px-2 py-1.5 rounded-lg text-[13px] cursor-pointer transition-colors",
+                                          "hover:bg-accent active:scale-[0.98]",
+                                          txn.category_id === c.id &&
+                                            "bg-primary/10 text-primary",
+                                        )}
+                                      >
+                                        {c.name}
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <button
+                                      onClick={() => handleCategoryChange(txn.id, g.id)}
+                                      className={cn(
+                                        "w-full text-left px-2 py-1.5 rounded-lg text-[13px] cursor-pointer transition-colors",
+                                        "hover:bg-accent active:scale-[0.98]",
+                                        txn.category_id === g.id &&
+                                          "bg-primary/10 text-primary",
+                                      )}
+                                    >
+                                      {g.name}
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Amount */}
+                        <td
+                          className={cn(
+                            "py-3 pr-4 text-right whitespace-nowrap font-semibold tabular-nums",
+                            isIncome ? "text-gain" : "text-loss",
+                          )}
+                        >
+                          {formatCurrency(txn.amount, txn.currency)}
+                        </td>
+
+                        {/* Edit button */}
+                        <td className="py-3 text-right">
+                          {isEditing ? (
+                            <div className="flex items-center gap-1 justify-end">
+                              <button
+                                onClick={saveEditing}
+                                disabled={savingEdit}
+                                className="rounded-lg p-1.5 hover:bg-accent active:scale-[0.98] cursor-pointer transition-all text-gain"
+                              >
+                                {savingEdit ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Check className="h-4 w-4" />
+                                )}
+                              </button>
+                              <button
+                                onClick={cancelEditing}
+                                className="rounded-lg p-1.5 hover:bg-accent active:scale-[0.98] cursor-pointer transition-all text-loss"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => startEditing(txn)}
+                              className="rounded-lg p-1.5 opacity-0 group-hover:opacity-100 hover:bg-accent active:scale-[0.98] cursor-pointer transition-all text-muted-foreground"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between pt-5">
-                <p className="text-[13px] text-muted-foreground">Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}</p>
-                <div className="flex items-center gap-1">
-                  <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="px-3 py-1.5 rounded-lg text-[13px] font-medium disabled:opacity-30 hover:bg-accent cursor-pointer transition-colors">Prev</button>
-                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => { let p: number; if (totalPages <= 7) p = i + 1; else if (page <= 4) p = i + 1; else if (page >= totalPages - 3) p = totalPages - 6 + i; else p = page - 3 + i; return <button key={p} onClick={() => setPage(p)} className={`w-8 h-8 rounded-lg text-[13px] font-medium cursor-pointer transition-colors ${p === page ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}>{p}</button>; })}
-                  <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="px-3 py-1.5 rounded-lg text-[13px] font-medium disabled:opacity-30 hover:bg-accent cursor-pointer transition-colors">Next</button>
-                </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-[13px] text-muted-foreground">
+                {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
+                {debouncedSearch && " found"}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className={cn(
+                    "flex items-center justify-center h-9 w-9 rounded-xl",
+                    "bg-accent hover:bg-accent/80 active:scale-[0.98] cursor-pointer transition-all",
+                    "disabled:opacity-40 disabled:cursor-not-allowed",
+                  )}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-[13px] text-muted-foreground tabular-nums min-w-[80px] text-center">
+                  Page {page + 1} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className={cn(
+                    "flex items-center justify-center h-9 w-9 rounded-xl",
+                    "bg-accent hover:bg-accent/80 active:scale-[0.98] cursor-pointer transition-all",
+                    "disabled:opacity-40 disabled:cursor-not-allowed",
+                  )}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
-            )}
+            </div>
           </>
         )}
       </GlassCard>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Exported page with Suspense boundary for useSearchParams           */
+/* ------------------------------------------------------------------ */
+export default function TransactionsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-32">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <TransactionsInner />
+    </Suspense>
   );
 }

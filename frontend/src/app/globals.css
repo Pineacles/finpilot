@@ -50,20 +50,16 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/*
- * FinPilot — Apple-inspired Clean + Glassmorphism
- * Light: soft gray bg, frosted glass cards
- * Dark: true black, glass cards with blur
- */
+/* FinPilot — Apple Glass + Orange Accent */
 
 :root {
   --background: #f2f2f7;
   --foreground: #1c1c1e;
   --card: rgba(255, 255, 255, 0.72);
   --card-foreground: #1c1c1e;
-  --popover: rgba(255, 255, 255, 0.85);
+  --popover: rgba(255, 255, 255, 0.9);
   --popover-foreground: #1c1c1e;
-  --primary: #34c759;
+  --primary: #f97316;
   --primary-foreground: #ffffff;
   --secondary: #e5e5ea;
   --secondary-foreground: #1c1c1e;
@@ -74,60 +70,60 @@
   --destructive: #ff3b30;
   --border: rgba(0, 0, 0, 0.08);
   --input: rgba(0, 0, 0, 0.06);
-  --ring: #34c759;
+  --ring: #f97316;
   --gain: #34c759;
   --loss: #ff3b30;
-  --chart-1: #34c759;
+  --chart-1: #f97316;
   --chart-2: #007aff;
-  --chart-3: #ff9500;
+  --chart-3: #34c759;
   --chart-4: #ff3b30;
   --chart-5: #af52de;
   --radius: 1rem;
   --sidebar: rgba(255, 255, 255, 0.6);
   --sidebar-foreground: #1c1c1e;
-  --sidebar-primary: #34c759;
+  --sidebar-primary: #f97316;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: rgba(0, 0, 0, 0.04);
   --sidebar-accent-foreground: #1c1c1e;
   --sidebar-border: rgba(0, 0, 0, 0.06);
-  --sidebar-ring: #34c759;
+  --sidebar-ring: #f97316;
 }
 
 .dark {
-  --background: #000000;
-  --foreground: #f5f5f7;
-  --card: rgba(28, 28, 30, 0.72);
-  --card-foreground: #f5f5f7;
-  --popover: rgba(28, 28, 30, 0.85);
-  --popover-foreground: #f5f5f7;
-  --primary: #30d158;
-  --primary-foreground: #000000;
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: rgba(24, 24, 27, 0.72);
+  --card-foreground: #fafafa;
+  --popover: rgba(24, 24, 27, 0.92);
+  --popover-foreground: #fafafa;
+  --primary: #fb923c;
+  --primary-foreground: #09090b;
   --secondary: rgba(255, 255, 255, 0.08);
-  --secondary-foreground: #f5f5f7;
+  --secondary-foreground: #fafafa;
   --muted: rgba(255, 255, 255, 0.06);
-  --muted-foreground: #98989d;
+  --muted-foreground: #a1a1aa;
   --accent: rgba(255, 255, 255, 0.06);
-  --accent-foreground: #f5f5f7;
+  --accent-foreground: #fafafa;
   --destructive: #ff453a;
   --border: rgba(255, 255, 255, 0.1);
   --input: rgba(255, 255, 255, 0.08);
-  --ring: #30d158;
-  --gain: #30d158;
-  --loss: #ff453a;
-  --chart-1: #30d158;
-  --chart-2: #0a84ff;
-  --chart-3: #ff9f0a;
-  --chart-4: #ff453a;
-  --chart-5: #bf5af2;
+  --ring: #fb923c;
+  --gain: #4ade80;
+  --loss: #f87171;
+  --chart-1: #fb923c;
+  --chart-2: #60a5fa;
+  --chart-3: #4ade80;
+  --chart-4: #f87171;
+  --chart-5: #c084fc;
   --radius: 1rem;
-  --sidebar: rgba(28, 28, 30, 0.6);
-  --sidebar-foreground: #f5f5f7;
-  --sidebar-primary: #30d158;
-  --sidebar-primary-foreground: #000000;
+  --sidebar: rgba(24, 24, 27, 0.6);
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #fb923c;
+  --sidebar-primary-foreground: #09090b;
   --sidebar-accent: rgba(255, 255, 255, 0.06);
-  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-accent-foreground: #fafafa;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #30d158;
+  --sidebar-ring: #fb923c;
 }
 
 @layer base {
@@ -142,20 +138,61 @@
   html {
     @apply font-sans;
   }
+
+  /* Scrollbar — styled for both modes */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+  .dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
+  .dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 }
 
-/* Glass card utility */
+/* Glass utility */
 .glass {
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--border);
   box-shadow:
-    0 0 0 0.5px rgba(255, 255, 255, 0.1) inset,
-    0 8px 32px -8px rgba(0, 0, 0, 0.08);
+    0 0 0 0.5px rgba(255,255,255,0.12) inset,
+    0 8px 40px -12px rgba(0,0,0,0.08);
 }
-
 .dark .glass {
   box-shadow:
-    0 0 0 0.5px rgba(255, 255, 255, 0.06) inset,
-    0 8px 32px -8px rgba(0, 0, 0, 0.4);
+    0 0 0 0.5px rgba(255,255,255,0.06) inset,
+    0 8px 40px -12px rgba(0,0,0,0.5);
+}
+
+/* Background gradient mesh for glassmorphism */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 20%, rgba(249,115,22,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 80%, rgba(59,130,246,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(168,85,247,0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+.dark body::before {
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 20%, rgba(251,146,60,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 80%, rgba(96,165,250,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(192,132,252,0.03) 0%, transparent 60%);
+}
+
+/* Recharts tooltip fix for dark mode */
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: rgba(24, 24, 27, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  color: #fafafa !important;
+}
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-label {
+  color: #a1a1aa !important;
+}
+.recharts-default-tooltip {
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px -8px rgba(0,0,0,0.12) !important;
 }
