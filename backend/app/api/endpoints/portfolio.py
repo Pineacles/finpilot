@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models.account import Account
 from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot
 from app.models.user import User
-from app.services.prices import get_quote, get_quotes_batch, get_history
+from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate
 
 router = APIRouter(prefix="/api/dashboard/portfolio", tags=["portfolio"])
 
@@ -103,11 +103,23 @@ async def get_portfolio(
                 p.unrealized_pnl = (q["price"] - p.avg_cost_price) * p.quantity
         await db.commit()
 
-    total_value = sum((p.last_price or p.avg_cost_price) * p.quantity for p in stock_positions)
-    total_cost = sum(p.avg_cost_price * p.quantity for p in stock_positions)
+    # Fetch FX rates to convert everything to CHF
+    BASE_CCY = "CHF"
+    fx_rates: dict[str, float] = {}
+    currencies_needed = {p.currency for p in stock_positions if p.currency != BASE_CCY}
+    for ccy in currencies_needed:
+        fx_rates[ccy] = await get_fx_rate(ccy, BASE_CCY)
+
+    def to_chf(amount: float, ccy: str) -> float:
+        if ccy == BASE_CCY:
+            return amount
+        return amount * fx_rates.get(ccy, 1.0)
+
+    total_value = sum(to_chf((p.last_price or p.avg_cost_price) * p.quantity, p.currency) for p in stock_positions)
+    total_cost = sum(to_chf(p.avg_cost_price * p.quantity, p.currency) for p in stock_positions)
     total_pnl = total_value - total_cost
     total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else 0
-    cash_balance = cash_pos.quantity if cash_pos else 0
+    cash_balance = cash_pos.quantity if cash_pos else 0  # Already in CHF
 
     # Get trade history for "bought on" dates
     trade_dates = {}
@@ -134,7 +146,11 @@ async def get_portfolio(
     pos_list = []
     for p in stock_positions:
         q_data = quotes.get(p.symbol, {}) if stock_positions else {}
-        mv = (p.last_price or p.avg_cost_price) * p.quantity
+        mv_local = (p.last_price or p.avg_cost_price) * p.quantity
+        mv_chf = to_chf(mv_local, p.currency)
+        pnl_local = (p.unrealized_pnl or 0)
+        pnl_chf = to_chf(pnl_local, p.currency)
+        fx = fx_rates.get(p.currency, 1.0)
         td = trade_dates.get(p.symbol, {})
         pos_list.append({
             "id": p.id,
@@ -143,13 +159,14 @@ async def get_portfolio(
             "quantity": p.quantity,
             "avg_cost_price": p.avg_cost_price,
             "currency": p.currency,
+            "fx_rate": fx if p.currency != BASE_CCY else None,
             "last_price": p.last_price,
             "change": q_data.get("change", 0),
             "change_pct": q_data.get("change_pct", 0),
-            "market_value": mv,
-            "unrealized_pnl": p.unrealized_pnl or 0,
+            "market_value": mv_chf,
+            "unrealized_pnl": pnl_chf,
             "pnl_pct": ((p.last_price or p.avg_cost_price) / p.avg_cost_price - 1) * 100 if p.avg_cost_price else 0,
-            "weight_pct": (mv / total_value * 100) if total_value else 0,
+            "weight_pct": (mv_chf / total_value * 100) if total_value else 0,
             "first_bought": td.get("first_buy"),
             "trade_count": td.get("trades", 0),
             "sparkline": sparklines.get(p.symbol, []),
@@ -182,6 +199,8 @@ async def get_portfolio(
         "total_pnl": total_pnl,
         "total_pnl_pct": total_pnl_pct,
         "cash_balance": cash_balance,
+        "base_currency": BASE_CCY,
+        "fx_rates": {k: round(v, 4) for k, v in fx_rates.items()},
         "positions_count": len(pos_list),
         "positions": sorted(pos_list, key=lambda p: p["market_value"], reverse=True),
     }

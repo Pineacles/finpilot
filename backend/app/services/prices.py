@@ -69,6 +69,45 @@ async def get_quotes_batch(tickers: list[str]) -> dict[str, dict]:
     return results
 
 
+# FX rate cache
+_fx_cache: dict[str, dict] = {}
+FX_CACHE_TTL = 300  # 5 minutes
+
+
+async def get_fx_rate(from_ccy: str, to_ccy: str) -> float:
+    """Get exchange rate. Returns multiplier to convert from_ccy to to_ccy."""
+    if from_ccy == to_ccy:
+        return 1.0
+
+    pair = f"{from_ccy}{to_ccy}=X"
+    now = time.time()
+    cached = _fx_cache.get(pair)
+    if cached and now - cached["fetched_at"] < FX_CACHE_TTL:
+        return cached["rate"]
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{_BASE}/{pair}",
+                params={"interval": "1d", "range": "1d"},
+                headers=_HEADERS,
+            )
+            if resp.status_code == 200:
+                rate = resp.json()["chart"]["result"][0]["meta"]["regularMarketPrice"]
+                _fx_cache[pair] = {"rate": rate, "fetched_at": now}
+                return rate
+    except Exception as e:
+        logger.warning(f"FX rate fetch failed for {pair}: {e}")
+
+    # Fallback: try reverse
+    reverse_pair = f"{to_ccy}{from_ccy}=X"
+    cached = _fx_cache.get(reverse_pair)
+    if cached:
+        return 1.0 / cached["rate"]
+
+    return 1.0  # Last resort
+
+
 async def get_history(ticker: str, range: str = "1y", interval: str = "1d") -> list[dict]:
     """Get historical prices.
 
