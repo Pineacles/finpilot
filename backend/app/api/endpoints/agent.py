@@ -1,102 +1,103 @@
-"""Agent endpoints — API key auth for AI assistant integration."""
-from datetime import date, timedelta
+"""Agent endpoints — API key auth for AI assistant integration.
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select, and_, func
+All endpoints use X-API-Key header authentication.
+The agent can do everything a user can do through these endpoints.
+"""
+from datetime import date, datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from pydantic import BaseModel
+from sqlalchemy import select, and_, func, case, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_user_by_api_key
 from app.core.database import get_db
+from app.models.account import Account
 from app.models.finance import Transaction, Budget, Category, RecurringExpense
-from app.models.stock import StockPosition
+from app.models.stock import StockPosition, StockTransaction
 from app.models.user import User
 from app.schemas.finance import TransactionCreate, TransactionResponse
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
 
-@router.post("/transaction", response_model=TransactionResponse)
-async def log_transaction(
-    body: TransactionCreate,
-    user: User = Depends(get_user_by_api_key),
-    db: AsyncSession = Depends(get_db),
-):
-    txn = Transaction(user_id=user.id, **body.model_dump())
-    db.add(txn)
-    await db.commit()
-    await db.refresh(txn)
-    return TransactionResponse.model_validate(txn)
-
+# ── Financial Summaries ──────────────────────────────────────────
 
 @router.get("/summary/financial")
 async def financial_summary(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
+    """Monthly financial overview: spending, income, budgets, upcoming bills."""
     today = date.today()
     month_start = today.replace(day=1)
 
-    # Monthly spending
     result = await db.execute(
-        select(func.coalesce(func.sum(func.abs(Transaction.amount)), 0)).where(
-            and_(
-                Transaction.user_id == user.id,
-                Transaction.date >= month_start,
-                Transaction.amount < 0,
-            )
-        )
+        select(
+            func.coalesce(func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)), 0).label("income"),
+            func.coalesce(func.sum(case((Transaction.amount < 0, func.abs(Transaction.amount)), else_=0)), 0).label("expenses"),
+            func.count(Transaction.id).label("txn_count"),
+        ).where(and_(Transaction.user_id == user.id, Transaction.date >= month_start))
     )
-    monthly_spent = float(result.scalar())
+    row = result.one()
+    income, expenses, txn_count = float(row.income), float(row.expenses), int(row.txn_count)
 
-    # Monthly income
-    result = await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-            and_(
-                Transaction.user_id == user.id,
-                Transaction.date >= month_start,
-                Transaction.amount > 0,
-            )
-        )
+    # Category breakdown
+    cat_result = await db.execute(
+        select(Category.name, func.coalesce(func.sum(func.abs(Transaction.amount)), 0).label("total"))
+        .outerjoin(Category, Transaction.category_id == Category.id)
+        .where(and_(Transaction.user_id == user.id, Transaction.date >= month_start, Transaction.amount < 0))
+        .group_by(Category.name)
+        .order_by(func.sum(func.abs(Transaction.amount)).desc())
+        .limit(10)
     )
-    monthly_income = float(result.scalar())
+    categories = [{"name": r.name or "Uncategorized", "total": float(r.total)} for r in cat_result.all()]
 
     # Budget status
     result = await db.execute(select(Budget).where(Budget.user_id == user.id))
-    budgets = result.scalars().all()
-    budget_status = []
-    for b in budgets:
+    budgets = []
+    for b in result.scalars().all():
         spent_result = await db.execute(
-            select(func.coalesce(func.sum(func.abs(Transaction.amount)), 0)).where(
-                and_(
-                    Transaction.user_id == user.id,
-                    Transaction.date >= month_start,
-                    Transaction.amount < 0,
-                    Transaction.category_id == b.category_id if b.category_id else True,
-                )
-            )
+            select(func.coalesce(func.sum(func.abs(Transaction.amount)), 0)).where(and_(
+                Transaction.user_id == user.id, Transaction.date >= month_start,
+                Transaction.amount < 0,
+                Transaction.category_id == b.category_id if b.category_id else True,
+            ))
         )
         spent = float(spent_result.scalar())
-        budget_status.append({"name": b.name, "limit": b.amount, "spent": spent})
+        budgets.append({"name": b.name, "limit": b.amount, "spent": spent, "pct": (spent / b.amount * 100) if b.amount else 0})
 
     # Upcoming bills
     result = await db.execute(
-        select(RecurringExpense).where(
-            and_(
-                RecurringExpense.user_id == user.id,
-                RecurringExpense.active == True,
-                RecurringExpense.next_due_date <= today + timedelta(days=14),
-            )
-        )
+        select(RecurringExpense).where(and_(
+            RecurringExpense.user_id == user.id, RecurringExpense.active == True,
+            RecurringExpense.next_due_date <= today + timedelta(days=14),
+        ))
     )
     upcoming = [{"name": r.name, "amount": r.amount, "due": r.next_due_date.isoformat()} for r in result.scalars().all()]
 
+    # Account balances
+    acct_result = await db.execute(select(Account).where(Account.user_id == user.id))
+    account_balances = []
+    for acct in acct_result.scalars().all():
+        bal_result = await db.execute(
+            select(func.coalesce(func.sum(Transaction.amount), 0)).where(and_(
+                Transaction.user_id == user.id, Transaction.account_id == acct.id,
+            ))
+        )
+        balance = float(bal_result.scalar())
+        account_balances.append({"name": acct.name, "type": acct.type, "balance": balance})
+
     return {
         "month": month_start.isoformat(),
-        "spent": monthly_spent,
-        "income": monthly_income,
-        "net": monthly_income - monthly_spent,
-        "budgets": budget_status,
+        "income": income,
+        "expenses": expenses,
+        "net": income - expenses,
+        "txn_count": txn_count,
+        "categories": categories,
+        "budgets": budgets,
         "upcoming_bills": upcoming,
+        "accounts": account_balances,
     }
 
 
@@ -105,27 +106,349 @@ async def portfolio_summary(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
+    """Portfolio overview with positions."""
     result = await db.execute(
         select(StockPosition).where(StockPosition.user_id == user.id)
     )
     positions = result.scalars().all()
 
-    total_value = sum((p.last_price or p.avg_cost_price) * p.quantity for p in positions)
-    total_pnl = sum(p.unrealized_pnl or 0 for p in positions)
+    stock_positions = [p for p in positions if p.symbol != "CASH"]
+    cash_pos = next((p for p in positions if p.symbol == "CASH"), None)
 
-    top_movers = sorted(positions, key=lambda p: abs(p.unrealized_pnl or 0), reverse=True)[:5]
+    total_value = sum((p.last_price or p.avg_cost_price) * p.quantity for p in stock_positions)
+    total_cost = sum(p.avg_cost_price * p.quantity for p in stock_positions)
+    total_pnl = total_value - total_cost
 
     return {
         "total_value": total_value,
+        "total_cost": total_cost,
         "total_pnl": total_pnl,
-        "positions_count": len(positions),
-        "top_movers": [
+        "total_pnl_pct": (total_pnl / total_cost * 100) if total_cost else 0,
+        "cash_balance": cash_pos.quantity if cash_pos else 0,
+        "positions_count": len(stock_positions),
+        "positions": [
             {
                 "symbol": p.symbol,
                 "name": p.name,
-                "pnl": p.unrealized_pnl,
+                "quantity": p.quantity,
+                "avg_cost": p.avg_cost_price,
+                "last_price": p.last_price,
+                "pnl": p.unrealized_pnl or 0,
                 "value": (p.last_price or p.avg_cost_price) * p.quantity,
             }
-            for p in top_movers
+            for p in stock_positions
         ],
     }
+
+
+# ── Stats ────────────────────────────────────────────────────────
+
+@router.get("/stats/monthly")
+async def agent_monthly_stats(
+    year: int | None = None,
+    month: int | None = None,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Monthly stats — same as dashboard endpoint but with API key auth."""
+    from app.api.endpoints.stats import monthly_stats
+    # Inject user into the request
+    return await monthly_stats(year=year, month=month, user=user, db=db)
+
+
+@router.get("/stats/yearly")
+async def agent_yearly_stats(
+    year: int | None = None,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Yearly stats — same as dashboard endpoint but with API key auth."""
+    from app.api.endpoints.stats import yearly_stats
+    return await yearly_stats(year=year, user=user, db=db)
+
+
+# ── Transactions ─────────────────────────────────────────────────
+
+@router.get("/transactions")
+async def agent_list_transactions(
+    category: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    search: str | None = None,
+    limit: int = 50,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """List transactions with filtering."""
+    query = (
+        select(Transaction, Category)
+        .outerjoin(Category, Transaction.category_id == Category.id)
+        .where(Transaction.user_id == user.id)
+    )
+    if category:
+        query = query.where(Category.name == category)
+    if from_date:
+        query = query.where(Transaction.date >= date.fromisoformat(from_date))
+    if to_date:
+        query = query.where(Transaction.date <= date.fromisoformat(to_date))
+    if search:
+        query = query.where(Transaction.merchant.ilike(f"%{search}%"))
+
+    query = query.order_by(desc(Transaction.date)).limit(limit)
+    result = await db.execute(query)
+
+    return [
+        {
+            "id": txn.id, "date": txn.date.isoformat(), "merchant": txn.merchant,
+            "amount": txn.amount, "currency": txn.currency,
+            "category": cat.name if cat else None, "notes": txn.notes,
+        }
+        for txn, cat in result.all()
+    ]
+
+
+@router.post("/transaction")
+async def log_transaction(
+    body: TransactionCreate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a transaction."""
+    txn = Transaction(user_id=user.id, **body.model_dump())
+    db.add(txn)
+    await db.commit()
+    return {"status": "ok", "id": txn.id}
+
+
+# ── Categorization ───────────────────────────────────────────────
+
+@router.post("/categorize")
+async def agent_categorize(
+    transaction_id: str,
+    category_name: str,
+    apply_to_all: bool = True,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Categorize a transaction by category name (not ID)."""
+    # Find category by name
+    cat_result = await db.execute(
+        select(Category).where(and_(Category.user_id == user.id, Category.name == category_name))
+    )
+    cat = cat_result.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found")
+
+    # Find transaction
+    txn_result = await db.execute(
+        select(Transaction).where(and_(Transaction.id == transaction_id, Transaction.user_id == user.id))
+    )
+    txn = txn_result.scalar_one_or_none()
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    txn.category_id = cat.id
+    updated = 1
+
+    if apply_to_all and txn.merchant:
+        others = await db.execute(
+            select(Transaction).where(and_(
+                Transaction.user_id == user.id, Transaction.merchant == txn.merchant, Transaction.id != txn.id,
+            ))
+        )
+        for other in others.scalars().all():
+            other.category_id = cat.id
+            updated += 1
+
+    await db.commit()
+    return {"status": "ok", "updated": updated, "merchant": txn.merchant, "category": category_name}
+
+
+@router.get("/categories")
+async def agent_list_categories(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all categories with hierarchy."""
+    result = await db.execute(
+        select(Category).where(Category.user_id == user.id).order_by(Category.name)
+    )
+    cats = result.scalars().all()
+    parent_map = {c.id: c.name for c in cats}
+
+    return [
+        {
+            "id": c.id, "name": c.name, "type": c.type,
+            "parent": parent_map.get(c.parent_id) if c.parent_id else None,
+        }
+        for c in cats
+    ]
+
+
+# ── Portfolio Trades ─────────────────────────────────────────────
+
+class AgentTradeRequest(BaseModel):
+    symbol: str
+    type: str  # buy | sell | deposit | withdraw
+    quantity: float
+    price: float = 0
+    currency: str = "USD"
+    date: str | None = None
+    fees: float = 0
+    deduct_from_cash: bool = True
+
+
+@router.post("/trade")
+async def agent_trade(
+    body: AgentTradeRequest,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Execute a portfolio trade. Same as dashboard but with API key auth."""
+    from app.api.endpoints.portfolio import execute_trade, TradeRequest
+    trade_req = TradeRequest(**body.model_dump())
+    return await execute_trade(body=trade_req, user=user, db=db)
+
+
+@router.get("/trades")
+async def agent_trades(
+    symbol: str | None = None,
+    limit: int = 50,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trade history."""
+    query = select(StockTransaction).where(StockTransaction.user_id == user.id)
+    if symbol:
+        query = query.where(StockTransaction.symbol == symbol.upper())
+    query = query.order_by(desc(StockTransaction.executed_at)).limit(limit)
+    result = await db.execute(query)
+    return [
+        {
+            "symbol": t.symbol, "type": t.type, "quantity": t.quantity,
+            "price": t.price, "fees": t.fees, "date": t.executed_at.isoformat(),
+        }
+        for t in result.scalars().all()
+    ]
+
+
+# ── File Import ──────────────────────────────────────────────────
+
+@router.post("/import")
+async def agent_import_file(
+    file: UploadFile = File(...),
+    use_ai: bool = Form(default=True),
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import a bank statement file (camt.053 XML, Valiant CSV, Viseca CSV/TSV).
+    Same as /api/import/csv but with API key auth for agent use."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower()
+    if ext not in ("csv", "xml", "tsv"):
+        raise HTTPException(status_code=400, detail="File must be .csv, .tsv, or .xml")
+
+    raw = await file.read()
+    for encoding in ("utf-8-sig", "utf-8", "iso-8859-1", "cp1252"):
+        try:
+            content = raw.decode(encoding)
+            break
+        except (UnicodeDecodeError, ValueError):
+            continue
+    else:
+        raise HTTPException(status_code=400, detail="Could not decode file")
+
+    from app.services.csv_import import detect_format, import_transactions
+    from app.services.seed_merchants import seed_merchants
+
+    fmt = detect_format(content)
+    is_credit_card = fmt == "viseca"
+
+    acct_type = "credit_card" if is_credit_card else "bank"
+    acct_name = "Viseca Credit Card" if is_credit_card else "Valiant Bank"
+    result = await db.execute(
+        select(Account).where(and_(Account.user_id == user.id, Account.type == acct_type))
+    )
+    account = result.scalar_one_or_none()
+    if not account:
+        account = Account(user_id=user.id, name=acct_name, type=acct_type, currency="CHF")
+        db.add(account)
+        await db.flush()
+
+    await seed_merchants(db, user.id)
+    result = await import_transactions(db, user.id, account.id, content, use_ai=use_ai)
+    return result
+
+
+# ── Analysis ─────────────────────────────────────────────────────
+
+@router.post("/analysis/run")
+async def agent_run_analysis(
+    analysis_type: str = "position",
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Run AI analysis.
+
+    analysis_type: "macro" | "sector" | "position"
+    - macro: Economic overview, interest rates, market sentiment
+    - sector: Sector rotation, industry trends relevant to portfolio
+    - position: Individual stock analysis, buy/sell recommendations
+    """
+    from app.services.analysis import generate_analysis
+    from app.models.stock import MarketAnalysis
+
+    if analysis_type not in ("macro", "sector", "position"):
+        raise HTTPException(status_code=400, detail="analysis_type must be: macro, sector, position")
+
+    content = await generate_analysis(db, user.id, analysis_type)
+
+    analysis = MarketAnalysis(
+        user_id=user.id, analysis_type=analysis_type,
+        content=content, model_used="agent",
+    )
+    db.add(analysis)
+    await db.commit()
+
+    return {"status": "ok", "analysis_type": analysis_type, "content": content}
+
+
+@router.get("/analysis/latest")
+async def agent_latest_analysis(
+    analysis_type: str | None = None,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get latest analysis results."""
+    from app.models.stock import MarketAnalysis
+
+    query = select(MarketAnalysis).where(MarketAnalysis.user_id == user.id)
+    if analysis_type:
+        query = query.where(MarketAnalysis.analysis_type == analysis_type)
+    query = query.order_by(desc(MarketAnalysis.created_at)).limit(1)
+
+    result = await db.execute(query)
+    analysis = result.scalar_one_or_none()
+    if not analysis:
+        return {"status": "none", "message": "No analysis found. Run one first."}
+
+    return {
+        "analysis_type": analysis.analysis_type,
+        "content": analysis.content,
+        "created_at": analysis.created_at.isoformat(),
+        "model": analysis.model_used,
+    }
+
+
+# ── Gmail Poll ───────────────────────────────────────────────────
+
+@router.post("/gmail/poll")
+async def agent_poll_gmail(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Poll Gmail for bank notifications."""
+    from app.services.gmail_poller import poll_gmail
+    return await poll_gmail(db, user.id)
