@@ -224,14 +224,29 @@ async def log_transaction(
 
 @router.post("/categorize")
 async def agent_categorize(
-    transaction_id: str,
     category_name: str,
+    transaction_id: str | None = None,
+    merchant: str | None = None,
+    description_contains: str | None = None,
+    new_merchant: str | None = None,
     apply_to_all: bool = True,
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Categorize a transaction by category name (not ID)."""
-    # Find category by name
+    """Categorize transactions by category name.
+
+    Two modes:
+    1. By transaction_id: categorize one transaction (+ all with same merchant if apply_to_all)
+    2. By merchant + optional description_contains: batch categorize by pattern
+
+    Optional new_merchant: rename matching transactions' merchant field too.
+
+    Examples:
+      ?transaction_id=uuid&category_name=Supermarket
+      ?merchant=Swisscom&description_contains=Swisscharge&category_name=Fuel&new_merchant=Swisscharge
+      ?merchant=Pending&category_name=Other (categorize all "Pending" from email notifications)
+    """
+    # Find category
     cat_result = await db.execute(
         select(Category).where(and_(Category.user_id == user.id, Category.name == category_name))
     )
@@ -239,29 +254,73 @@ async def agent_categorize(
     if not cat:
         raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found")
 
-    # Find transaction
-    txn_result = await db.execute(
-        select(Transaction).where(and_(Transaction.id == transaction_id, Transaction.user_id == user.id))
-    )
-    txn = txn_result.scalar_one_or_none()
-    if not txn:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+    updated = 0
+    renamed = 0
+    matched_merchant = merchant
 
-    txn.category_id = cat.id
-    updated = 1
-
-    if apply_to_all and txn.merchant:
-        others = await db.execute(
-            select(Transaction).where(and_(
-                Transaction.user_id == user.id, Transaction.merchant == txn.merchant, Transaction.id != txn.id,
-            ))
+    if transaction_id:
+        # Mode 1: by transaction ID
+        txn_result = await db.execute(
+            select(Transaction).where(and_(Transaction.id == transaction_id, Transaction.user_id == user.id))
         )
-        for other in others.scalars().all():
-            other.category_id = cat.id
+        txn = txn_result.scalar_one_or_none()
+        if not txn:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+
+        txn.category_id = cat.id
+        if new_merchant:
+            txn.merchant = new_merchant
+            renamed += 1
+        updated = 1
+        matched_merchant = txn.merchant
+
+        if apply_to_all and txn.merchant:
+            conditions = [
+                Transaction.user_id == user.id,
+                Transaction.merchant == matched_merchant,
+                Transaction.id != txn.id,
+            ]
+            if description_contains:
+                conditions.append(Transaction.notes.ilike(f"%{description_contains}%"))
+
+            others = await db.execute(select(Transaction).where(and_(*conditions)))
+            for other in others.scalars().all():
+                other.category_id = cat.id
+                updated += 1
+                if new_merchant:
+                    other.merchant = new_merchant
+                    renamed += 1
+
+    elif merchant:
+        # Mode 2: by merchant name + optional description filter
+        conditions = [
+            Transaction.user_id == user.id,
+            Transaction.merchant == merchant,
+        ]
+        if description_contains:
+            conditions.append(Transaction.notes.ilike(f"%{description_contains}%"))
+
+        result = await db.execute(select(Transaction).where(and_(*conditions)))
+        for txn in result.scalars().all():
+            txn.category_id = cat.id
             updated += 1
+            if new_merchant:
+                txn.merchant = new_merchant
+                renamed += 1
+    else:
+        raise HTTPException(status_code=400, detail="Provide transaction_id or merchant")
 
     await db.commit()
-    return {"status": "ok", "updated": updated, "merchant": txn.merchant, "category": category_name}
+
+    response = {"status": "ok", "updated": updated, "category": category_name}
+    if merchant:
+        response["merchant"] = merchant
+    if description_contains:
+        response["description_filter"] = description_contains
+    if new_merchant:
+        response["renamed_to"] = new_merchant
+        response["renamed"] = renamed
+    return response
 
 
 @router.get("/categories")
