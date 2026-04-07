@@ -27,29 +27,30 @@ export function Sidebar() {
   const { logout } = useAuth();
 
   return (
-    <aside className="flex h-screen w-56 flex-col bg-sidebar">
+    <aside className="flex h-screen w-60 flex-col border-r border-border bg-card">
       {/* Brand */}
-      <div className="px-5 pt-6 pb-8">
-        <span className="text-lg font-semibold tracking-tight text-foreground">
-          fin<span className="text-primary">pilot</span>
-        </span>
+      <div className="flex items-center gap-2 px-6 h-16 border-b border-border">
+        <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+          <TrendingUp className="h-4 w-4 text-primary-foreground" />
+        </div>
+        <span className="text-lg font-semibold">FinPilot</span>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 space-y-0.5">
+      <nav className="flex-1 px-3 py-4 space-y-1">
         {nav.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium transition-colors ${
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
                 active
-                  ? "text-primary bg-primary/8"
+                  ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent"
               }`}
             >
-              <Icon className="h-4 w-4 shrink-0" strokeWidth={active ? 2 : 1.5} />
+              <Icon className="h-5 w-5 shrink-0" />
               {label}
             </Link>
           );
@@ -57,12 +58,12 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-3 pb-4">
+      <div className="border-t border-border px-3 py-3">
         <button
           onClick={logout}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
         >
-          <LogOut className="h-4 w-4" strokeWidth={1.5} />
+          <LogOut className="h-5 w-5" />
           Logout
         </button>
       </div>
