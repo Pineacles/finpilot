@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   TrendingUp,
-  Receipt,
+  ArrowLeftRight,
   BarChart3,
   Tag,
   Settings,
@@ -19,7 +19,7 @@ import { useAuth } from "@/lib/auth";
 const nav = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/portfolio", label: "Portfolio", icon: TrendingUp },
-  { href: "/transactions", label: "Transactions", icon: Receipt },
+  { href: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/stats", label: "Statistics", icon: BarChart3 },
   { href: "/categories", label: "Categories", icon: Tag },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -45,30 +45,33 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="flex h-screen w-[240px] flex-col bg-card border-r border-border shrink-0">
+    <aside className="flex h-screen w-[260px] flex-col glass bg-sidebar shrink-0">
       {/* Brand */}
-      <div className="flex items-center gap-3 px-6 h-[72px]">
-        <div className="h-10 w-10 rounded-2xl bg-primary flex items-center justify-center shadow-sm">
-          <TrendingUp className="h-5 w-5 text-primary-foreground" />
+      <div className="flex items-center gap-3 px-7 h-[80px]">
+        <div className="h-11 w-11 rounded-2xl bg-primary flex items-center justify-center">
+          <TrendingUp className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
         </div>
-        <span className="text-xl font-semibold tracking-tight">FinPilot</span>
+        <div>
+          <span className="text-[17px] font-semibold tracking-tight">FinPilot</span>
+          <p className="text-[11px] text-muted-foreground">Finance Dashboard</p>
+        </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 py-2 space-y-1">
+      <nav className="flex-1 px-4 py-3 space-y-1">
         {nav.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-[15px] font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-medium transition-all duration-200 cursor-pointer active:scale-[0.98] ${
                 active
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent"
               }`}
             >
-              <Icon className="h-5 w-5 shrink-0" />
+              <Icon className="h-[22px] w-[22px] shrink-0" strokeWidth={active ? 2.2 : 1.8} />
               {label}
             </Link>
           );
@@ -76,19 +79,19 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-3 space-y-1 border-t border-border">
+      <div className="px-4 py-4 space-y-1">
         <button
           onClick={toggleTheme}
-          className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-[15px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all cursor-pointer"
+          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-200 cursor-pointer active:scale-[0.98]"
         >
-          {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          {dark ? <Sun className="h-[22px] w-[22px]" strokeWidth={1.8} /> : <Moon className="h-[22px] w-[22px]" strokeWidth={1.8} />}
           {dark ? "Light Mode" : "Dark Mode"}
         </button>
         <button
           onClick={logout}
-          className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-[15px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all cursor-pointer"
+          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-200 cursor-pointer active:scale-[0.98]"
         >
-          <LogOut className="h-5 w-5" />
+          <LogOut className="h-[22px] w-[22px]" strokeWidth={1.8} />
           Logout
         </button>
       </div>
