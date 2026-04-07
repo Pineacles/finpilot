@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.models.finance import Transaction, Category
 from app.models.user import User
 from app.services.categorize import batch_categorize_with_ai
+from app.services import classifier
 
 router = APIRouter(prefix="/api/dashboard", tags=["categorize"])
 
@@ -58,6 +59,10 @@ async def manual_categorize(
             updated += 1
 
     await db.commit()
+
+    # Retrain classifier in background (non-blocking conceptually, but awaited)
+    await classifier.train_classifier(db, user.id)
+
     return {"status": "ok", "updated": updated, "merchant": txn.merchant}
 
 
@@ -84,6 +89,7 @@ async def bulk_manual_categorize(
             txn.category_id = body.category_id
             count += 1
     await db.commit()
+    await classifier.train_classifier(db, user.id)
     return {"status": "ok", "updated": count}
 
 

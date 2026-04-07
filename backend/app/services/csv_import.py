@@ -19,8 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.finance import Transaction
 from app.models.account import Account
 from app.services.categorize import categorize_transaction, batch_categorize_with_ai
-from app.services.viseca import ensure_categories
+from app.services.seed_merchants import seed_merchants
 from app.services.camt053 import parse_camt053
+from app.services import classifier
 
 
 def parse_valiant_csv(content: str) -> list[dict]:
@@ -98,8 +99,6 @@ async def import_transactions(
 
     def _log(msg: str, detail: str = ""):
         log.append({"msg": msg, "detail": detail})
-
-    await ensure_categories(db, user_id)
 
     fmt = detect_format(content)
     _log(f"Detected format: {fmt}")
@@ -205,7 +204,7 @@ async def import_transactions(
 
     # Log categorization breakdown
     for method, count in sorted(method_counts.items(), key=lambda x: -x[1]):
-        label = {"keyword": "Keyword match", "merchant_db": "Merchant DB", "history": "History", "unmatched": "Unmatched"}.get(method, method)
+        label = {"keyword": "Keyword match", "merchant_db": "Merchant DB", "history": "History", "classifier": "ML Classifier", "unmatched": "Unmatched"}.get(method, method)
         _log(f"  {label}: {count}", "categorized" if method != "unmatched" else "pending")
 
     # Batch AI categorization for unknowns — deduplicated by merchant
@@ -277,6 +276,14 @@ async def import_transactions(
 
     categorized = sum(1 for t in imported_txns if t.category_id) + ai_categorized
     still_uncategorized = imported - categorized
+
+    # Train/retrain ML classifier on all categorized data
+    _log("Training ML classifier on categorized data...")
+    train_result = await classifier.train_classifier(db, user_id)
+    if train_result["status"] == "trained":
+        _log(f"  Classifier trained: {train_result['samples']} samples, {train_result['categories']} categories")
+    else:
+        _log(f"  Classifier: {train_result.get('reason', 'skipped')}")
 
     _log(f"Done: {categorized} categorized, {still_uncategorized} uncategorized")
 

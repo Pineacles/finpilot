@@ -1,10 +1,12 @@
 """Transaction categorization engine.
 
 Layered approach (priority order):
-1. Merchant DB — exact pattern match against known merchants
-2. History — same normalized description was categorized before
-3. AI/LLM — fallback for unknowns (uses settings endpoint or Anthropic)
-4. Uncategorized — flagged for manual review
+1. Keywords — direct Swiss-German keyword match
+2. Merchant DB — fuzzy pattern match against known merchants
+3. History — same merchant was categorized before
+4. ML Classifier — scikit-learn model trained on user's own data
+5. AI/LLM — fallback for unknowns (chunked, deduplicated)
+6. Uncategorized — flagged for manual review
 """
 import re
 import json
@@ -14,12 +16,14 @@ logger = logging.getLogger(__name__)
 
 import httpx
 import anthropic
+from thefuzz import fuzz
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.finance import Category, Transaction
-from app.models.merchant import Merchant, CategorizationLog
+from app.models.merchant import Merchant
 from app.services.settings import get_setting
+from app.services import classifier
 
 # Swiss transaction normalization
 PREFIXES = [
@@ -50,7 +54,7 @@ def normalize_description(raw: str) -> dict:
     # Strip reference numbers, dates, card numbers, phone numbers
     text = re.sub(r"\d{2}\.\d{2}\.\d{2,4}\s*\d{2}:\d{2}", "", text)  # datetime
     text = re.sub(r"\d{2}\.\d{2}\.\d{2,4}", "", text)  # date
-    text = re.sub(r"Karten?-?Nr\.?\s*\d+\*+\d+", "", text, flags=re.IGNORECASE)  # card number
+    text = re.sub(r"Karten?-?Nr\.?\s*\d+\*+\d+", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\+\d{10,}", "", text)  # phone numbers
     text = re.sub(r"\b\d{10,}\b", "", text)  # long reference numbers
     text = re.sub(r"\s*-\s*$", "", text)  # trailing dash
@@ -72,20 +76,21 @@ DIRECT_CATEGORY_MAP = {
     "bargeldbezug": "Cash",
     "bancomat": "Cash",
     "einzahlung": "Cash",
+    "setgebühr": "Bank Fees",
+    "setgebuhr": "Bank Fees",
+    "kontoführung": "Bank Fees",
+    "kontofuhrung": "Bank Fees",
+    "steuern": "Taxes",
+    "steueramt": "Taxes",
+    "serafe": "Utilities",
+    "billag": "Utilities",
 }
-
-# TWINT with a person name (no business identifier) = transfer to/from friends
-# Pattern: just a first name + optional last name + phone number
-TWINT_PERSON_PATTERN = re.compile(
-    r"^[\s]*[A-ZÄÖÜ][a-zäöüéèê]+(?:\s+[A-ZÄÖÜ][a-zäöüéèê]+)?$"
-)
 
 
 def is_person_name(text: str) -> bool:
     """Check if the cleaned merchant looks like a person name (not a business)."""
     cleaned = re.sub(r"\+\d+", "", text).strip()
     cleaned = re.sub(r"\d{10,}", "", cleaned).strip()
-    # Person names: 1-2 words, each capitalized, no special business chars
     if not cleaned:
         return False
     words = cleaned.split()
@@ -95,6 +100,48 @@ def is_person_name(text: str) -> bool:
         return False
     return all(w[0].isupper() and w[1:].islower() if len(w) > 1 else True for w in words)
 
+
+# ── Fuzzy merchant matching ─────────────────────────────────────────
+FUZZY_THRESHOLD = 80  # Minimum fuzz ratio for a match
+
+
+def _fuzzy_match_merchant(merchants: list[Merchant], search_text: str) -> Merchant | None:
+    """Match against merchant DB using exact substring first, then fuzzy."""
+    search_lower = search_text.lower()
+
+    # Pass 1: exact substring (fast, existing behavior)
+    for m in merchants:
+        patterns = m.patterns.split("|") if m.patterns else []
+        for p in patterns:
+            if p and p.lower() in search_lower:
+                return m
+
+    # Pass 2: fuzzy match on merchant name and patterns
+    best_match = None
+    best_score = 0
+    for m in merchants:
+        # Check merchant name
+        score = fuzz.partial_ratio(m.name.lower(), search_lower)
+        if score > best_score:
+            best_score = score
+            best_match = m
+
+        # Check each pattern
+        patterns = m.patterns.split("|") if m.patterns else []
+        for p in patterns:
+            if not p:
+                continue
+            score = fuzz.partial_ratio(p.lower(), search_lower)
+            if score > best_score:
+                best_score = score
+                best_match = m
+
+    if best_score >= FUZZY_THRESHOLD and best_match:
+        return best_match
+    return None
+
+
+# ── Main categorization function ─────────────────────────────────────
 
 async def categorize_transaction(
     db: AsyncSession, user_id: str, description: str, amount: float,
@@ -108,25 +155,22 @@ async def categorize_transaction(
 
     # 0a. TWINT with person name = Transfer (friends)
     if pm == "twint" and is_person_name(parsed["merchant"]):
-        cat_name = "Transfer"
-        cat = await _find_category(db, user_id, cat_name)
+        cat = await _find_category(db, user_id, "Transfer")
         if cat:
             return cat.id, merchant_name, "keyword", 0.95
 
     # 0b. Any incoming money (positive amount) = Income by default
     if amount > 0:
-        # Salary has its own keyword match below, this catches the rest
         cat_name = "Salary" if "gehalt" in normalized or "lohn" in normalized else "Income"
         cat = await _find_category(db, user_id, cat_name)
         if cat:
             return cat.id, merchant_name, "keyword", 0.9
 
-    # 0c. "Vergütung" in CSV = e-banking payment (the CSV lacks detail, camt.053 is better)
-    # If we have a counterparty from camt.053, use that. Otherwise mark as "Bills"
+    # 0c. "Vergütung" = e-banking payment
     if "vergütung" in normalized or "vergutung" in normalized:
         if counterparty:
             merchant_name = counterparty
-            # Fall through to merchant DB lookup with counterparty name
+            # Fall through to merchant DB with counterparty
         else:
             cat = await _find_category(db, user_id, "Other")
             if cat:
@@ -139,17 +183,15 @@ async def categorize_transaction(
             if cat:
                 return cat.id, merchant_name, "keyword", 1.0
 
-    # 1. Merchant DB lookup (also checks counterparty name)
+    # 1. Merchant DB lookup with fuzzy matching
     result = await db.execute(select(Merchant))
     merchants = result.scalars().all()
     search_text = f"{normalized} {counterparty.lower()}"
-    for m in merchants:
-        patterns = m.patterns.split("|") if m.patterns else []
-        for p in patterns:
-            if p and p.lower() in search_text:
-                return m.default_category_id, m.name, "merchant_db", 0.95
+    matched = _fuzzy_match_merchant(merchants, search_text)
+    if matched:
+        return matched.default_category_id, matched.name, "merchant_db", 0.95
 
-    # 2. History — same normalized description was categorized before
+    # 2. History — same merchant was categorized before
     result = await db.execute(
         select(Transaction.category_id, func.count().label("cnt"))
         .where(and_(
@@ -165,31 +207,64 @@ async def categorize_transaction(
     if history and history.cnt >= 1:
         return history.category_id, merchant_name, "history", 0.85
 
-    # 3. Return uncategorized — AI will be run in batch
+    # 3. ML classifier (trained on user's own data)
+    cat_id, cat_name, confidence = classifier.predict(
+        user_id, merchant_name, description, amount
+    )
+    if cat_id and confidence >= 0.6:
+        return cat_id, merchant_name, "classifier", confidence
+
+    # 4. Return uncategorized — AI will be run in batch
     return None, merchant_name, "unmatched", 0.0
 
 
-CHUNK_SIZE = 20  # Max merchants per AI call — keeps prompts small and responses reliable
+# ── AI batch categorization ──────────────────────────────────────────
+
+CHUNK_SIZE = 20  # Max merchants per AI call
+
+
+async def _build_category_tree_prompt(db: AsyncSession, user_id: str) -> tuple[str, dict[str, str]]:
+    """Build category list for AI prompt showing parent > sub hierarchy.
+
+    Returns (prompt_text, name_to_id_map).
+    """
+    result = await db.execute(
+        select(Category).where(Category.user_id == user_id)
+    )
+    all_cats = result.scalars().all()
+    cat_map = {c.name: c.id for c in all_cats}
+
+    # Build tree structure
+    parents = [c for c in all_cats if c.parent_id is None]
+    children = {}
+    for c in all_cats:
+        if c.parent_id:
+            children.setdefault(c.parent_id, []).append(c)
+
+    lines = []
+    for p in sorted(parents, key=lambda x: x.name):
+        kids = children.get(p.id, [])
+        if kids:
+            kid_names = ", ".join(sorted(k.name for k in kids))
+            lines.append(f"{p.name} ({kid_names})")
+        else:
+            lines.append(p.name)
+
+    return "\n".join(lines), cat_map
 
 
 async def batch_categorize_with_ai(
     db: AsyncSession, user_id: str, transactions: list[dict]
 ) -> list[dict]:
-    """Batch categorize uncategorized transactions using AI.
+    """Batch categorize using AI. Sends in chunks of CHUNK_SIZE.
 
-    Sends in chunks of CHUNK_SIZE for reliable responses.
     transactions: [{"id": ..., "description": ..., "amount": ..., "merchant": ...}]
     Returns: [{"id": ..., "category_id": ..., "category_name": ..., "confidence": ...}]
     """
     if not transactions:
         return []
 
-    # Get user's categories
-    result = await db.execute(
-        select(Category).where(Category.user_id == user_id)
-    )
-    categories = {c.name: c.id for c in result.scalars().all()}
-    cat_list = list(categories.keys())
+    cat_tree_prompt, categories = await _build_category_tree_prompt(db, user_id)
 
     # Load AI settings once
     custom_endpoint = await get_setting(db, user_id, "analysis_endpoint")
@@ -201,7 +276,6 @@ async def batch_categorize_with_ai(
         logger.warning("No AI backend configured for categorization")
         return []
 
-    # Process in chunks
     all_results: list[dict] = []
     for chunk_start in range(0, len(transactions), CHUNK_SIZE):
         chunk = transactions[chunk_start:chunk_start + CHUNK_SIZE]
@@ -209,38 +283,46 @@ async def batch_categorize_with_ai(
         total_chunks = (len(transactions) + CHUNK_SIZE - 1) // CHUNK_SIZE
         logger.info(f"AI categorize chunk {chunk_num}/{total_chunks} ({len(chunk)} merchants)")
 
-        txn_lines = "\n".join(f'{i+1}. {t["merchant"]} | CHF {t["amount"]}' for i, t in enumerate(chunk))
+        txn_lines = "\n".join(
+            f'{i+1}. {t["merchant"]} | CHF {t["amount"]}'
+            for i, t in enumerate(chunk)
+        )
 
-        prompt = f"""Categorize these Swiss bank transactions into exactly one category each.
+        prompt = f"""Categorize these Swiss bank transactions. Use the MOST SPECIFIC subcategory.
 
-Categories: {", ".join(cat_list)}
+Category hierarchy (Parent > Subcategories):
+{cat_tree_prompt}
 
 Transactions:
 {txn_lines}
 
-Return ONLY a JSON array, one object per transaction in same order:
-[{{"m":"merchant name","c":"category","s":0.9}}]
+Return ONLY a JSON array, one object per transaction in order:
+[{{"m":"merchant","c":"SUBCATEGORY name","s":0.9}}]
 
 Rules:
-- c MUST be from the categories list above
+- c MUST exactly match a category name from above (prefer subcategory over parent)
 - s = confidence 0.0-1.0
-- Person names (first+last) = Transfer
-- Food delivery / restaurants = Dining
-- Subscriptions (Netflix, Spotify, OpenAI, Google services) = Entertainment
-- Gaming (Riot, Steam, etc) = Entertainment
-- Online shopping = Shopping
-- Government / Strassenverkehrsamt / fees = Taxes
-- Bank fees / Setgebühr = Other
-- Education (Hochschule, courses) = Education
-- Health insurance (Concordia, CSS, etc) = Insurance
+- Person names (first+last name only) = Transfer
+- Food delivery apps = Delivery
+- Restaurants / cafes = Restaurants or Cafe & Snacks
+- Digital subscriptions (Netflix, Spotify, OpenAI, YouTube, gaming subs) = Subscriptions
+- Video games / gaming platforms = Gaming
+- Supermarkets = Supermarket, convenience stores = Convenience
+- Online stores (Amazon, BRACK, Galaxus) = Online Shopping
+- Government offices / Strassenverkehrsamt / fines = Government Fees
+- Bank fees / Setgebuehr / card fees = Bank Fees
+- Health insurance (Concordia, CSS, Helsana) = Insurance
+- University / school = Tuition
+- Fuel stations (Shell, BP, Migrol, Tankomat) = Fuel
+- Parking (Parkingpay) = Parking
+- Car maintenance / garage = Maintenance
+- Train / bus = Public Transport
 JSON only, no explanation."""
 
         chunk_results = await _call_ai(
-            custom_endpoint, auth_header, api_key, model,
-            prompt, chunk,
+            custom_endpoint, auth_header, api_key, model, prompt, chunk,
         )
 
-        # Map results back
         for i, txn in enumerate(chunk):
             if i < len(chunk_results):
                 r = chunk_results[i]
@@ -265,7 +347,7 @@ async def _call_ai(
     api_key: str | None, model: str,
     prompt: str, transactions: list[dict],
 ) -> list[dict]:
-    """Call AI backend and parse response. Returns list of result dicts."""
+    """Call AI backend and parse response."""
     try:
         if custom_endpoint:
             headers = {"Content-Type": "application/json"}
@@ -303,7 +385,6 @@ def _parse_ai_response(result_data: dict | list) -> list[dict]:
     if isinstance(result_data, list):
         return result_data
 
-    # Try each known response key
     for key in ("content", "text", "results"):
         if key not in result_data:
             continue
@@ -324,10 +405,8 @@ def _parse_json_text(text: str) -> list[dict]:
     text = text.strip()
     if not text:
         return []
-    # Strip markdown code blocks
     if text.startswith("```"):
         text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    # Find JSON array in text (sometimes AI adds explanation before/after)
     start = text.find("[")
     end = text.rfind("]")
     if start != -1 and end != -1 and end > start:
@@ -343,13 +422,11 @@ def _parse_json_text(text: str) -> list[dict]:
 async def _ai_categorize_with_custom_prompt(
     db: AsyncSession, user_id: str, transactions: list[dict], custom_prompt: str
 ) -> list[dict]:
-    """Categorize with a user-provided custom prompt injected. Uses chunking."""
+    """Categorize with a user-provided custom prompt. Uses chunking."""
     if not transactions:
         return []
 
-    result = await db.execute(select(Category).where(Category.user_id == user_id))
-    categories = {c.name: c.id for c in result.scalars().all()}
-    cat_list = list(categories.keys())
+    cat_tree_prompt, categories = await _build_category_tree_prompt(db, user_id)
 
     custom_endpoint = await get_setting(db, user_id, "analysis_endpoint")
     auth_header = await get_setting(db, user_id, "analysis_auth_header")
@@ -359,17 +436,21 @@ async def _ai_categorize_with_custom_prompt(
     all_results: list[dict] = []
     for chunk_start in range(0, len(transactions), CHUNK_SIZE):
         chunk = transactions[chunk_start:chunk_start + CHUNK_SIZE]
-        txn_lines = "\n".join(f'{i+1}. {t["merchant"]} | CHF {t["amount"]}' for i, t in enumerate(chunk))
+        txn_lines = "\n".join(
+            f'{i+1}. {t["merchant"]} | CHF {t["amount"]}'
+            for i, t in enumerate(chunk)
+        )
 
         prompt = f"""User rules: {custom_prompt}
 
-Categories: {", ".join(cat_list)}
+Category hierarchy:
+{cat_tree_prompt}
 
 Transactions:
 {txn_lines}
 
-Return ONLY JSON array: [{{"m":"merchant","c":"category","s":0.9}}]
-c must be from categories. Follow user rules above. JSON only."""
+Return ONLY JSON array: [{{"m":"merchant","c":"subcategory","s":0.9}}]
+c must exactly match a category name. Use most specific subcategory. Follow user rules. JSON only."""
 
         chunk_results = await _call_ai(custom_endpoint, auth_header, api_key, model, prompt, chunk)
 

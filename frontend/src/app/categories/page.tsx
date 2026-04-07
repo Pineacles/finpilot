@@ -16,7 +16,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Tag, Store, Search, Pencil } from "lucide-react";
+import { Plus, Trash2, Tag, Store, Search, Pencil, ChevronRight } from "lucide-react";
+
+function buildCategoryTree(categories: Category[]) {
+  const parents = categories.filter((c) => !c.parent_id);
+  const childMap: Record<string, Category[]> = {};
+  for (const c of categories) {
+    if (c.parent_id) {
+      if (!childMap[c.parent_id]) childMap[c.parent_id] = [];
+      childMap[c.parent_id].push(c);
+    }
+  }
+  return { parents, childMap };
+}
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -27,6 +39,7 @@ export default function CategoriesPage() {
   // New category form
   const [newCatName, setNewCatName] = useState("");
   const [newCatType, setNewCatType] = useState("expense");
+  const [newCatParent, setNewCatParent] = useState("");
 
   // New merchant form
   const [newMerchant, setNewMerchant] = useState({ name: "", patterns: "", category_id: "" });
@@ -45,8 +58,13 @@ export default function CategoriesPage() {
 
   const handleCreateCategory = async () => {
     if (!newCatName.trim()) return;
-    await api.createCategory({ name: newCatName.trim(), type: newCatType });
+    await api.createCategory({
+      name: newCatName.trim(),
+      type: newCatType,
+      parent_id: newCatParent || undefined,
+    });
     setNewCatName("");
+    setNewCatParent("");
     load();
   };
 
@@ -88,15 +106,119 @@ export default function CategoriesPage() {
       )
     : merchants;
 
+  const { parents, childMap } = buildCategoryTree(categories);
+
+  // Grouped select options for category dropdowns
+  const categoryOptions = (() => {
+    const opts: { value: string; label: string; isParent?: boolean }[] = [];
+    for (const p of parents.sort((a, b) => a.name.localeCompare(b.name))) {
+      const kids = childMap[p.id] || [];
+      if (kids.length > 0) {
+        opts.push({ value: p.id, label: p.name, isParent: true });
+        for (const k of kids.sort((a, b) => a.name.localeCompare(b.name))) {
+          opts.push({ value: k.id, label: `  ${k.name}` });
+        }
+      } else {
+        opts.push({ value: p.id, label: p.name });
+      }
+    }
+    return opts;
+  })();
+
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Categories & Rules</h1>
 
-      <Tabs defaultValue="rules">
+      <Tabs defaultValue="categories">
         <TabsList>
-          <TabsTrigger value="rules"><Store className="h-4 w-4 mr-1" />Merchant Rules ({merchants.length})</TabsTrigger>
           <TabsTrigger value="categories"><Tag className="h-4 w-4 mr-1" />Categories ({categories.length})</TabsTrigger>
+          <TabsTrigger value="rules"><Store className="h-4 w-4 mr-1" />Merchant Rules ({merchants.length})</TabsTrigger>
         </TabsList>
+
+        {/* Categories */}
+        <TabsContent value="categories" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Add Category</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <Label className="text-xs">Name</Label>
+                  <Input
+                    placeholder="e.g. Gym"
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    className="text-sm"
+                  />
+                </div>
+                <div className="w-32">
+                  <Label className="text-xs">Type</Label>
+                  <select
+                    className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                    value={newCatType}
+                    onChange={(e) => setNewCatType(e.target.value)}
+                  >
+                    <option value="expense">Expense</option>
+                    <option value="income">Income</option>
+                    <option value="transfer">Transfer</option>
+                  </select>
+                </div>
+                <div className="w-40">
+                  <Label className="text-xs">Parent (optional)</Label>
+                  <select
+                    className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                    value={newCatParent}
+                    onChange={(e) => setNewCatParent(e.target.value)}
+                  >
+                    <option value="">None (top-level)</option>
+                    {parents.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <Button onClick={handleCreateCategory} size="sm">
+                  <Plus className="h-4 w-4 mr-1" />Add
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle className="text-base">Category Hierarchy</CardTitle></CardHeader>
+            <CardContent>
+              <div className="space-y-1">
+                {parents.sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
+                  const kids = (childMap[p.id] || []).sort((a, b) => a.name.localeCompare(b.name));
+                  return (
+                    <div key={p.id}>
+                      <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent/50">
+                        <div className={`w-3 h-3 rounded-full ${
+                          p.type === "income" ? "bg-green-500" : p.type === "transfer" ? "bg-blue-500" : "bg-red-500"
+                        }`} />
+                        <span className="font-medium text-sm">{p.name}</span>
+                        <Badge variant="secondary" className="text-[10px] capitalize">{p.type}</Badge>
+                        {kids.length > 0 && (
+                          <span className="text-xs text-muted-foreground ml-auto">{kids.length} sub</span>
+                        )}
+                      </div>
+                      {kids.length > 0 && (
+                        <div className="ml-6 border-l pl-3 space-y-0.5">
+                          {kids.map((k) => (
+                            <div key={k.id} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-accent/30">
+                              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-sm">{k.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Merchant Rules */}
         <TabsContent value="rules" className="space-y-4 mt-4">
@@ -127,7 +249,7 @@ export default function CategoriesPage() {
                     className="text-sm font-mono"
                   />
                 </div>
-                <div className="w-40">
+                <div className="w-48">
                   <Label className="text-xs">Category</Label>
                   <select
                     className="w-full rounded-md border bg-background px-2 py-2 text-sm"
@@ -135,7 +257,11 @@ export default function CategoriesPage() {
                     onChange={(e) => setNewMerchant({ ...newMerchant, category_id: e.target.value })}
                   >
                     <option value="">Select...</option>
-                    {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {categoryOptions.map((o) => (
+                      <option key={o.value} value={o.value} className={o.isParent ? "font-bold" : ""}>
+                        {o.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <Button onClick={handleCreateMerchant} size="sm">
@@ -191,8 +317,10 @@ export default function CategoriesPage() {
                                   value={editForm.category_id}
                                   onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}
                                 >
-                                  <option value="">—</option>
-                                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                  <option value="">--</option>
+                                  {categoryOptions.map((o) => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
                                 </select>
                               </TableCell>
                               <TableCell className="text-right">
@@ -212,7 +340,7 @@ export default function CategoriesPage() {
                                 {m.category_name ? (
                                   <Badge variant="secondary">{m.category_name}</Badge>
                                 ) : (
-                                  <span className="text-muted-foreground">—</span>
+                                  <span className="text-muted-foreground">--</span>
                                 )}
                               </TableCell>
                               <TableCell className="text-right">
@@ -233,62 +361,6 @@ export default function CategoriesPage() {
                   </Table>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Categories */}
-        <TabsContent value="categories" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Add Category</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <Label className="text-xs">Name</Label>
-                  <Input
-                    placeholder="e.g. Subscriptions"
-                    value={newCatName}
-                    onChange={(e) => setNewCatName(e.target.value)}
-                    className="text-sm"
-                  />
-                </div>
-                <div className="w-32">
-                  <Label className="text-xs">Type</Label>
-                  <select
-                    className="w-full rounded-md border bg-background px-2 py-2 text-sm"
-                    value={newCatType}
-                    onChange={(e) => setNewCatType(e.target.value)}
-                  >
-                    <option value="expense">Expense</option>
-                    <option value="income">Income</option>
-                    <option value="transfer">Transfer</option>
-                  </select>
-                </div>
-                <Button onClick={handleCreateCategory} size="sm">
-                  <Plus className="h-4 w-4 mr-1" />Add
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle className="text-base">All Categories</CardTitle></CardHeader>
-            <CardContent>
-              <div className="grid gap-2 md:grid-cols-3">
-                {categories.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${
-                        c.type === "income" ? "bg-green-500" : c.type === "transfer" ? "bg-blue-500" : "bg-red-500"
-                      }`} />
-                      <span className="text-sm font-medium">{c.name}</span>
-                    </div>
-                    <Badge variant="secondary" className="text-xs capitalize">{c.type}</Badge>
-                  </div>
-                ))}
-              </div>
             </CardContent>
           </Card>
         </TabsContent>

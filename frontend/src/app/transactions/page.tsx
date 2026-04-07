@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { api, TransactionItem, Category, ImportResult, ImportLogEntry } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Upload, CheckCircle2, AlertCircle, Brain, Tag, Loader2, Terminal, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Upload, CheckCircle2, AlertCircle, Brain, Tag, Loader2, Terminal, ChevronDown, ChevronUp, Pencil, X, Check } from "lucide-react";
 
 const IMPORT_STEPS = [
   { label: "Uploading file", pct: 10 },
@@ -20,6 +21,29 @@ const IMPORT_STEPS = [
 
 const PAGE_SIZE = 50;
 
+// Build grouped options: Parent > Sub1, Sub2...
+function buildCategoryOptions(categories: Category[]) {
+  const parents = categories.filter((c) => !c.parent_id).sort((a, b) => a.name.localeCompare(b.name));
+  const childMap: Record<string, Category[]> = {};
+  for (const c of categories) {
+    if (c.parent_id) {
+      if (!childMap[c.parent_id]) childMap[c.parent_id] = [];
+      childMap[c.parent_id].push(c);
+    }
+  }
+  const opts: { value: string; label: string; isGroup?: boolean }[] = [];
+  for (const p of parents) {
+    const kids = (childMap[p.id] || []).sort((a, b) => a.name.localeCompare(b.name));
+    if (kids.length > 0) {
+      opts.push({ value: p.id, label: p.name, isGroup: true });
+      for (const k of kids) opts.push({ value: k.id, label: `  ${k.name}` });
+    } else {
+      opts.push({ value: p.id, label: p.name });
+    }
+  }
+  return opts;
+}
+
 // Inline category editor — only renders the <select> when clicked
 function CategoryCell({ txn, categories, onCategorize }: {
   txn: TransactionItem;
@@ -27,18 +51,21 @@ function CategoryCell({ txn, categories, onCategorize }: {
   onCategorize: (txnId: string, catId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const options = buildCategoryOptions(categories);
 
   if (editing) {
     return (
       <select
         autoFocus
-        className="rounded-md border bg-background px-2 py-1 text-xs w-32"
+        className="rounded-md border bg-background px-2 py-1 text-xs w-40"
         value={txn.category_id || ""}
         onChange={(e) => { if (e.target.value) { onCategorize(txn.id, e.target.value); setEditing(false); } }}
         onBlur={() => setEditing(false)}
       >
-        <option value="">—</option>
-        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        <option value="">--</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value} className={o.isGroup ? "font-bold" : ""}>{o.label}</option>
+        ))}
       </select>
     );
   }
@@ -55,9 +82,19 @@ function CategoryCell({ txn, categories, onCategorize }: {
 }
 
 export default function TransactionsPage() {
+  return (
+    <Suspense>
+      <TransactionsContent />
+    </Suspense>
+  );
+}
+
+function TransactionsContent() {
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("highlight") || "";
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("search") || "");
   const [filter, setFilter] = useState<"all" | "uncategorized">("all");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -71,6 +108,8 @@ export default function TransactionsPage() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiRunning, setAiRunning] = useState(false);
   const [aiResult, setAiResult] = useState<string | null>(null);
+  const [editingTxn, setEditingTxn] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ merchant: "", notes: "" });
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
@@ -80,6 +119,19 @@ export default function TransactionsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Jump to highlighted transaction's page and scroll to it
+  useEffect(() => {
+    if (!highlightId || loading || transactions.length === 0) return;
+    const idx = filtered.findIndex((t) => t.id === highlightId);
+    if (idx >= 0) {
+      const targetPage = Math.floor(idx / PAGE_SIZE) + 1;
+      setPage(targetPage);
+      setTimeout(() => {
+        document.getElementById(`txn-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    }
+  }, [highlightId, loading, transactions.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -140,6 +192,21 @@ export default function TransactionsPage() {
     }
   };
 
+  const startEditTxn = (t: TransactionItem) => {
+    setEditingTxn(t.id);
+    setEditForm({ merchant: t.merchant, notes: t.notes || "" });
+  };
+
+  const saveEditTxn = async () => {
+    if (!editingTxn) return;
+    await api.updateTransaction(editingTxn, {
+      merchant: editForm.merchant,
+      notes: editForm.notes || undefined,
+    } as Partial<TransactionItem>);
+    setEditingTxn(null);
+    load();
+  };
+
   const toggleSelect = (id: string) => {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -150,7 +217,14 @@ export default function TransactionsPage() {
 
   const filtered = (() => {
     let list = filter === "uncategorized" ? uncategorized : transactions;
-    if (search) list = list.filter((t) => t.merchant.toLowerCase().includes(search.toLowerCase()));
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter((t) =>
+        t.merchant.toLowerCase().includes(q) ||
+        (t.notes && t.notes.toLowerCase().includes(q)) ||
+        (t.category_name && t.category_name.toLowerCase().includes(q))
+      );
+    }
     return list;
   })();
 
@@ -256,7 +330,9 @@ export default function TransactionsPage() {
                   <span className="text-xs text-muted-foreground">{selected.size} selected →</span>
                   <select className="rounded-md border bg-background px-2 py-1 text-sm" defaultValue="" onChange={(e) => { if (e.target.value) handleBulkCategorize(e.target.value); e.target.value = ""; }}>
                     <option value="">Set category...</option>
-                    {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {buildCategoryOptions(categories).map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
                   </select>
                 </>
               )}
@@ -281,7 +357,7 @@ export default function TransactionsPage() {
             <CardTitle>{filter === "uncategorized" ? "Uncategorized" : "All"} ({filtered.length})</CardTitle>
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search merchant..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+              <Input placeholder="Search merchant, description, category..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
             </div>
           </div>
         </CardHeader>
@@ -299,25 +375,85 @@ export default function TransactionsPage() {
                       {filter === "uncategorized" && <th className="pb-2 w-8"></th>}
                       <th className="pb-2 font-medium">Date</th>
                       <th className="pb-2 font-medium">Merchant</th>
+                      <th className="pb-2 font-medium">Description</th>
                       <th className="pb-2 font-medium">Category</th>
                       <th className="pb-2 font-medium text-right">Amount</th>
+                      <th className="pb-2 w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {displayed.map((t) => (
-                      <tr key={t.id} className={`border-b border-border/50 ${selected.has(t.id) ? "bg-primary/5" : ""}`}>
-                        {filter === "uncategorized" && (
-                          <td className="py-2"><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} /></td>
-                        )}
-                        <td className="py-2 text-muted-foreground whitespace-nowrap">{formatDate(t.date)}</td>
-                        <td className="py-2 font-medium">{t.merchant}</td>
-                        <td className="py-2">
-                          <CategoryCell txn={t} categories={categories} onCategorize={handleManualCategorize} />
-                        </td>
-                        <td className={`py-2 text-right font-medium whitespace-nowrap ${t.amount < 0 ? "text-red-500" : "text-green-500"}`}>
-                          {formatCurrency(t.amount, t.currency)}
-                        </td>
-                      </tr>
+                      editingTxn === t.id ? (
+                        <tr key={t.id} className="border-b border-primary/30 bg-primary/5">
+                          {filter === "uncategorized" && <td className="py-2"></td>}
+                          <td className="py-2 text-muted-foreground whitespace-nowrap">{formatDate(t.date)}</td>
+                          <td className="py-2">
+                            <Input
+                              value={editForm.merchant}
+                              onChange={(e) => setEditForm({ ...editForm, merchant: e.target.value })}
+                              className="h-7 text-sm font-medium"
+                            />
+                          </td>
+                          <td className="py-2">
+                            <Input
+                              value={editForm.notes}
+                              onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                              className="h-7 text-xs"
+                              placeholder="Description / notes"
+                            />
+                          </td>
+                          <td className="py-2">
+                            <CategoryCell txn={t} categories={categories} onCategorize={handleManualCategorize} />
+                          </td>
+                          <td className={`py-2 text-right font-medium whitespace-nowrap ${t.amount < 0 ? "text-red-500" : "text-green-500"}`}>
+                            {formatCurrency(t.amount, t.currency)}
+                          </td>
+                          <td className="py-2">
+                            <div className="flex gap-0.5">
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={saveEditTxn}>
+                                <Check className="h-3 w-3 text-green-500" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingTxn(null)}>
+                                <X className="h-3 w-3 text-muted-foreground" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr key={t.id} id={`txn-${t.id}`} className={`border-b border-border/50 ${selected.has(t.id) ? "bg-primary/5" : ""} ${highlightId === t.id ? "bg-yellow-500/10 ring-1 ring-yellow-500/30" : ""}`}>
+                          {filter === "uncategorized" && (
+                            <td className="py-2"><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} /></td>
+                          )}
+                          <td className="py-2 text-muted-foreground whitespace-nowrap">{formatDate(t.date)}</td>
+                          <td className="py-2 font-medium">{t.merchant}</td>
+                          <td className="py-2 max-w-[250px]">
+                            {t.notes ? (
+                              <span className="text-xs text-muted-foreground truncate block" title={t.notes}>
+                                {t.notes.split("|")[0].trim().substring(0, 60)}
+                                {t.notes.split("|")[0].trim().length > 60 ? "..." : ""}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </td>
+                          <td className="py-2">
+                            <div className="flex flex-col gap-0.5">
+                              {t.parent_category_name && (
+                                <span className="text-[10px] text-muted-foreground leading-none">{t.parent_category_name}</span>
+                              )}
+                              <CategoryCell txn={t} categories={categories} onCategorize={handleManualCategorize} />
+                            </div>
+                          </td>
+                          <td className={`py-2 text-right font-medium whitespace-nowrap ${t.amount < 0 ? "text-red-500" : "text-green-500"}`}>
+                            {formatCurrency(t.amount, t.currency)}
+                          </td>
+                          <td className="py-2">
+                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEditTxn(t)}>
+                              <Pencil className="h-3 w-3 text-muted-foreground" />
+                            </Button>
+                          </td>
+                        </tr>
+                      )
                     ))}
                   </tbody>
                 </table>

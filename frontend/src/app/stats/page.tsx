@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, MonthlyStats, YearlyStats } from "@/lib/api";
-import { formatCurrency, formatPct } from "@/lib/format";
+import { api, MonthlyStats, YearlyStats, TransactionItem } from "@/lib/api";
+import { formatCurrency, formatPct, formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,8 +27,12 @@ import {
   Area,
 } from "recharts";
 import {
-  TrendingUp,
-  TrendingDown,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
@@ -40,9 +44,84 @@ import {
   Receipt,
   Store,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#a855f7"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function CategoryDrillDown({ open, onClose, categoryName, categoryId, fromDate, toDate }: {
+  open: boolean;
+  onClose: () => void;
+  categoryName: string;
+  categoryId: string | null;
+  fromDate: string;
+  toDate: string;
+}) {
+  const router = useRouter();
+  const [txns, setTxns] = useState<TransactionItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !categoryId) return;
+    setLoading(true);
+    api.transactions({ category_id: categoryId, from_date: fromDate, to_date: toDate, limit: 500 })
+      .then(setTxns)
+      .finally(() => setLoading(false));
+  }, [open, categoryId, fromDate, toDate]);
+
+  const total = txns.reduce((s, t) => s + Math.abs(t.amount), 0);
+
+  const goToTransaction = (txnId: string) => {
+    router.push(`/transactions?highlight=${txnId}`);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle>{categoryName} — {txns.length} transactions</DialogTitle>
+          <p className="text-sm text-muted-foreground">{fromDate} to {toDate} — Total: {formatCurrency(total)}</p>
+        </DialogHeader>
+        <div className="overflow-y-auto flex-1 -mx-6 px-6">
+          {loading ? (
+            <p className="text-sm text-muted-foreground py-4">Loading...</p>
+          ) : txns.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">No transactions found.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="pb-2 font-medium">Date</th>
+                  <th className="pb-2 font-medium">Merchant</th>
+                  <th className="pb-2 font-medium">Description</th>
+                  <th className="pb-2 font-medium text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {txns.map((t) => (
+                  <tr key={t.id} className="border-b border-border/50 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => goToTransaction(t.id)}>
+                    <td className="py-1.5 text-muted-foreground whitespace-nowrap">{formatDate(t.date)}</td>
+                    <td className="py-1.5 font-medium">{t.merchant}</td>
+                    <td className="py-1.5 max-w-[200px]">
+                      {t.notes ? (
+                        <span className="text-xs text-muted-foreground truncate block" title={t.notes}>
+                          {t.notes.split("|")[0].trim().substring(0, 50)}
+                        </span>
+                      ) : <span className="text-xs text-muted-foreground">-</span>}
+                    </td>
+                    <td className={`py-1.5 text-right font-medium whitespace-nowrap ${t.amount < 0 ? "text-red-500" : "text-green-500"}`}>
+                      {formatCurrency(t.amount, t.currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function ChangeIndicator({ value, pct }: { value: number; pct: number }) {
   if (Math.abs(pct) < 0.5) return <span className="text-xs text-muted-foreground flex items-center gap-1"><Minus className="h-3 w-3" />No change</span>;
@@ -124,7 +203,7 @@ export default function StatsPage() {
           <>
             {/* ─── MONTHLY TAB ─── */}
             <TabsContent value="monthly" className="space-y-6 mt-4">
-              {monthly && <MonthlyView data={monthly} />}
+              {monthly && <MonthlyView data={monthly} year={year} month={month} />}
             </TabsContent>
 
             {/* ─── YEARLY TAB ─── */}
@@ -138,7 +217,8 @@ export default function StatsPage() {
   );
 }
 
-function MonthlyView({ data }: { data: MonthlyStats }) {
+function MonthlyView({ data, year, month }: { data: MonthlyStats; year: number; month: number }) {
+  const [drillCat, setDrillCat] = useState<{ id: string | null; name: string } | null>(null);
   const s = data.summary;
   const recDisc = data.recurring_vs_discretionary;
   const totalForPie = data.categories.reduce((sum, c) => sum + c.total, 0);
@@ -208,7 +288,7 @@ function MonthlyView({ data }: { data: MonthlyStats }) {
                 {data.categories.map((c, i) => {
                   const pct = totalForPie ? (c.total / totalForPie) * 100 : 0;
                   return (
-                    <div key={c.name}>
+                    <div key={c.name} className="cursor-pointer hover:bg-accent/50 rounded-lg p-1.5 -mx-1.5 transition-colors" onClick={() => setDrillCat({ id: c.id, name: c.name })}>
                       <div className="flex items-center justify-between text-sm mb-1">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: c.color || COLORS[i % COLORS.length] }} />
@@ -325,11 +405,23 @@ function MonthlyView({ data }: { data: MonthlyStats }) {
           </CardContent>
         </Card>
       </div>
+
+      {drillCat && (
+        <CategoryDrillDown
+          open={!!drillCat}
+          onClose={() => setDrillCat(null)}
+          categoryName={drillCat.name}
+          categoryId={drillCat.id}
+          fromDate={data.period.start}
+          toDate={data.period.end}
+        />
+      )}
     </>
   );
 }
 
 function YearlyView({ data }: { data: YearlyStats }) {
+  const [drillCat, setDrillCat] = useState<{ id: string | null; name: string } | null>(null);
   const s = data.summary;
   const monthlyData = data.monthly.map((m) => ({
     ...m,
@@ -516,6 +608,17 @@ function YearlyView({ data }: { data: YearlyStats }) {
           )}
         </CardContent>
       </Card>
+
+      {drillCat && (
+        <CategoryDrillDown
+          open={!!drillCat}
+          onClose={() => setDrillCat(null)}
+          categoryName={drillCat.name}
+          categoryId={drillCat.id}
+          fromDate={`${data.period.year}-01-01`}
+          toDate={`${data.period.year}-12-31`}
+        />
+      )}
     </>
   );
 }

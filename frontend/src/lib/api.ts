@@ -57,7 +57,7 @@ export const api = {
 
   // Categories
   categories: () => request<Category[]>("/api/dashboard/categories"),
-  createCategory: (data: { name: string; type: string }) =>
+  createCategory: (data: { name: string; type: string; parent_id?: string }) =>
     request<Category>("/api/dashboard/categories", { method: "POST", body: JSON.stringify(data) }),
 
   // Budgets
@@ -195,7 +195,8 @@ export interface StockTransaction { id: string; symbol: string; type: string; qu
 export interface TransactionItem {
   id: string; account_id: string; date: string; merchant: string; amount: number; currency: string;
   original_amount: number | null; original_currency: string | null; category_id: string | null;
-  category_name: string | null; notes: string | null; viseca_transaction_id: string | null; created_at: string;
+  category_name: string | null; parent_category_name: string | null; notes: string | null;
+  viseca_transaction_id: string | null; created_at: string;
 }
 export interface CreateTransaction { account_id: string; date: string; merchant: string; amount: number; currency?: string; category_id?: string; notes?: string }
 
@@ -223,7 +224,7 @@ export interface MonthlyStats {
   period: { year: number; month: number; start: string; end: string };
   summary: { income: number; expenses: number; net: number; savings_rate: number; avg_daily_spend: number; txn_count: number };
   comparison: Record<string, { current: number; previous: number; change: number; change_pct: number }>;
-  categories: { name: string; color: string | null; total: number; count: number }[];
+  categories: { id: string | null; name: string; color: string | null; total: number; count: number }[];
   top_merchants: { merchant: string; total: number; count: number }[];
   daily_spend: { date: string; amount: number }[];
   spending_velocity: { date: string; cumulative: number }[];
@@ -236,7 +237,7 @@ export interface YearlyStats {
   summary: { income: number; expenses: number; net: number; savings_rate: number; avg_monthly_spend: number; avg_monthly_income: number; txn_count: number };
   comparison: Record<string, { current: number; previous: number; change: number; change_pct: number }>;
   monthly: { month: number; income: number; expenses: number; net: number }[];
-  categories: { name: string; color: string | null; total: number }[];
+  categories: { id: string | null; name: string; color: string | null; total: number; count: number }[];
   category_trends: { month: number; category: string; total: number }[];
   top_merchants: { merchant: string; total: number; count: number }[];
   net_worth_history: { date: string; value: number; pnl: number }[];

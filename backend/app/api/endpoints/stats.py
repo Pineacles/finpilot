@@ -66,6 +66,7 @@ async def monthly_stats(
     # Spending by category
     cat_result = await db.execute(
         select(
+            Category.id,
             Category.name,
             Category.color,
             func.coalesce(func.sum(func.abs(Transaction.amount)), 0).label("total"),
@@ -78,11 +79,11 @@ async def monthly_stats(
             Transaction.date <= month_end,
             Transaction.amount < 0,
         ))
-        .group_by(Category.name, Category.color)
+        .group_by(Category.id, Category.name, Category.color)
         .order_by(func.sum(func.abs(Transaction.amount)).desc())
     )
     categories = [
-        {"name": r.name or "Uncategorized", "color": r.color, "total": float(r.total), "count": int(r.count)}
+        {"id": r.id, "name": r.name or "Uncategorized", "color": r.color, "total": float(r.total), "count": int(r.count)}
         for r in cat_result.all()
     ]
 
@@ -244,9 +245,11 @@ async def yearly_stats(
     # Annual category breakdown
     cat_result = await db.execute(
         select(
+            Category.id,
             Category.name,
             Category.color,
             func.coalesce(func.sum(func.abs(Transaction.amount)), 0).label("total"),
+            func.count(Transaction.id).label("count"),
         )
         .outerjoin(Category, Transaction.category_id == Category.id)
         .where(and_(
@@ -255,11 +258,11 @@ async def yearly_stats(
             Transaction.date <= year_end,
             Transaction.amount < 0,
         ))
-        .group_by(Category.name, Category.color)
+        .group_by(Category.id, Category.name, Category.color)
         .order_by(func.sum(func.abs(Transaction.amount)).desc())
     )
     categories = [
-        {"name": r.name or "Uncategorized", "color": r.color, "total": float(r.total)}
+        {"id": r.id, "name": r.name or "Uncategorized", "color": r.color, "total": float(r.total), "count": int(r.count)}
         for r in cat_result.all()
     ]
 

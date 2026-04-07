@@ -46,6 +46,7 @@ class TransactionResponse(BaseModel):
     original_currency: str | None
     category_id: str | None
     category_name: str | None = None
+    parent_category_name: str | None = None
     notes: str | None
     viseca_transaction_id: str | None
     created_at: datetime

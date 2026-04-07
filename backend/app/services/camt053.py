@@ -192,7 +192,15 @@ def _parse_tx_detail(txd: ET.Element, ns: str, txn_date: date, currency: str,
     else:
         # Other — use whatever info is available
         description = addtl_tx_inf or remittance or addtl_ntry_inf
-        if not is_cdtr_self and cdtr_name and cdtr_name != "NOTPROVIDED":
+
+        # TWINT: Cdtr is "TWINT" but real merchant is in AddtlTxInf
+        is_twint = (
+            cdtr_name and "twint" in cdtr_name.lower()
+            or (description and "twint" in description.lower())
+        )
+        if is_twint and description:
+            merchant = _extract_merchant_from_text(description)
+        elif not is_cdtr_self and cdtr_name and cdtr_name != "NOTPROVIDED" and not is_twint:
             merchant = cdtr_name
         elif not is_dbtr_self and dbtr_name and dbtr_name != "NOTPROVIDED":
             merchant = dbtr_name
