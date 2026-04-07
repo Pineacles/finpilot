@@ -11,7 +11,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { ChevronLeft, ChevronRight, Calendar, Wallet, PiggyBank, Receipt, Store, CreditCard, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const COLORS = ["#34c759","#007aff","#ff9500","#ff3b30","#af52de","#ff2d55","#5ac8fa","#4cd964"];
+const COLORS = ["#f97316","#007aff","#ff9500","#ff3b30","#af52de","#ff2d55","#5ac8fa","#4cd964"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function GlassCard({children,className="",delay=0}:{children:React.ReactNode;className?:string;delay?:number}){
@@ -79,7 +79,7 @@ export default function StatsPage(){
           <div className="grid gap-5 lg:grid-cols-2">
             <GlassCard delay={0.15}>
               <h2 className="text-lg font-semibold mb-4">Spending by Category</h2>
-              {monthly.categories.length===0?<p className="text-muted-foreground">No data.</p>:<div className="h-72"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={monthly.categories} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={55} label={((e:any)=>`${e.name} ${((e.percent??0)*100).toFixed(0)}%`) as any}>{monthly.categories.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}</Pie><Tooltip formatter={(v:any)=>formatCurrency(Number(v))}/></PieChart></ResponsiveContainer></div>}
+              {monthly.categories.length===0?<p className="text-muted-foreground">No data.</p>:<div className="h-72"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={monthly.categories} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={55} >{monthly.categories.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}</Pie><Tooltip formatter={(v:any)=>formatCurrency(Number(v))}/></PieChart></ResponsiveContainer></div>}
             </GlassCard>
             <GlassCard delay={0.2}>
               <h2 className="text-lg font-semibold mb-4">Category Breakdown</h2>
@@ -91,7 +91,7 @@ export default function StatsPage(){
           <div className="grid gap-5 lg:grid-cols-2">
             <GlassCard delay={0.25}>
               <h2 className="text-lg font-semibold mb-4">Spending Pace</h2>
-              <div className="h-64">{monthly.spending_velocity.length===0?<p className="text-muted-foreground">No data.</p>:<ResponsiveContainer width="100%" height="100%"><AreaChart data={monthly.spending_velocity}><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:11}} tickFormatter={d=>d.slice(8)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:11}} tickFormatter={v=>`${(v/1000).toFixed(1)}k`} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>formatCurrency(Number(v))}/><Area type="monotone" dataKey="cumulative" stroke="#34c759" fill="#34c759" fillOpacity={0.12} strokeWidth={2}/></AreaChart></ResponsiveContainer>}</div>
+              <div className="h-64">{monthly.spending_velocity.length===0?<p className="text-muted-foreground">No data.</p>:<ResponsiveContainer width="100%" height="100%"><AreaChart data={monthly.spending_velocity}><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:11}} tickFormatter={d=>d.slice(8)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:11}} tickFormatter={v=>`${(v/1000).toFixed(1)}k`} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>formatCurrency(Number(v))}/><Area type="monotone" dataKey="cumulative" stroke="#f97316" fill="#f97316" fillOpacity={0.12} strokeWidth={2}/></AreaChart></ResponsiveContainer>}</div>
             </GlassCard>
             <GlassCard delay={0.3}>
               <h2 className="text-lg font-semibold mb-4">Fixed vs Variable</h2>
