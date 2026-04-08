@@ -7,21 +7,30 @@ import { Sidebar } from "@/components/sidebar";
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLogin = pathname === "/login";
+  const isPublic = pathname.startsWith("/p/");
 
-  return (
-    <AuthProvider>
-      {isLogin ? (
+  if (isLogin) {
+    return (
+      <AuthProvider>
         <main className="flex min-h-screen items-center justify-center">
           {children}
         </main>
-      ) : (
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-[1200px] px-8 py-8">{children}</div>
-          </main>
-        </div>
-      )}
+      </AuthProvider>
+    );
+  }
+
+  if (isPublic) {
+    return <main className="min-h-screen">{children}</main>;
+  }
+
+  return (
+    <AuthProvider>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-[1200px] px-8 py-8">{children}</div>
+        </main>
+      </div>
     </AuthProvider>
   );
 }

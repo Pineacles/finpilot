@@ -4,9 +4,10 @@ export function middleware(req: NextRequest) {
   const token = req.cookies.get("token")?.value;
   const { pathname } = req.nextUrl;
 
-  // Allow login page, API routes, and static assets
+  // Allow login page, public portfolio, API routes, and static assets
   if (
     pathname === "/login" ||
+    pathname.startsWith("/p/") ||
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon")

@@ -1,16 +1,16 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { motion } from "motion/react";
-import { api, PortfolioSummary, PortfolioAnalysis, StockAnalysisEntry, Trade } from "@/lib/api";
+import { api, PortfolioSummary, PortfolioAnalysis, StockAnalysisEntry, Trade, ValueTimelinePoint } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar, Brush } from "recharts";
 import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight, Globe, Link2, ClipboardCheck, History, LineChart } from "lucide-react";
 
 const COLORS = ["#3b82f6","#f97316","#ef4444","#a855f7","#14b8a6","#f59e0b","#ec4899","#22c55e","#06b6d4","#8b5cf6","#e11d48","#84cc16","#6366f1","#d946ef","#0ea5e9","#fb923c"];
-const RANGES = [{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
+const RANGES = [{value:"1d",label:"1D"},{value:"5d",label:"1W"},{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
 
 function GlassCard({children,className="",delay=0}:{children:React.ReactNode;className?:string;delay?:number}){
   return <motion.div initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{duration:0.45,delay,ease:[0.25,0.46,0.45,0.94]}} className={`glass bg-card rounded-3xl p-6 ${className}`}>{children}</motion.div>;
@@ -51,6 +51,7 @@ export default function PortfolioPage(){
   const [copied,setCopied]=useState(false);
   const [trades,setTrades]=useState<Trade[]>([]);
   const [tradesLoading,setTradesLoading]=useState(false);
+  const [timeline,setTimeline]=useState<ValueTimelinePoint[]>([]);
   const [tradeChartSymbol,setTradeChartSymbol]=useState<string|null>(null);
   const [tradeChartData,setTradeChartData]=useState<{date:string;close:number}[]>([]);
   const [tradeChartRange,setTradeChartRange]=useState("1y");
@@ -58,11 +59,12 @@ export default function PortfolioPage(){
 
   const load=useCallback(()=>{
     setLoading(true);
-    Promise.all([api.portfolio(),api.portfolioHistory(365),api.analysesByStock(),api.analysisLatest("economy"),api.trades()]).then(([port,h,sa,ae,tr])=>{
+    Promise.all([api.portfolio(),api.portfolioHistory(365),api.analysesByStock(),api.analysisLatest("economy"),api.trades(),api.portfolioValueTimeline()]).then(([port,h,sa,ae,tr,tl])=>{
       setP(port);setHistoryData(h);
       if(sa&&typeof sa==="object")setStockAnalyses(sa);
       if(ae&&!("status" in ae&&(ae as any).status==="none"))setLE(ae);
       setTrades(tr);
+      setTimeline(tl);
     }).finally(()=>setLoading(false));
   },[]);
   useEffect(()=>{load();api.publicPortfolioStatus().then(s=>{setPublicEnabled(s.enabled);setPublicToken(s.token);}).catch(()=>{});},[load]);
@@ -299,50 +301,91 @@ export default function PortfolioPage(){
         )}
       </GlassCard>
 
-      {/* Portfolio Timeline with Transaction Markers */}
-      {(historyData.length>0||trades.length>0)&&(
+      {/* Portfolio Timeline — unified chart with zoom, P&L bars, and all transaction markers */}
+      {timeline.length>0&&(()=>{
+        const chartData=timeline.map((pt,i)=>{
+          const prev=i>0?timeline[i-1]:pt;
+          const dailyChange=pt.value-prev.value;
+          const tradeLabels=pt.trades?.map(t=>{
+            if(t.symbol==="CASH")return `${t.type==="deposit"?"+ Deposit":"- Withdraw"} ${formatCurrency(t.quantity)}`;
+            return `${t.type==="buy"?"+ Buy":"- Sell"} ${t.quantity} ${t.symbol} @ ${t.price.toFixed(2)}`;
+          }).join("\n")||null;
+          return {date:pt.date,value:pt.value,cost:pt.cost,pnl:pt.pnl,dailyChange,gain:dailyChange>=0?dailyChange:0,loss:dailyChange<0?dailyChange:0,tradeLabels,hasTrades:!!pt.trades?.length,trades:pt.trades};
+        });
+        const lastPt=timeline[timeline.length-1];
+        const firstPt=timeline[0];
+        const totalReturn=lastPt.value-firstPt.value;
+        const totalReturnPct=firstPt.value>0?((lastPt.value/firstPt.value-1)*100):0;
+        return(
         <div>
-          <div className="flex items-center gap-3 mb-5">
-            <div className="h-10 w-10 rounded-2xl bg-indigo-100 dark:bg-indigo-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" strokeWidth={1.8}/></div>
-            <h2 className="text-lg font-semibold">Portfolio Timeline</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-indigo-100 dark:bg-indigo-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" strokeWidth={1.8}/></div>
+              <h2 className="text-lg font-semibold">Portfolio Timeline</h2>
+            </div>
+            <div className="sm:ml-auto flex items-center gap-3">
+              <span className="text-[13px] text-muted-foreground">Current</span>
+              <span className="text-lg font-bold tabular-nums">{formatCurrency(lastPt.value)}</span>
+              <span className={`text-[13px] font-semibold ${totalReturn>=0?"text-gain":"text-loss"}`}>{totalReturn>=0?"+":""}{formatCurrency(totalReturn)} ({totalReturnPct>=0?"+":""}{totalReturnPct.toFixed(1)}%)</span>
+            </div>
           </div>
           <GlassCard delay={0.42} className="!p-4">
-            <div className="h-72">
-              {historyData.length===0?<div className="flex items-center justify-center h-full text-muted-foreground text-sm">No portfolio snapshots yet. Data builds over time.</div>:(
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={historyData}>
-                    <defs>
-                      <linearGradient id="sg-timeline" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.2}/>
-                        <stop offset="100%" stopColor="#6366f1" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
-                    <XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={(d:string)=>d.slice(5)} stroke="var(--muted-foreground)"/>
-                    <YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)" tickFormatter={(v:number)=>`${(v/1000).toFixed(0)}k`}/>
-                    <Tooltip formatter={(v:any)=>formatCurrency(Number(v))} labelFormatter={(l:any)=>new Date(String(l)).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}/>
-                    <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2} fill="url(#sg-timeline)"/>
-                    {trades.filter(t=>t.symbol!=="CASH").map(t=>{
-                      const d=t.date.split("T")[0];
-                      const inRange=historyData.some(h=>h.date===d);
-                      if(!inRange)return null;
-                      return <ReferenceLine key={t.id} x={d} stroke={t.type==="buy"?"#22c55e":t.type==="sell"?"#ef4444":"#3b82f6"} strokeDasharray="4 3" strokeWidth={1.5} label={{value:t.symbol,position:"top",fontSize:10,fill:t.type==="buy"?"#22c55e":"#ef4444"}}/>;
-                    })}
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} margin={{top:10,right:10,bottom:0,left:0}}>
+                  <defs>
+                    <linearGradient id="sg-tl-gain" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#22c55e" stopOpacity={0.15}/><stop offset="100%" stopColor="#22c55e" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="sg-tl-loss" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef4444" stopOpacity={0.15}/><stop offset="100%" stopColor="#ef4444" stopOpacity={0}/></linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
+                  <XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={(d:string)=>d.slice(5)} stroke="var(--muted-foreground)"/>
+                  <YAxis yAxisId="value" tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)" tickFormatter={(v:number)=>v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(0)}/>
+                  <YAxis yAxisId="change" orientation="right" tick={{fontSize:9}} stroke="var(--muted-foreground)" tickFormatter={(v:number)=>v>=1000||v<=-1000?`${(v/1000).toFixed(1)}k`:v.toFixed(0)} width={45}/>
+                  <Tooltip content={({active,payload,label}:any)=>{
+                    if(!active||!payload?.length)return null;
+                    const d=payload[0]?.payload;
+                    const change=d?.dailyChange??0;
+                    return(<div className="bg-popover border border-border rounded-xl p-3 shadow-lg text-[13px] space-y-1 max-w-[260px]">
+                      <p className="font-medium">{new Date(String(label)).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
+                      <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">Value</span><span className="font-semibold tabular-nums">{formatCurrency(d?.value??0)}</span></div>
+                      <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">Cost</span><span className="tabular-nums">{formatCurrency(d?.cost??0)}</span></div>
+                      <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">P&L</span><span className={`font-semibold tabular-nums ${(d?.pnl??0)>=0?"text-gain":"text-loss"}`}>{(d?.pnl??0)>=0?"+":""}{formatCurrency(d?.pnl??0)}</span></div>
+                      <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">Day</span><span className={`font-medium tabular-nums ${change>=0?"text-gain":"text-loss"}`}>{change>=0?"+":""}{formatCurrency(change)}</span></div>
+                      {d?.tradeLabels&&<div className="pt-1.5 mt-1.5 border-t border-border space-y-0.5">{d.tradeLabels.split("\n").map((line:string,i:number)=><p key={i} className={`text-[12px] font-medium ${line.startsWith("+")?line.includes("Deposit")?"text-blue-500":"text-gain":line.includes("Withdraw")?"text-amber-500":"text-loss"}`}>{line}</p>)}</div>}
+                    </div>);
+                  }}/>
+                  {/* Daily change bars */}
+                  <Bar yAxisId="change" dataKey="gain" fill="#22c55e" opacity={0.5} radius={[2,2,0,0]} barSize={3}/>
+                  <Bar yAxisId="change" dataKey="loss" fill="#ef4444" opacity={0.5} radius={[0,0,2,2]} barSize={3}/>
+                  {/* Value area */}
+                  <Area yAxisId="value" type="monotone" dataKey="value" stroke={lastPt.pnl>=0?"#22c55e":"#ef4444"} strokeWidth={2} fill={lastPt.pnl>=0?"url(#sg-tl-gain)":"url(#sg-tl-loss)"}/>
+                  {/* Cost basis line */}
+                  <Line yAxisId="value" type="monotone" dataKey="cost" stroke="var(--muted-foreground)" strokeWidth={1} strokeDasharray="4 3" dot={false}/>
+                  {/* Transaction markers */}
+                  {timeline.filter(pt=>pt.trades&&pt.trades.length>0).map((pt,i)=>{
+                    const t=pt.trades![0];
+                    const color=t.symbol==="CASH"?(t.type==="deposit"?"#3b82f6":"#f59e0b"):t.type==="buy"?"#22c55e":"#ef4444";
+                    return <ReferenceLine key={`tl-${i}`} yAxisId="value" x={pt.date} stroke={color} strokeDasharray="3 3" strokeWidth={1.5}/>;
+                  })}
+                  {/* Zoom brush */}
+                  <Brush dataKey="date" height={28} stroke="var(--border)" fill="var(--card)" tickFormatter={(d:string)=>d.slice(5,10)} travellerWidth={10} startIndex={Math.max(0,chartData.length-90)}/>
+                </ComposedChart>
+              </ResponsiveContainer>
             </div>
-            <div className="flex items-center gap-5 mt-3 px-1">
-              <div className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-[#22c55e] rounded-full inline-block" style={{borderTop:"2px dashed #22c55e"}}/>
-                <span className="text-[11px] text-muted-foreground">Buy</span></div>
-              <div className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-[#ef4444] rounded-full inline-block" style={{borderTop:"2px dashed #ef4444"}}/>
-                <span className="text-[11px] text-muted-foreground">Sell</span></div>
-              <div className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-[#6366f1] rounded-full inline-block"/>
-                <span className="text-[11px] text-muted-foreground">Portfolio Value</span></div>
+            {/* Legend */}
+            <div className="flex flex-wrap items-center gap-4 mt-3 px-1">
+              <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#22c55e]/70 inline-block"/><span className="text-[11px] text-muted-foreground">Profit</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#ef4444]/70 inline-block"/><span className="text-[11px] text-muted-foreground">Loss</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-muted-foreground"/><span className="text-[11px] text-muted-foreground">Cost basis</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#22c55e]"/><span className="text-[11px] text-muted-foreground">Buy</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#ef4444]"/><span className="text-[11px] text-muted-foreground">Sell</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#3b82f6]"/><span className="text-[11px] text-muted-foreground">Deposit</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#f59e0b]"/><span className="text-[11px] text-muted-foreground">Withdraw</span></div>
+              <span className="text-[11px] text-muted-foreground ml-auto">Drag the bar below to zoom</span>
             </div>
           </GlassCard>
-        </div>
-      )}
+        </div>);
+      })()}
 
       {/* Transaction History */}
       <div>
