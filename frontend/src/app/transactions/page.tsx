@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -104,6 +104,10 @@ function TransactionsInner() {
   const [editMerchant, setEditMerchant] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editApplyMerchant, setEditApplyMerchant] = useState(true);
+  const [editApplyCategory, setEditApplyCategory] = useState(true);
+  const [editDescFilter, setEditDescFilter] = useState("");
+  const [editOriginalMerchant, setEditOriginalMerchant] = useState("");
 
   // Category dropdown
   const [categoryDropdownId, setCategoryDropdownId] = useState<string | null>(null);
@@ -309,13 +313,51 @@ function TransactionsInner() {
     setEditingId(txn.id);
     setEditMerchant(txn.merchant);
     setEditNotes(txn.notes ?? "");
+    setEditOriginalMerchant(txn.merchant);
+    setEditApplyMerchant(true);
+    setEditApplyCategory(true);
+    setEditDescFilter("");
   };
 
   const cancelEditing = () => {
     setEditingId(null);
     setEditMerchant("");
     setEditNotes("");
+    setEditOriginalMerchant("");
+    setEditDescFilter("");
   };
+
+  // Count siblings: other transactions with the same merchant name
+  const editSiblingCount = useMemo(() => {
+    if (!editOriginalMerchant) return 0;
+    return transactions.filter(
+      (t) => t.merchant === editOriginalMerchant && t.id !== editingId,
+    ).length;
+  }, [editOriginalMerchant, editingId, transactions]);
+
+  // Count how many siblings have distinct descriptions (to show description filter hint)
+  const editDistinctDescriptions = useMemo(() => {
+    if (!editOriginalMerchant) return [];
+    const notes = new Set<string>();
+    transactions
+      .filter((t) => t.merchant === editOriginalMerchant)
+      .forEach((t) => {
+        if (t.notes) notes.add(t.notes.toLowerCase().split(/\s+/)[0]);
+      });
+    return Array.from(notes).slice(0, 10);
+  }, [editOriginalMerchant, transactions]);
+
+  // Count how many will be affected by current filter
+  const editFilteredCount = useMemo(() => {
+    if (!editOriginalMerchant || !editApplyMerchant) return 0;
+    return transactions.filter((t) => {
+      if (t.merchant !== editOriginalMerchant || t.id === editingId) return false;
+      if (editDescFilter) {
+        return (t.notes ?? "").toLowerCase().includes(editDescFilter.toLowerCase());
+      }
+      return true;
+    }).length;
+  }, [editOriginalMerchant, editingId, editApplyMerchant, editDescFilter, transactions]);
 
   const saveEditing = async () => {
     if (!editingId) return;
@@ -324,7 +366,10 @@ function TransactionsInner() {
       await api.updateTransaction(editingId, {
         merchant: editMerchant,
         notes: editNotes || undefined,
-      } as Partial<TransactionItem>);
+        apply_merchant_to_all: editApplyMerchant,
+        apply_category_to_all: editApplyCategory,
+        description_filter: editDescFilter || undefined,
+      } as any);
       await load();
       cancelEditing();
     } finally {
@@ -680,12 +725,13 @@ function TransactionsInner() {
                     const isIncome = txn.amount >= 0;
 
                     return (
+                      <React.Fragment key={txn.id}>
                       <tr
-                        key={txn.id}
                         ref={isHighlighted ? highlightRef : undefined}
                         className={cn(
                           "group border-b border-border/50 transition-colors hover:bg-accent/30",
                           isHighlighted && "bg-primary/5 ring-1 ring-primary/20",
+                          isEditing && "bg-accent/20 border-b-0",
                         )}
                       >
                         {/* Date */}
@@ -857,6 +903,62 @@ function TransactionsInner() {
                           )}
                         </td>
                       </tr>
+                      {/* Scope controls row — only shown when editing and there are sibling transactions */}
+                      {isEditing && editSiblingCount > 0 && (
+                        <tr className="border-b border-border/50 bg-accent/10">
+                          <td colSpan={6} className="px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-4 text-[13px]">
+                              <span className="text-muted-foreground font-medium">
+                                {editSiblingCount} other &quot;{editOriginalMerchant}&quot; transaction{editSiblingCount !== 1 ? "s" : ""}
+                              </span>
+
+                              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={editApplyMerchant}
+                                  onChange={(e) => setEditApplyMerchant(e.target.checked)}
+                                  className="rounded accent-primary cursor-pointer"
+                                />
+                                <span>Rename all</span>
+                              </label>
+
+                              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={editApplyCategory}
+                                  onChange={(e) => setEditApplyCategory(e.target.checked)}
+                                  className="rounded accent-primary cursor-pointer"
+                                />
+                                <span>Recategorize all</span>
+                              </label>
+
+                              {editDistinctDescriptions.length > 1 && (editApplyMerchant || editApplyCategory) && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-muted-foreground">Only where description contains:</span>
+                                  <input
+                                    value={editDescFilter}
+                                    onChange={(e) => setEditDescFilter(e.target.value)}
+                                    placeholder="e.g. carvolution"
+                                    className="h-7 w-36 rounded-lg bg-accent px-2 text-[13px] outline-none focus:ring-2 focus:ring-primary/30"
+                                  />
+                                </div>
+                              )}
+
+                              {(editApplyMerchant || editApplyCategory) && (
+                                <span className={cn(
+                                  "text-[12px] px-2 py-0.5 rounded-lg font-medium",
+                                  editFilteredCount > 0
+                                    ? "bg-primary/10 text-primary"
+                                    : "bg-muted text-muted-foreground",
+                                )}>
+                                  {editFilteredCount} will be updated
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>

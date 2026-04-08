@@ -1,4 +1,5 @@
 """Portfolio endpoints — positions, trades, cash, live prices, charts."""
+import secrets
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
 from app.models.account import Account
-from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot
+from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot, MarketAnalysis
 from app.models.user import User
 from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate
 
@@ -414,3 +415,302 @@ async def get_portfolio_history(
         .order_by(PortfolioSnapshot.snapshot_date)
     )
     return [{"date": s.snapshot_date.isoformat(), "value": s.total_value, "pnl": s.total_pnl} for s in result.scalars().all()]
+
+
+# ── Per-stock analyses ──────────────────────────────────────────
+
+@router.get("/analyses/by-stock")
+async def get_analyses_by_stock(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the latest analysis for each stock symbol."""
+    result = await db.execute(
+        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "portfolio"))
+        .order_by(desc(MarketAnalysis.created_at))
+    )
+    stock_analyses: dict[str, dict] = {}
+    for a in result.scalars().all():
+        for s in a.content.get("stocks", []):
+            sym = s.get("symbol")
+            if sym and sym not in stock_analyses:
+                stock_analyses[sym] = {
+                    "analysis_id": a.id,
+                    "stock": s,
+                    "market_summary": a.content.get("market_summary", ""),
+                    "market_sentiment": a.content.get("market_sentiment", ""),
+                    "created_at": a.created_at.isoformat(),
+                }
+    return stock_analyses
+
+
+@router.get("/analyses/{symbol}")
+async def get_stock_analyses(
+    symbol: str,
+    limit: int = 20,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get older analyses for a specific stock."""
+    result = await db.execute(
+        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "portfolio"))
+        .order_by(desc(MarketAnalysis.created_at)).limit(limit)
+    )
+    out = []
+    for a in result.scalars().all():
+        for s in a.content.get("stocks", []):
+            if s.get("symbol") == symbol.upper():
+                out.append({
+                    "id": a.id,
+                    "stock": s,
+                    "market_summary": a.content.get("market_summary", ""),
+                    "market_sentiment": a.content.get("market_sentiment", ""),
+                    "created_at": a.created_at.isoformat(),
+                })
+    return out
+
+
+# ── Public sharing ──────────────────────────────────────────────
+
+@router.get("/public/status")
+async def get_public_status(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return {"enabled": user.public_portfolio, "token": user.public_share_token}
+
+
+@router.post("/public/toggle")
+async def toggle_public_portfolio(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.public_portfolio:
+        # Turning off — clear the token so old links stop working
+        user.public_portfolio = False
+        user.public_share_token = None
+    else:
+        # Turning on — generate a fresh token
+        user.public_portfolio = True
+        user.public_share_token = secrets.token_urlsafe(32)
+    await db.commit()
+    return {"enabled": user.public_portfolio, "token": user.public_share_token}
+
+
+# ── Public portfolio view (no auth) ────────────────────────────
+
+public_router = APIRouter(prefix="/api/public", tags=["public"])
+
+
+@public_router.get("/portfolio/{token}")
+async def get_public_portfolio(token: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    result = await db.execute(
+        select(StockPosition).where(StockPosition.user_id == user.id)
+    )
+    positions = result.scalars().all()
+
+    if not positions:
+        return {
+            "display_name": user.display_name,
+            "total_value": 0, "total_cost": 0, "total_pnl": 0, "total_pnl_pct": 0,
+            "cash_balance": 0, "positions_count": 0, "positions": [],
+        }
+
+    cash_pos = next((p for p in positions if p.symbol == "CASH"), None)
+    stock_positions = [p for p in positions if p.symbol != "CASH"]
+
+    if stock_positions:
+        tickers = list({p.symbol for p in stock_positions})
+        quotes = await get_quotes_batch(tickers)
+        for p in stock_positions:
+            q = quotes.get(p.symbol)
+            if q:
+                p.last_price = q["price"]
+
+    BASE_CCY = "CHF"
+    fx_rates: dict[str, float] = {}
+    for ccy in {p.currency for p in stock_positions if p.currency != BASE_CCY}:
+        fx_rates[ccy] = await get_fx_rate(ccy, BASE_CCY)
+
+    def to_chf(amount: float, ccy: str) -> float:
+        if ccy == BASE_CCY:
+            return amount
+        return amount * fx_rates.get(ccy, 1.0)
+
+    total_value = sum(to_chf((p.last_price or p.avg_cost_price) * p.quantity, p.currency) for p in stock_positions)
+    total_cost = sum(to_chf(p.avg_cost_price * p.quantity, p.currency) for p in stock_positions)
+    total_pnl = total_value - total_cost
+    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else 0
+    cash_balance = cash_pos.quantity if cash_pos else 0
+
+    sparklines: dict[str, list[float]] = {}
+    for p in stock_positions:
+        hist = await get_history(p.symbol, range="5d", interval="1d")
+        if hist:
+            sparklines[p.symbol] = [h["close"] for h in hist]
+
+    pos_list = []
+    for p in stock_positions:
+        q_data = quotes.get(p.symbol, {}) if stock_positions else {}
+        mv_chf = to_chf((p.last_price or p.avg_cost_price) * p.quantity, p.currency)
+        pnl_chf = to_chf((p.unrealized_pnl or 0), p.currency)
+        pos_list.append({
+            "id": p.id,
+            "symbol": p.symbol,
+            "name": q_data.get("name", p.name),
+            "quantity": p.quantity,
+            "avg_cost_price": p.avg_cost_price,
+            "currency": p.currency,
+            "last_price": p.last_price,
+            "change": q_data.get("change", 0),
+            "change_pct": q_data.get("change_pct", 0),
+            "market_value": mv_chf,
+            "unrealized_pnl": pnl_chf,
+            "pnl_pct": ((p.last_price or p.avg_cost_price) / p.avg_cost_price - 1) * 100 if p.avg_cost_price else 0,
+            "weight_pct": (mv_chf / total_value * 100) if total_value else 0,
+            "sparkline": sparklines.get(p.symbol, []),
+        })
+
+    # Fetch latest analysis per stock symbol
+    def _fmt_analysis(a):
+        if not a:
+            return None
+        return {"id": a.id, "analysis_type": a.analysis_type, "content": a.content, "created_at": a.created_at.isoformat()}
+
+    # Get ALL portfolio analyses, then pick the latest per symbol
+    all_pa_result = await db.execute(
+        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "portfolio"))
+        .order_by(desc(MarketAnalysis.created_at))
+    )
+    all_analyses = all_pa_result.scalars().all()
+
+    stock_analyses: dict[str, dict] = {}
+    for a in all_analyses:
+        stocks = a.content.get("stocks", [])
+        for s in stocks:
+            sym = s.get("symbol")
+            if sym and sym not in stock_analyses:
+                stock_analyses[sym] = {
+                    "analysis_id": a.id,
+                    "stock": s,
+                    "market_summary": a.content.get("market_summary", ""),
+                    "market_sentiment": a.content.get("market_sentiment", ""),
+                    "created_at": a.created_at.isoformat(),
+                }
+
+    ea_result = await db.execute(
+        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "economy"))
+        .order_by(desc(MarketAnalysis.created_at)).limit(1)
+    )
+
+    return {
+        "display_name": user.display_name,
+        "total_value": total_value,
+        "total_cost": total_cost,
+        "total_pnl": total_pnl,
+        "total_pnl_pct": total_pnl_pct,
+        "cash_balance": cash_balance,
+        "base_currency": BASE_CCY,
+        "positions_count": len(pos_list),
+        "positions": sorted(pos_list, key=lambda p: p["market_value"], reverse=True),
+        "stock_analyses": stock_analyses,
+        "economy_analysis": _fmt_analysis(ea_result.scalar_one_or_none()),
+    }
+
+
+@public_router.get("/portfolio/{token}/chart/{ticker}")
+async def get_public_chart(token: str, ticker: str, range: str = "1y", interval: str = "1d", db: AsyncSession = Depends(get_db)):
+    """Public price chart — validates the share token first."""
+    result = await db.execute(
+        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    valid_ranges = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
+    if range not in valid_ranges:
+        raise HTTPException(status_code=400, detail="Invalid range")
+    data = await get_history(ticker, range=range, interval=interval)
+    if not data:
+        raise HTTPException(status_code=404, detail=f"No data for {ticker}")
+    return {"ticker": ticker, "range": range, "data": data}
+
+
+@public_router.get("/portfolio/{token}/trades")
+async def get_public_trades(token: str, symbol: str | None = None, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    """Public trade history — validates the share token first."""
+    result = await db.execute(
+        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    query = select(StockTransaction).where(StockTransaction.user_id == user.id)
+    if symbol:
+        query = query.where(StockTransaction.symbol == symbol.upper())
+    query = query.order_by(desc(StockTransaction.executed_at)).limit(limit)
+    result = await db.execute(query)
+    trades = result.scalars().all()
+    return [
+        {
+            "id": t.id, "symbol": t.symbol, "type": t.type,
+            "quantity": t.quantity, "price": t.price, "fees": t.fees,
+            "currency": t.currency, "date": t.executed_at.isoformat(),
+            "total": t.quantity * t.price + (t.fees if t.type == "buy" else -t.fees),
+        }
+        for t in trades
+    ]
+
+
+@public_router.get("/portfolio/{token}/history")
+async def get_public_portfolio_history(token: str, days: int = 365, db: AsyncSession = Depends(get_db)):
+    """Public portfolio value history."""
+    result = await db.execute(
+        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    since = date.today() - timedelta(days=days)
+    result = await db.execute(
+        select(PortfolioSnapshot)
+        .where(and_(PortfolioSnapshot.user_id == user.id, PortfolioSnapshot.snapshot_date >= since))
+        .order_by(PortfolioSnapshot.snapshot_date)
+    )
+    return [{"date": s.snapshot_date.isoformat(), "value": s.total_value, "pnl": s.total_pnl} for s in result.scalars().all()]
+
+
+@public_router.get("/portfolio/{token}/analyses/{symbol}")
+async def get_public_stock_analyses(token: str, symbol: str, limit: int = 20, db: AsyncSession = Depends(get_db)):
+    """Get older analyses for a specific stock."""
+    result = await db.execute(
+        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    result = await db.execute(
+        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "portfolio"))
+        .order_by(desc(MarketAnalysis.created_at)).limit(limit)
+    )
+    out = []
+    for a in result.scalars().all():
+        for s in a.content.get("stocks", []):
+            if s.get("symbol") == symbol.upper():
+                out.append({
+                    "id": a.id,
+                    "stock": s,
+                    "market_summary": a.content.get("market_summary", ""),
+                    "market_sentiment": a.content.get("market_sentiment", ""),
+                    "created_at": a.created_at.isoformat(),
+                })
+    return out

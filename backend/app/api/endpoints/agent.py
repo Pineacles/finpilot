@@ -14,6 +14,7 @@ from app.api.deps.auth import get_user_by_api_key
 from app.core.database import get_db
 from app.models.account import Account
 from app.models.finance import Transaction, Budget, Category, RecurringExpense, SavingsGoal, Milestone
+from app.models.merchant import Merchant
 from app.models.stock import StockPosition, StockTransaction
 from app.models.user import User
 from app.schemas.finance import TransactionCreate, TransactionResponse
@@ -222,6 +223,50 @@ async def log_transaction(
 
 # ── Categorization ───────────────────────────────────────────────
 
+
+async def _upsert_merchant_rule(
+    db: AsyncSession, merchant_name: str, original_name: str | None, category_id: str,
+):
+    """Create or update a Merchant DB entry so future imports auto-categorize.
+
+    Builds patterns from both the new merchant name and the original name.
+    """
+    # Build patterns: lowercase, pipe-separated, deduplicated
+    patterns_set: set[str] = set()
+    for name in (merchant_name, original_name):
+        if name:
+            cleaned = name.strip().lower()
+            if cleaned:
+                patterns_set.add(cleaned)
+                # Also add significant words (3+ chars) as individual patterns
+                for word in cleaned.split():
+                    if len(word) >= 4 and word not in ("gmbh", "sarl", "bank", "card", "payment", "services"):
+                        patterns_set.add(word)
+
+    if not patterns_set:
+        return
+
+    # Check if a merchant with this name already exists
+    result = await db.execute(
+        select(Merchant).where(Merchant.name == merchant_name)
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        # Merge new patterns into existing
+        old_patterns = set(p.strip().lower() for p in existing.patterns.split("|") if p.strip())
+        merged = old_patterns | patterns_set
+        existing.patterns = "|".join(sorted(merged))
+        existing.default_category_id = category_id
+    else:
+        db.add(Merchant(
+            name=merchant_name,
+            patterns="|".join(sorted(patterns_set)),
+            default_category_id=category_id,
+            is_system=False,
+        ))
+
+
 @router.post("/categorize")
 async def agent_categorize(
     category_name: str,
@@ -267,17 +312,20 @@ async def agent_categorize(
         if not txn:
             raise HTTPException(status_code=404, detail="Transaction not found")
 
+        # Capture original merchant BEFORE rename for apply_to_all query
+        original_merchant = txn.merchant
+
         txn.category_id = cat.id
         if new_merchant:
             txn.merchant = new_merchant
             renamed += 1
         updated = 1
-        matched_merchant = txn.merchant
+        matched_merchant = original_merchant
 
-        if apply_to_all and txn.merchant:
+        if apply_to_all and original_merchant:
             conditions = [
                 Transaction.user_id == user.id,
-                Transaction.merchant == matched_merchant,
+                Transaction.merchant == original_merchant,
                 Transaction.id != txn.id,
             ]
             if description_contains:
@@ -309,6 +357,11 @@ async def agent_categorize(
                 renamed += 1
     else:
         raise HTTPException(status_code=400, detail="Provide transaction_id or merchant")
+
+    # Upsert Merchant DB rule so future imports auto-categorize correctly
+    final_merchant_name = new_merchant or matched_merchant or merchant
+    if final_merchant_name and final_merchant_name != "Pending":
+        await _upsert_merchant_rule(db, final_merchant_name, matched_merchant or merchant, cat.id)
 
     await db.commit()
 
@@ -389,6 +442,69 @@ async def agent_trades(
         }
         for t in result.scalars().all()
     ]
+
+
+class AgentTradeUpdate(BaseModel):
+    symbol: str | None = None
+    type: str | None = None
+    quantity: float | None = None
+    price: float | None = None
+    fees: float | None = None
+    currency: str | None = None
+    date: str | None = None
+
+
+@router.patch("/trades/{trade_id}")
+async def agent_update_trade(
+    trade_id: str,
+    body: AgentTradeUpdate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a stock transaction."""
+    result = await db.execute(
+        select(StockTransaction).where(and_(StockTransaction.id == trade_id, StockTransaction.user_id == user.id))
+    )
+    txn = result.scalar_one_or_none()
+    if not txn:
+        raise HTTPException(status_code=404, detail="Trade not found")
+
+    if body.symbol is not None:
+        txn.symbol = body.symbol.upper().strip()
+    if body.type is not None:
+        txn.type = body.type
+    if body.quantity is not None:
+        txn.quantity = body.quantity
+    if body.price is not None:
+        txn.price = body.price
+    if body.fees is not None:
+        txn.fees = body.fees
+    if body.currency is not None:
+        txn.currency = body.currency
+    if body.date is not None:
+        from datetime import datetime, timezone
+        txn.executed_at = datetime.fromisoformat(body.date).replace(tzinfo=timezone.utc)
+
+    await db.commit()
+    return {"status": "ok", "id": trade_id}
+
+
+@router.delete("/trades/{trade_id}")
+async def agent_delete_trade(
+    trade_id: str,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a stock transaction."""
+    result = await db.execute(
+        select(StockTransaction).where(and_(StockTransaction.id == trade_id, StockTransaction.user_id == user.id))
+    )
+    txn = result.scalar_one_or_none()
+    if not txn:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    await db.delete(txn)
+    await db.commit()
+    return {"status": "deleted", "id": trade_id}
 
 
 # ── File Import ──────────────────────────────────────────────────
