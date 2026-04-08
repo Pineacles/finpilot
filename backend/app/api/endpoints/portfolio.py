@@ -337,7 +337,7 @@ async def get_trades(
             "id": t.id, "symbol": t.symbol, "type": t.type,
             "quantity": t.quantity, "price": t.price, "fees": t.fees,
             "currency": t.currency, "date": t.executed_at.isoformat(),
-            "total": t.quantity * t.price + (t.fees if t.type == "buy" else -t.fees),
+            "total": t.quantity * t.price,
         }
         for t in trades
     ]
@@ -398,6 +398,137 @@ async def get_price_chart(ticker: str, range: str = "1y", interval: str = "1d"):
     if not data:
         raise HTTPException(status_code=404, detail=f"No data for {ticker}")
     return {"ticker": ticker, "range": range, "data": data}
+
+
+# ── Portfolio value timeline (built from transactions + yfinance) ──
+
+@router.get("/value-timeline")
+async def get_value_timeline(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Build day-by-day portfolio value from actual transactions + historical prices."""
+    return await _build_value_timeline(db, user.id)
+
+
+async def _build_value_timeline(db: AsyncSession, user_id: str):
+    """Shared logic for private + public value timeline."""
+    # Get all trades ordered by date
+    result = await db.execute(
+        select(StockTransaction)
+        .where(StockTransaction.user_id == user_id)
+        .order_by(StockTransaction.executed_at)
+    )
+    all_trades = result.scalars().all()
+
+    if not all_trades:
+        return []
+
+    # Collect unique stock symbols (exclude CASH)
+    symbols = list({t.symbol for t in all_trades if t.symbol != "CASH"})
+
+    # Fetch historical prices for each symbol from first trade date
+    first_date = all_trades[0].executed_at.date()
+    days_needed = (date.today() - first_date).days + 1
+    if days_needed < 30:
+        yf_range = "1mo"
+    elif days_needed < 90:
+        yf_range = "3mo"
+    elif days_needed < 180:
+        yf_range = "6mo"
+    elif days_needed < 365:
+        yf_range = "1y"
+    elif days_needed < 730:
+        yf_range = "2y"
+    else:
+        yf_range = "5y"
+
+    # symbol -> {date_str -> close_price}
+    price_history: dict[str, dict[str, float]] = {}
+    for sym in symbols:
+        hist = await get_history(sym, range=yf_range, interval="1d")
+        if hist:
+            price_history[sym] = {h["date"]: h["close"] for h in hist}
+
+    # Collect all unique dates from price history
+    all_dates: set[str] = set()
+    for prices in price_history.values():
+        all_dates.update(prices.keys())
+    # Also add trade dates
+    for t in all_trades:
+        all_dates.add(t.executed_at.date().isoformat())
+
+    if not all_dates:
+        return []
+
+    sorted_dates = sorted(all_dates)
+
+    # Walk through dates, building cumulative positions
+    holdings: dict[str, float] = {}  # symbol -> quantity
+    cost_basis: dict[str, float] = {}  # symbol -> total cost
+    cash = 0.0
+    trade_idx = 0
+
+    timeline = []
+    for d in sorted_dates:
+        # Apply all trades on or before this date
+        while trade_idx < len(all_trades):
+            t = all_trades[trade_idx]
+            td = t.executed_at.date().isoformat()
+            if td > d:
+                break
+
+            if t.symbol == "CASH":
+                if t.type == "deposit":
+                    cash += t.quantity
+                elif t.type == "withdraw":
+                    cash -= t.quantity
+            elif t.type == "buy":
+                holdings[t.symbol] = holdings.get(t.symbol, 0) + t.quantity
+                cost_basis[t.symbol] = cost_basis.get(t.symbol, 0) + (t.quantity * t.price)
+                cash -= (t.quantity * t.price + t.fees)
+            elif t.type == "sell":
+                qty = holdings.get(t.symbol, 0)
+                avg_cost = cost_basis.get(t.symbol, 0) / qty if qty > 0 else 0
+                sold_cost = min(t.quantity, qty) * avg_cost
+                holdings[t.symbol] = max(0, qty - t.quantity)
+                cost_basis[t.symbol] = max(0, cost_basis.get(t.symbol, 0) - sold_cost)
+                cash += (t.quantity * t.price - t.fees)
+
+            trade_idx += 1
+
+        # Calculate portfolio value on this date
+        total_value = cash
+        total_cost = cash  # cash is at-cost
+        for sym, qty in holdings.items():
+            if qty <= 0:
+                continue
+            # Find price on this date (or most recent before)
+            prices = price_history.get(sym, {})
+            price = prices.get(d)
+            if price is None:
+                # Find the most recent price before this date
+                prev_dates = [pd for pd in sorted(prices.keys()) if pd <= d]
+                price = prices[prev_dates[-1]] if prev_dates else 0
+            total_value += qty * price
+            total_cost += cost_basis.get(sym, 0)
+
+        # Find trades on this date for markers
+        day_trades = [
+            {"symbol": t.symbol, "type": t.type, "quantity": t.quantity, "price": t.price}
+            for t in all_trades
+            if t.executed_at.date().isoformat() == d
+        ]
+
+        timeline.append({
+            "date": d,
+            "value": round(total_value, 2),
+            "cost": round(total_cost, 2),
+            "pnl": round(total_value - total_cost, 2),
+            "trades": day_trades if day_trades else None,
+        })
+
+    return timeline
 
 
 # ── Portfolio history ────────────────────────────────────────────
@@ -663,10 +794,22 @@ async def get_public_trades(token: str, symbol: str | None = None, limit: int = 
             "id": t.id, "symbol": t.symbol, "type": t.type,
             "quantity": t.quantity, "price": t.price, "fees": t.fees,
             "currency": t.currency, "date": t.executed_at.isoformat(),
-            "total": t.quantity * t.price + (t.fees if t.type == "buy" else -t.fees),
+            "total": t.quantity * t.price,
         }
         for t in trades
     ]
+
+
+@public_router.get("/portfolio/{token}/value-timeline")
+async def get_public_value_timeline(token: str, db: AsyncSession = Depends(get_db)):
+    """Public portfolio value timeline built from transactions + yfinance."""
+    result = await db.execute(
+        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    return await _build_value_timeline(db, user.id)
 
 
 @public_router.get("/portfolio/{token}/history")

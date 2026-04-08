@@ -340,6 +340,45 @@ async def import_transactions(
                 "merchant": merchant_name,
             })
 
+    # ── Purge pending transactions that were replaced by real imports ──
+    # Email notifications often batch multiple transactions into one "Pending"
+    # entry (e.g. 11 individual charges → 2 aggregated pending amounts).
+    # After importing the real transactions for a date, remove any remaining
+    # "Pending" entries for that date if their total roughly matches.
+    imported_dates = {t.date for t in imported_txns}
+    pending_purged = 0
+    for d in imported_dates:
+        pending_result = await db.execute(
+            select(Transaction).where(and_(
+                Transaction.user_id == user_id,
+                Transaction.account_id == account_id,
+                Transaction.date == d,
+                Transaction.merchant == "Pending",
+            ))
+        )
+        pending_for_date = pending_result.scalars().all()
+        if not pending_for_date:
+            continue
+
+        # Sum of pending entries and imported entries for this date
+        pending_total = sum(p.amount for p in pending_for_date)
+        imported_for_date = [t for t in imported_txns if t.date == d]
+        imported_total = sum(t.amount for t in imported_for_date)
+
+        # If the pending total is close to the imported total (within 5% or 5 CHF),
+        # or if we imported more granular transactions than pending entries,
+        # the pending entries are clearly the batched email notifications → purge them.
+        diff = abs(pending_total - imported_total)
+        threshold = max(abs(pending_total) * 0.05, 5.0)  # 5% or 5 CHF
+
+        if diff <= threshold or len(imported_for_date) > len(pending_for_date):
+            for p in pending_for_date:
+                await db.delete(p)
+                pending_purged += 1
+
+    if pending_purged:
+        _log(f"Purged {pending_purged} batched pending transactions (replaced by {len(imported_txns)} real imports)")
+
     if skipped:
         _log(f"Skipped {skipped} duplicate transactions")
 

@@ -41,6 +41,7 @@ export const api = {
   overview: () => request<Overview>("/api/dashboard/overview"),
   portfolio: () => request<PortfolioSummary>("/api/dashboard/portfolio"),
   portfolioHistory: (days = 90) => request<PortfolioSnapshot[]>(`/api/dashboard/portfolio/history?days=${days}`),
+  portfolioValueTimeline: () => request<ValueTimelinePoint[]>("/api/dashboard/portfolio/value-timeline"),
   trade: (data: { symbol: string; type: string; quantity: number; price?: number; currency?: string; date?: string; fees?: number; deduct_from_cash?: boolean }) =>
     request<{ status: string }>("/api/dashboard/portfolio/trade", { method: "POST", body: JSON.stringify(data) }),
   trades: (symbol?: string) =>
@@ -67,6 +68,8 @@ export const api = {
     fetch(`/api/public/portfolio/${token}/trades${symbol ? `?symbol=${symbol}` : ""}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<Trade[]>; }),
   publicPortfolioHistory: (token: string, days = 365) =>
     fetch(`/api/public/portfolio/${token}/history?days=${days}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<PortfolioSnapshot[]>; }),
+  publicValueTimeline: (token: string) =>
+    fetch(`/api/public/portfolio/${token}/value-timeline`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<ValueTimelinePoint[]>; }),
 
   // Per-stock analyses (private)
   analysesByStock: () => request<Record<string, StockAnalysisEntry>>("/api/dashboard/portfolio/analyses/by-stock"),
@@ -222,6 +225,7 @@ export interface Position {
 }
 
 export interface Trade { id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; date: string; total: number }
+export interface ValueTimelinePoint { date: string; value: number; cost: number; pnl: number; trades: { symbol: string; type: string; quantity: number; price: number }[] | null }
 export interface PortfolioSnapshot { date: string; value: number; pnl: number }
 export interface StockTransaction { id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; executed_at: string }
 
