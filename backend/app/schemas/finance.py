@@ -58,6 +58,9 @@ class TransactionUpdate(BaseModel):
     category_id: str | None = None
     notes: str | None = None
     merchant: str | None = None
+    apply_merchant_to_all: bool = True  # Apply merchant rename to all matching
+    apply_category_to_all: bool = True  # Apply category change to all matching
+    description_filter: str | None = None  # Only apply to transactions whose notes contain this
 
 
 # --- Budgets ---

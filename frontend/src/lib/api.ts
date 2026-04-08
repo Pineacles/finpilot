@@ -54,6 +54,24 @@ export const api = {
   stockTransactions: (symbol?: string) =>
     request<StockTransaction[]>(`/api/dashboard/portfolio/transactions${symbol ? `?symbol=${symbol}` : ""}`),
 
+  // Public sharing
+  publicPortfolioStatus: () => request<{ enabled: boolean; token: string | null }>("/api/dashboard/portfolio/public/status"),
+  publicPortfolioToggle: () => request<{ enabled: boolean; token: string | null }>("/api/dashboard/portfolio/public/toggle", { method: "POST" }),
+  publicPortfolio: (token: string) =>
+    fetch(`/api/public/portfolio/${token}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<PublicPortfolio>; }),
+  publicChart: (token: string, ticker: string, range = "1y") =>
+    fetch(`/api/public/portfolio/${token}/chart/${ticker}?range=${range}`).then(r => { if (!r.ok) throw new Error("No data"); return r.json() as Promise<{ ticker: string; range: string; data: { date: string; close: number }[] }>; }),
+  publicStockAnalyses: (token: string, symbol: string) =>
+    fetch(`/api/public/portfolio/${token}/analyses/${symbol}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<StockAnalysisEntry[]>; }),
+  publicTrades: (token: string, symbol?: string) =>
+    fetch(`/api/public/portfolio/${token}/trades${symbol ? `?symbol=${symbol}` : ""}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<Trade[]>; }),
+  publicPortfolioHistory: (token: string, days = 365) =>
+    fetch(`/api/public/portfolio/${token}/history?days=${days}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<PortfolioSnapshot[]>; }),
+
+  // Per-stock analyses (private)
+  analysesByStock: () => request<Record<string, StockAnalysisEntry>>("/api/dashboard/portfolio/analyses/by-stock"),
+  stockAnalyses: (symbol: string) => request<StockAnalysisEntry[]>(`/api/dashboard/portfolio/analyses/${symbol}`),
+
   // Transactions
   transactions: (params?: { category_id?: string; from_date?: string; to_date?: string; search?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams();
@@ -62,7 +80,7 @@ export const api = {
   },
   createTransaction: (data: CreateTransaction) =>
     request<TransactionItem>("/api/dashboard/transactions", { method: "POST", body: JSON.stringify(data) }),
-  updateTransaction: (id: string, data: Partial<TransactionItem>) =>
+  updateTransaction: (id: string, data: Partial<TransactionItem> & { apply_merchant_to_all?: boolean; apply_category_to_all?: boolean; description_filter?: string }) =>
     request<TransactionItem>(`/api/dashboard/transactions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   // Categories
@@ -203,6 +221,7 @@ export interface Position {
   sparkline: number[];
 }
 
+export interface Trade { id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; date: string; total: number }
 export interface PortfolioSnapshot { date: string; value: number; pnl: number }
 export interface StockTransaction { id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; executed_at: string }
 
@@ -291,6 +310,29 @@ export interface AnalysisListItem {
   market_sentiment: string | null;
   stocks_count: number;
   created_at: string;
+}
+
+export interface StockAnalysisEntry {
+  analysis_id: string;
+  stock: StockAnalysis;
+  market_summary: string;
+  market_sentiment: string;
+  created_at: string;
+}
+
+export interface PublicPortfolio {
+  display_name: string;
+  total_value: number;
+  total_cost: number;
+  total_pnl: number;
+  total_pnl_pct: number;
+  cash_balance: number;
+  base_currency: string;
+  positions_count: number;
+  positions: Position[];
+  stock_analyses: Record<string, StockAnalysisEntry>;
+  economy_analysis: PortfolioAnalysis | null;
+  trades?: Trade[];
 }
 
 export interface SyncResult { status: string; records_synced: number; message: string }

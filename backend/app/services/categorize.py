@@ -155,43 +155,43 @@ async def categorize_transaction(
     normalized = parsed["normalized"]
     pm = payment_method or parsed["payment_method"] or ""
 
-    # 0a. TWINT with person name = Transfer (friends)
-    if pm == "twint" and is_person_name(parsed["merchant"]):
-        cat = await _find_category(db, user_id, "Transfer")
-        if cat:
-            return cat.id, merchant_name, "keyword", 0.95
-
-    # 0b. Any incoming money (positive amount) = Income by default
-    if amount > 0:
-        cat_name = "Salary" if "gehalt" in normalized or "lohn" in normalized else "Income"
-        cat = await _find_category(db, user_id, cat_name)
-        if cat:
-            return cat.id, merchant_name, "keyword", 0.9
-
-    # 0c. "Vergütung" = e-banking payment
-    if "vergütung" in normalized or "vergutung" in normalized:
-        if counterparty:
-            merchant_name = counterparty
-            # Fall through to merchant DB with counterparty
-        else:
-            cat = await _find_category(db, user_id, "Other")
-            if cat:
-                return cat.id, "E-Banking Payment", "keyword", 0.5
-
-    # 0d. Direct keyword match for Swiss transaction types
-    for keyword, cat_name in DIRECT_CATEGORY_MAP.items():
-        if keyword in normalized:
-            cat = await _find_category(db, user_id, cat_name)
-            if cat:
-                return cat.id, merchant_name, "keyword", 1.0
-
-    # 1. Merchant DB lookup with fuzzy matching
+    # 0. Merchant DB lookup FIRST — user-created rules take priority over keywords
     result = await db.execute(select(Merchant))
     merchants = result.scalars().all()
     search_text = f"{normalized} {counterparty.lower()}"
     matched = _fuzzy_match_merchant(merchants, search_text)
     if matched:
         return matched.default_category_id, matched.name, "merchant_db", 0.95
+
+    # 1a. TWINT with person name = Transfer (friends)
+    if pm == "twint" and is_person_name(parsed["merchant"]):
+        cat = await _find_category(db, user_id, "Transfer")
+        if cat:
+            return cat.id, merchant_name, "keyword", 0.95
+
+    # 1b. Any incoming money (positive amount) = Income by default
+    if amount > 0:
+        cat_name = "Salary" if "gehalt" in normalized or "lohn" in normalized else "Income"
+        cat = await _find_category(db, user_id, cat_name)
+        if cat:
+            return cat.id, merchant_name, "keyword", 0.9
+
+    # 1c. "Vergütung" = e-banking payment
+    if "vergütung" in normalized or "vergutung" in normalized:
+        if counterparty:
+            merchant_name = counterparty
+            # Fall through to history/classifier
+        else:
+            cat = await _find_category(db, user_id, "Other")
+            if cat:
+                return cat.id, "E-Banking Payment", "keyword", 0.5
+
+    # 1d. Direct keyword match for Swiss transaction types
+    for keyword, cat_name in DIRECT_CATEGORY_MAP.items():
+        if keyword in normalized:
+            cat = await _find_category(db, user_id, cat_name)
+            if cat:
+                return cat.id, merchant_name, "keyword", 1.0
 
     # 2. History — same merchant was categorized before
     result = await db.execute(

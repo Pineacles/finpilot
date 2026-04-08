@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
 from app.models.finance import Transaction, Category
+from app.models.merchant import Merchant
 from app.models.user import User
 from app.schemas.finance import (
     TransactionCreate,
@@ -89,29 +90,94 @@ async def update_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     old_merchant = txn.merchant
+    old_category_id = txn.category_id
 
-    for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(txn, field, value)
+    # Only apply actual data fields to the transaction (not control flags)
+    for field in ("category_id", "notes", "merchant"):
+        value = getattr(body, field, None)
+        if value is not None:
+            setattr(txn, field, value)
 
-    # If merchant name changed, apply to all transactions with the same old merchant name
-    bulk_updated = 0
-    if body.merchant and body.merchant != old_merchant:
-        others = await db.execute(
-            select(Transaction).where(
-                and_(
-                    Transaction.user_id == user.id,
-                    Transaction.merchant == old_merchant,
-                    Transaction.id != transaction_id,
-                )
-            )
-        )
+    merchant_changed = body.merchant and body.merchant != old_merchant
+    category_changed = body.category_id and body.category_id != old_category_id
+
+    # Build conditions for finding related transactions
+    should_bulk_merchant = merchant_changed and body.apply_merchant_to_all
+    should_bulk_category = category_changed and body.apply_category_to_all
+
+    if should_bulk_merchant or should_bulk_category:
+        conditions = [
+            Transaction.user_id == user.id,
+            Transaction.merchant == old_merchant,
+            Transaction.id != transaction_id,
+        ]
+        # Scope by description if provided (e.g. only "carvolution" notes, not all "revolut")
+        if body.description_filter:
+            conditions.append(Transaction.notes.ilike(f"%{body.description_filter}%"))
+
+        others = await db.execute(select(Transaction).where(and_(*conditions)))
         for other in others.scalars().all():
-            other.merchant = body.merchant
-            bulk_updated += 1
+            if should_bulk_merchant:
+                other.merchant = body.merchant
+            if should_bulk_category:
+                other.category_id = body.category_id
+
+    # Upsert Merchant DB rule so future imports auto-categorize correctly
+    final_merchant = body.merchant or old_merchant
+    final_category = body.category_id or old_category_id
+    if final_merchant and final_merchant != "Pending" and final_category:
+        # Include description_filter as a pattern so future imports with that keyword also match
+        await _upsert_merchant_rule(
+            db, final_merchant,
+            old_merchant if merchant_changed else None,
+            final_category,
+            extra_pattern=body.description_filter,
+        )
 
     await db.commit()
     await db.refresh(txn)
     return TransactionResponse.model_validate(txn)
+
+
+async def _upsert_merchant_rule(
+    db: AsyncSession, merchant_name: str, original_name: str | None, category_id: str,
+    extra_pattern: str | None = None,
+):
+    """Create or update a Merchant DB entry so future imports auto-categorize."""
+    patterns_set: set[str] = set()
+    for name in (merchant_name, original_name):
+        if name:
+            cleaned = name.strip().lower()
+            if cleaned:
+                patterns_set.add(cleaned)
+                for word in cleaned.split():
+                    if len(word) >= 4 and word not in ("gmbh", "sarl", "bank", "card", "payment", "services"):
+                        patterns_set.add(word)
+    if extra_pattern:
+        cleaned = extra_pattern.strip().lower()
+        if cleaned:
+            patterns_set.add(cleaned)
+
+    if not patterns_set:
+        return
+
+    result = await db.execute(
+        select(Merchant).where(Merchant.name == merchant_name)
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        old_patterns = set(p.strip().lower() for p in existing.patterns.split("|") if p.strip())
+        merged = old_patterns | patterns_set
+        existing.patterns = "|".join(sorted(merged))
+        existing.default_category_id = category_id
+    else:
+        db.add(Merchant(
+            name=merchant_name,
+            patterns="|".join(sorted(patterns_set)),
+            default_category_id=category_id,
+            is_system=False,
+        ))
 
 
 # --- Categories ---
