@@ -437,8 +437,8 @@ async def agent_trades(
     result = await db.execute(query)
     return [
         {
-            "symbol": t.symbol, "type": t.type, "quantity": t.quantity,
-            "price": t.price, "fees": t.fees, "date": t.executed_at.isoformat(),
+            "id": t.id, "symbol": t.symbol, "type": t.type, "quantity": t.quantity,
+            "price": t.price, "fees": t.fees, "currency": t.currency, "date": t.executed_at.isoformat(),
         }
         for t in result.scalars().all()
     ]
