@@ -92,6 +92,7 @@ async def get_overview(
     net_worth = portfolio_value + bank_balance + cc_balance
 
     return OverviewResponse(
+        display_name=user.display_name,
         net_worth=net_worth,
         portfolio_value=portfolio_value,
         portfolio_pnl=portfolio_pnl,

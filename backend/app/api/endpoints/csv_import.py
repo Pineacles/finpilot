@@ -47,7 +47,7 @@ async def upload_file(
     # Find or create the right account
     if not account_id:
         acct_type = "credit_card" if is_credit_card else "bank"
-        acct_name = "Viseca Credit Card" if is_credit_card else "Valiant Bank"
+        acct_name = "Viseca Credit Card" if is_credit_card else "PostFinance" if fmt == "postfinance" else "Valiant Bank"
         result = await db.execute(
             select(Account).where(Account.user_id == user.id, Account.type == acct_type)
         )

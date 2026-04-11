@@ -24,6 +24,7 @@ class RecentTransaction(BaseModel):
 
 
 class OverviewResponse(BaseModel):
+    display_name: str
     net_worth: float
     portfolio_value: float
     portfolio_pnl: float

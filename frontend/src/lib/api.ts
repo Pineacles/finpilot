@@ -11,14 +11,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const res = await fetch(path, { ...options, headers });
 
-  if (res.status === 401) {
+  if (res.status === 401 || res.status === 403) {
     if (typeof window !== "undefined" && window.location.pathname !== "/login") {
       localStorage.removeItem("token");
       localStorage.removeItem("refreshToken");
-      window.location.href = "/login";
+      document.cookie = "token=; path=/; max-age=0";
+      // Prevent multiple concurrent redirects
+      if (!(window as any).__redirecting) {
+        (window as any).__redirecting = true;
+        window.location.href = "/login";
+      }
     }
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || "Invalid credentials");
+    throw new Error("Session expired");
   }
 
   if (!res.ok) {
@@ -45,13 +49,15 @@ export const api = {
   trade: (data: { symbol: string; type: string; quantity: number; price?: number; currency?: string; date?: string; fees?: number; deduct_from_cash?: boolean }) =>
     request<{ status: string }>("/api/dashboard/portfolio/trade", { method: "POST", body: JSON.stringify(data) }),
   trades: (symbol?: string) =>
-    request<{ id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; date: string; total: number }[]>(`/api/dashboard/portfolio/trades${symbol ? `?symbol=${symbol}` : ""}`),
+    request<Trade[]>(`/api/dashboard/portfolio/trades${symbol ? `?symbol=${symbol}` : ""}`),
   updatePosition: (id: string, data: { quantity?: number; avg_cost_price?: number }) =>
     request<{ status: string }>(`/api/dashboard/portfolio/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deletePosition: (id: string) =>
     request<{ status: string }>(`/api/dashboard/portfolio/${id}`, { method: "DELETE" }),
   priceChart: (ticker: string, range = "1y") =>
     request<{ ticker: string; range: string; data: { date: string; close: number }[] }>(`/api/dashboard/portfolio/chart/${ticker}?range=${range}`),
+  livePrices: () =>
+    request<Record<string, { price: number; change: number; change_pct: number }>>("/api/dashboard/portfolio/live-prices"),
   stockTransactions: (symbol?: string) =>
     request<StockTransaction[]>(`/api/dashboard/portfolio/transactions${symbol ? `?symbol=${symbol}` : ""}`),
 
@@ -70,9 +76,13 @@ export const api = {
     fetch(`/api/public/portfolio/${token}/history?days=${days}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<PortfolioSnapshot[]>; }),
   publicValueTimeline: (token: string) =>
     fetch(`/api/public/portfolio/${token}/value-timeline`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<ValueTimelinePoint[]>; }),
+  publicLivePrices: (token: string) =>
+    fetch(`/api/public/portfolio/${token}/live-prices`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<Record<string, { price: number; change: number; change_pct: number }>>; }),
+  publicEconomyHistory: (token: string, limit = 20) =>
+    fetch(`/api/public/portfolio/${token}/economy-history?limit=${limit}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<PortfolioAnalysis[]>; }),
 
   // Per-stock analyses (private)
-  analysesByStock: () => request<Record<string, StockAnalysisEntry>>("/api/dashboard/portfolio/analyses/by-stock"),
+  analysesByStock: () => request<{ current: Record<string, StockAnalysisEntry>; past: Record<string, StockAnalysisEntry> }>("/api/dashboard/portfolio/analyses/by-stock"),
   stockAnalyses: (symbol: string) => request<StockAnalysisEntry[]>(`/api/dashboard/portfolio/analyses/${symbol}`),
 
   // Transactions
@@ -173,6 +183,7 @@ export const api = {
   analysisLatest: (type?: string) => request<PortfolioAnalysis>(`/api/dashboard/analysis/latest${type ? `?analysis_type=${type}` : ""}`),
   analysisList: (type?: string, limit = 20) => request<AnalysisListItem[]>(`/api/dashboard/analysis?limit=${limit}${type ? `&analysis_type=${type}` : ""}`),
   analysisDetail: (id: string) => request<PortfolioAnalysis>(`/api/dashboard/analysis/${id}`),
+  economyHistory: (limit = 20) => request<PortfolioAnalysis[]>(`/api/dashboard/analysis?analysis_type=economy&limit=${limit}&full=true`),
 
   // Settings
   getSettings: () => request<{ settings: Record<string, string>; groups: Record<string, { label: string; keys: string[] }> }>("/api/settings"),
@@ -186,6 +197,7 @@ export const api = {
 
 // Types
 export interface Overview {
+  display_name: string;
   net_worth: number;
   portfolio_value: number;
   portfolio_pnl: number;
@@ -224,7 +236,7 @@ export interface Position {
   sparkline: number[];
 }
 
-export interface Trade { id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; date: string; total: number }
+export interface Trade { id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; date: string; total: number; total_chf: number; fees_chf: number }
 export interface ValueTimelinePoint { date: string; value: number; cost: number; pnl: number; trades: { symbol: string; type: string; quantity: number; price: number }[] | null }
 export interface PortfolioSnapshot { date: string; value: number; pnl: number }
 export interface StockTransaction { id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; executed_at: string }
@@ -335,6 +347,7 @@ export interface PublicPortfolio {
   positions_count: number;
   positions: Position[];
   stock_analyses: Record<string, StockAnalysisEntry>;
+  past_stock_analyses?: Record<string, StockAnalysisEntry>;
   economy_analysis: PortfolioAnalysis | null;
   trades?: Trade[];
 }

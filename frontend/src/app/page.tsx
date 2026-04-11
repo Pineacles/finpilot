@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { motion } from "motion/react";
-import { api, Overview } from "@/lib/api";
+import { api, Overview, PortfolioSummary } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
 import {
   ArrowUpRight,
@@ -31,9 +31,9 @@ function GlassCard({ children, className = "", delay = 0 }: { children: React.Re
   );
 }
 
-function MetricCard({ icon: Icon, iconBg, iconColor, label, value, sub, delay }: {
+function MetricCard({ icon: Icon, iconBg, iconColor, label, value, sub, delay, live }: {
   icon: React.ElementType; iconBg: string; iconColor: string;
-  label: string; value: string; sub?: React.ReactNode; delay: number;
+  label: string; value: React.ReactNode; sub?: React.ReactNode; delay: number; live?: boolean;
 }) {
   return (
     <GlassCard delay={delay}>
@@ -42,20 +42,91 @@ function MetricCard({ icon: Icon, iconBg, iconColor, label, value, sub, delay }:
           <Icon className={`h-7 w-7 ${iconColor}`} strokeWidth={1.8} />
         </div>
       </div>
-      <p className="text-sm text-muted-foreground mb-1">{label}</p>
-      <p className="text-3xl font-semibold tracking-tight">{value}</p>
+      <div className="flex items-center gap-2 mb-1">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        {live && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tracking-wider">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+            </span>
+            LIVE
+          </span>
+        )}
+      </div>
+      <p className="text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
       {sub && <div className="mt-2">{sub}</div>}
     </GlassCard>
   );
 }
 
+function AnimatedNumber({ value, format }: { value: number; format: (n: number) => string }) {
+  const [display, setDisplay] = useState(value);
+  const rafRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (value === display) return;
+    const start = display;
+    const target = value;
+    const startTime = performance.now();
+    const duration = 600;
+    const tick = (now: number) => {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(start + (target - start) * eased);
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return <>{format(display)}</>;
+}
+
 export default function OverviewPage() {
   const [data, setData] = useState<Overview | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [livePrices, setLivePrices] = useState<Record<string, { price: number; change: number; change_pct: number }>>({});
+  const prevPricesRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    api.overview().then(setData).finally(() => setLoading(false));
+    Promise.all([api.overview(), api.portfolio()])
+      .then(([ov, port]) => { setData(ov); setPortfolio(port); })
+      .finally(() => setLoading(false));
   }, []);
+
+  // Live ticker polling — fetch fresh prices every 5 seconds
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const next = await api.livePrices();
+        if (cancelled) return;
+        Object.entries(next).forEach(([sym, p]) => { prevPricesRef.current[sym] = p.price; });
+        setLivePrices(next);
+      } catch {}
+    };
+    poll();
+    const i = setInterval(poll, 5000);
+    return () => { cancelled = true; clearInterval(i); };
+  }, []);
+
+  // Compute live totals from portfolio + live prices
+  const liveTotals = useMemo(() => {
+    if (!portfolio) return { value: 0, pnl: 0, pnlPct: 0 };
+    let liveValue = 0;
+    for (const pos of portfolio.positions) {
+      const live = livePrices[pos.symbol];
+      const refPrice = pos.last_price || pos.avg_cost_price || 0;
+      const fx = refPrice && pos.quantity ? (pos.market_value / (refPrice * pos.quantity)) : 1;
+      const livePrice = live?.price ?? pos.last_price ?? pos.avg_cost_price ?? 0;
+      liveValue += livePrice * pos.quantity * fx;
+    }
+    const pnl = liveValue - portfolio.total_cost;
+    const pnlPct = portfolio.total_cost > 0 ? (pnl / portfolio.total_cost * 100) : 0;
+    return { value: liveValue, pnl, pnlPct };
+  }, [portfolio, livePrices]);
 
   if (loading) {
     return (
@@ -75,6 +146,12 @@ export default function OverviewPage() {
   if (!data) return <p className="text-muted-foreground text-lg">Failed to load data.</p>;
 
   const pnlUp = data.portfolio_pnl >= 0;
+  // Live-aware values: when portfolio data is loaded, use the live total instead of the cached overview value
+  const livePortfolioValue = portfolio ? liveTotals.value : data.portfolio_value;
+  const livePortfolioPnl = portfolio ? liveTotals.pnl : data.portfolio_pnl;
+  const livePortfolioPnlPct = portfolio ? liveTotals.pnlPct : data.portfolio_pnl_pct;
+  const liveNetWorth = data.net_worth - data.portfolio_value + livePortfolioValue;
+  const liveUp = livePortfolioPnl >= 0;
   const bankAccounts = data.accounts.filter((a) => a.type === "bank");
   const ccAccounts = data.accounts.filter((a) => a.type === "credit_card");
   const bankTotal = bankAccounts.reduce((s, a) => s + a.balance, 0);
@@ -85,7 +162,7 @@ export default function OverviewPage() {
       {/* Header */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
         <p className="text-sm font-medium text-primary mb-1">Overview</p>
-        <h1 className="text-3xl font-bold tracking-tight">Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, Admin</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {data.display_name}</h1>
         <p className="text-muted-foreground mt-1">Here's how your finances are looking today.</p>
       </motion.div>
 
@@ -93,7 +170,7 @@ export default function OverviewPage() {
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         <MetricCard
           icon={Wallet} iconBg="bg-emerald-100 dark:bg-emerald-500/15" iconColor="text-emerald-600 dark:text-emerald-400"
-          label="Total Balance" value={formatCurrency(data.net_worth)} delay={0.05}
+          label="Total Balance" value={<AnimatedNumber value={liveNetWorth} format={formatCurrency} />} delay={0.05} live
         />
         <MetricCard
           icon={Landmark} iconBg="bg-blue-100 dark:bg-blue-500/15" iconColor="text-blue-600 dark:text-blue-400"
@@ -102,11 +179,11 @@ export default function OverviewPage() {
         />
         <MetricCard
           icon={TrendingUp} iconBg="bg-orange-100 dark:bg-orange-500/15" iconColor="text-orange-600 dark:text-orange-400"
-          label="Portfolio" value={formatCurrency(data.portfolio_value)} delay={0.15}
+          label="Portfolio" value={<AnimatedNumber value={livePortfolioValue} format={formatCurrency} />} delay={0.15} live
           sub={
-            <p className={`text-sm font-medium flex items-center gap-1 ${pnlUp ? "text-gain" : "text-loss"}`}>
-              {pnlUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-              {formatCurrency(Math.abs(data.portfolio_pnl))} ({formatPct(data.portfolio_pnl_pct)})
+            <p className={`text-sm font-medium flex items-center gap-1 ${liveUp ? "text-gain" : "text-loss"}`}>
+              {liveUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+              {formatCurrency(Math.abs(livePortfolioPnl))} ({formatPct(livePortfolioPnlPct)})
             </p>
           }
         />
