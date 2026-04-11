@@ -189,6 +189,98 @@ def parse_viseca_csv(content: str) -> list[dict]:
     return transactions
 
 
+def parse_postfinance_csv(content: str) -> list[dict]:
+    """Parse PostFinance CSV export (semicolon-separated, metadata header rows).
+
+    Format:
+      - Lines 1-6: metadata (Datum von, Datum bis, Kategorie, Konto, Währung, blank)
+      - Line 7: actual column header: Datum;Bewegungstyp;Avisierungstext;Gutschrift in CHF;Lastschrift in CHF;Label;Kategorie
+      - Lines 8+: data
+    """
+    lines = content.strip().split("\n")
+
+    # Find the header row containing "Avisierungstext"
+    header_idx = None
+    for i, line in enumerate(lines):
+        if "Avisierungstext" in line:
+            header_idx = i
+            break
+
+    if header_idx is None:
+        raise ValueError("PostFinance CSV: could not find header row with 'Avisierungstext'")
+
+    data_lines = [lines[header_idx]] + lines[header_idx + 1:]
+    reader = csv.DictReader(data_lines, delimiter=";")
+    transactions = []
+
+    for row in reader:
+        date_str = (row.get("Datum") or "").strip()
+        description = (row.get("Avisierungstext") or "").strip().strip('"')
+        credit_str = (row.get("Gutschrift in CHF") or "").strip()
+        debit_str = (row.get("Lastschrift in CHF") or "").strip()
+        pf_category = (row.get("Kategorie") or "").strip()
+
+        if not date_str or (not credit_str and not debit_str):
+            continue
+
+        # Parse date: DD.MM.YYYY
+        try:
+            txn_date = datetime.strptime(date_str, "%d.%m.%Y").date()
+        except ValueError:
+            continue
+
+        # Amount: credit is positive, debit is negative
+        amount = 0.0
+        try:
+            if credit_str:
+                amount = float(credit_str.replace("'", "").replace(",", "."))
+            elif debit_str:
+                amount = float(debit_str.replace("'", "").replace(",", "."))
+                if amount > 0:
+                    amount = -amount  # ensure debit is negative
+        except ValueError:
+            continue
+
+        # Extract merchant from description
+        merchant = description
+        # Common PostFinance patterns:
+        # "KAUF/DIENSTLEISTUNG VOM DD.MM.YYYY KARTEN NR. XXXXNNNN MERCHANT_NAME LOCATION (CH)"
+        # "PF PAY KAUF/ONLINE-SHOPPING VOM DD.MM.YYYY MERCHANT_NAME ..."
+        # "TWINT GELD EMPFANGEN/GESENDET VOM DD.MM.YYYY ..."
+        kauf_match = re.search(r"KARTEN NR\.\s*\S+\s+(.+?)(?:\s+\(CH\)|\s+WAREN\s)", description)
+        if kauf_match:
+            merchant = kauf_match.group(1).strip()
+        else:
+            pfpay_match = re.search(r"PF PAY KAUF/\S+\s+VOM\s+\S+\s+(.+?)(?:\s+N/A|\s+PAYMENT)", description)
+            if pfpay_match:
+                merchant = pfpay_match.group(1).strip()
+            elif "TWINT" in description:
+                twint_match = re.search(r"(?:VON|AN)\s+TELEFON-NR\.\s*\S+\s+(.+?)(?:\s+MITTEILUNGEN:|\s*$)", description)
+                if twint_match:
+                    merchant = twint_match.group(1).strip()
+                else:
+                    merchant = "TWINT"
+
+        # Build a reference for dedup (date + amount + first 40 chars of description)
+        ref = f"pf-{date_str}-{amount}-{description[:40]}"
+
+        transactions.append({
+            "date": txn_date,
+            "description": description,
+            "merchant": merchant,
+            "amount": amount,
+            "currency": "CHF",
+            "original_amount": None,
+            "original_currency": None,
+            "reference": ref,
+            "counterparty": merchant,
+            "payment_type": "",
+            "pf_category": pf_category,  # PostFinance's own category (useful as hint)
+        })
+
+    return transactions
+
+
 def detect_format(content: str) -> str:
     """Detect file format."""
     stripped = content.strip()
@@ -196,6 +288,8 @@ def detect_format(content: str) -> str:
         return "camt053"
     if "TransactionId" in content and "MerchantName" in content:
         return "viseca"
+    if "Avisierungstext" in content and ("Gutschrift" in content or "Lastschrift" in content):
+        return "postfinance"
     if "Buchungstext" in content and "Betrag" in content:
         return "valiant"
     if "Datum" in content and "Saldo" in content:
@@ -225,8 +319,10 @@ async def import_transactions(
         raw_transactions = parse_camt053(content)
     elif fmt == "valiant":
         raw_transactions = parse_valiant_csv(content)
+    elif fmt == "postfinance":
+        raw_transactions = parse_postfinance_csv(content)
     else:
-        raise ValueError("Unsupported file format. Use Valiant CSV or camt.053 XML.")
+        raise ValueError("Unsupported file format. Use Valiant CSV, PostFinance CSV, or camt.053 XML.")
 
     _log(f"Parsed {len(raw_transactions)} transactions from file")
 

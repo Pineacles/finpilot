@@ -332,12 +332,21 @@ async def get_trades(
     query = query.order_by(desc(StockTransaction.executed_at)).limit(limit)
     result = await db.execute(query)
     trades = result.scalars().all()
+
+    # Fetch FX rates for CHF conversion
+    currencies = {t.currency for t in trades if t.currency != "CHF"}
+    fx: dict[str, float] = {}
+    for ccy in currencies:
+        fx[ccy] = await get_fx_rate(ccy, "CHF")
+
     return [
         {
             "id": t.id, "symbol": t.symbol, "type": t.type,
             "quantity": t.quantity, "price": t.price, "fees": t.fees,
             "currency": t.currency, "date": t.executed_at.isoformat(),
             "total": t.quantity * t.price,
+            "total_chf": round((t.quantity * t.price) * fx.get(t.currency, 1.0), 2),
+            "fees_chf": round(t.fees * fx.get(t.currency, 1.0), 2),
         }
         for t in trades
     ]
@@ -390,10 +399,18 @@ async def delete_position(
 # ── Price chart ──────────────────────────────────────────────────
 
 @router.get("/chart/{ticker}")
-async def get_price_chart(ticker: str, range: str = "1y", interval: str = "1d"):
+async def get_price_chart(ticker: str, range: str = "1y", interval: str | None = None):
     valid_ranges = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
     if range not in valid_ranges:
         raise HTTPException(status_code=400, detail=f"Invalid range")
+    # Auto-select interval if not explicitly provided so 1D/1W show intraday detail
+    if interval is None:
+        if range == "1d":
+            interval = "5m"
+        elif range == "5d":
+            interval = "30m"
+        else:
+            interval = "1d"
     data = await get_history(ticker, range=range, interval=interval)
     if not data:
         raise HTTPException(status_code=404, detail=f"No data for {ticker}")
@@ -531,6 +548,38 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
     return timeline
 
 
+# ── Live prices (lightweight, polled every few seconds for live ticker) ──
+
+@router.get("/live-prices")
+async def get_live_prices(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lightweight live prices for held positions. Uses 15s cache override for fresh data."""
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+    if not positions:
+        return {}
+
+    tickers = list({p.symbol for p in positions})
+    quotes = await get_quotes_batch(tickers, cache_ttl=15)
+
+    return {
+        sym: {
+            "price": q["price"],
+            "change": q.get("change", 0),
+            "change_pct": q.get("change_pct", 0),
+        }
+        for sym, q in quotes.items()
+    }
+
+
 # ── Portfolio history ────────────────────────────────────────────
 
 @router.get("/history")
@@ -555,24 +604,45 @@ async def get_analyses_by_stock(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get the latest analysis for each stock symbol."""
+    """Get the latest analysis for each stock symbol, split into current (held) and past (sold)."""
+    # Get all portfolio analyses
     result = await db.execute(
         select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "portfolio"))
         .order_by(desc(MarketAnalysis.created_at))
     )
-    stock_analyses: dict[str, dict] = {}
+
+    # Get currently held symbols
+    pos_result = await db.execute(
+        select(StockPosition.symbol).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    held_symbols = {row[0] for row in pos_result.all()}
+
+    current: dict[str, dict] = {}
+    past: dict[str, dict] = {}
     for a in result.scalars().all():
         for s in a.content.get("stocks", []):
             sym = s.get("symbol")
-            if sym and sym not in stock_analyses:
-                stock_analyses[sym] = {
-                    "analysis_id": a.id,
-                    "stock": s,
-                    "market_summary": a.content.get("market_summary", ""),
-                    "market_sentiment": a.content.get("market_sentiment", ""),
-                    "created_at": a.created_at.isoformat(),
-                }
-    return stock_analyses
+            if not sym:
+                continue
+            entry = {
+                "analysis_id": a.id,
+                "stock": s,
+                "market_summary": a.content.get("market_summary", ""),
+                "market_sentiment": a.content.get("market_sentiment", ""),
+                "created_at": a.created_at.isoformat(),
+            }
+            if sym in held_symbols:
+                if sym not in current:
+                    current[sym] = entry
+            else:
+                if sym not in past:
+                    past[sym] = entry
+
+    return {"current": current, "past": past}
 
 
 @router.get("/analyses/{symbol}")
@@ -592,7 +662,7 @@ async def get_stock_analyses(
         for s in a.content.get("stocks", []):
             if s.get("symbol") == symbol.upper():
                 out.append({
-                    "id": a.id,
+                    "analysis_id": a.id,
                     "stock": s,
                     "market_summary": a.content.get("market_summary", ""),
                     "market_sentiment": a.content.get("market_sentiment", ""),
@@ -687,11 +757,26 @@ async def get_public_portfolio(token: str, db: AsyncSession = Depends(get_db)):
         if hist:
             sparklines[p.symbol] = [h["close"] for h in hist]
 
+    # Trade history for first_bought / trade_count
+    trade_dates: dict[str, dict] = {}
+    trade_result = await db.execute(
+        select(
+            StockTransaction.symbol,
+            func.min(StockTransaction.executed_at).label("first_buy"),
+            func.count(StockTransaction.id).label("trade_count"),
+        )
+        .where(and_(StockTransaction.user_id == user.id, StockTransaction.type == "buy"))
+        .group_by(StockTransaction.symbol)
+    )
+    for r in trade_result.all():
+        trade_dates[r.symbol] = {"first_buy": r.first_buy.isoformat() if r.first_buy else None, "trades": r.trade_count}
+
     pos_list = []
     for p in stock_positions:
         q_data = quotes.get(p.symbol, {}) if stock_positions else {}
         mv_chf = to_chf((p.last_price or p.avg_cost_price) * p.quantity, p.currency)
         pnl_chf = to_chf((p.unrealized_pnl or 0), p.currency)
+        td = trade_dates.get(p.symbol, {})
         pos_list.append({
             "id": p.id,
             "symbol": p.symbol,
@@ -706,6 +791,8 @@ async def get_public_portfolio(token: str, db: AsyncSession = Depends(get_db)):
             "unrealized_pnl": pnl_chf,
             "pnl_pct": ((p.last_price or p.avg_cost_price) / p.avg_cost_price - 1) * 100 if p.avg_cost_price else 0,
             "weight_pct": (mv_chf / total_value * 100) if total_value else 0,
+            "first_bought": td.get("first_buy"),
+            "trade_count": td.get("trades", 0),
             "sparkline": sparklines.get(p.symbol, []),
         })
 
@@ -722,19 +809,28 @@ async def get_public_portfolio(token: str, db: AsyncSession = Depends(get_db)):
     )
     all_analyses = all_pa_result.scalars().all()
 
-    stock_analyses: dict[str, dict] = {}
+    held_symbols = {p.symbol for p in stock_positions if p.quantity > 0}
+    current_analyses: dict[str, dict] = {}
+    past_analyses: dict[str, dict] = {}
     for a in all_analyses:
         stocks = a.content.get("stocks", [])
         for s in stocks:
             sym = s.get("symbol")
-            if sym and sym not in stock_analyses:
-                stock_analyses[sym] = {
-                    "analysis_id": a.id,
-                    "stock": s,
-                    "market_summary": a.content.get("market_summary", ""),
-                    "market_sentiment": a.content.get("market_sentiment", ""),
-                    "created_at": a.created_at.isoformat(),
-                }
+            if not sym:
+                continue
+            entry = {
+                "analysis_id": a.id,
+                "stock": s,
+                "market_summary": a.content.get("market_summary", ""),
+                "market_sentiment": a.content.get("market_sentiment", ""),
+                "created_at": a.created_at.isoformat(),
+            }
+            if sym in held_symbols:
+                if sym not in current_analyses:
+                    current_analyses[sym] = entry
+            else:
+                if sym not in past_analyses:
+                    past_analyses[sym] = entry
 
     ea_result = await db.execute(
         select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "economy"))
@@ -751,13 +847,14 @@ async def get_public_portfolio(token: str, db: AsyncSession = Depends(get_db)):
         "base_currency": BASE_CCY,
         "positions_count": len(pos_list),
         "positions": sorted(pos_list, key=lambda p: p["market_value"], reverse=True),
-        "stock_analyses": stock_analyses,
+        "stock_analyses": current_analyses,
+        "past_stock_analyses": past_analyses,
         "economy_analysis": _fmt_analysis(ea_result.scalar_one_or_none()),
     }
 
 
 @public_router.get("/portfolio/{token}/chart/{ticker}")
-async def get_public_chart(token: str, ticker: str, range: str = "1y", interval: str = "1d", db: AsyncSession = Depends(get_db)):
+async def get_public_chart(token: str, ticker: str, range: str = "1y", interval: str | None = None, db: AsyncSession = Depends(get_db)):
     """Public price chart — validates the share token first."""
     result = await db.execute(
         select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
@@ -767,6 +864,14 @@ async def get_public_chart(token: str, ticker: str, range: str = "1y", interval:
     valid_ranges = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
     if range not in valid_ranges:
         raise HTTPException(status_code=400, detail="Invalid range")
+    # Auto-select interval if not explicitly provided so 1D/1W show intraday detail
+    if interval is None:
+        if range == "1d":
+            interval = "5m"
+        elif range == "5d":
+            interval = "30m"
+        else:
+            interval = "1d"
     data = await get_history(ticker, range=range, interval=interval)
     if not data:
         raise HTTPException(status_code=404, detail=f"No data for {ticker}")
@@ -789,15 +894,77 @@ async def get_public_trades(token: str, symbol: str | None = None, limit: int = 
     query = query.order_by(desc(StockTransaction.executed_at)).limit(limit)
     result = await db.execute(query)
     trades = result.scalars().all()
+
+    currencies = {t.currency for t in trades if t.currency != "CHF"}
+    fx: dict[str, float] = {}
+    for ccy in currencies:
+        fx[ccy] = await get_fx_rate(ccy, "CHF")
+
     return [
         {
             "id": t.id, "symbol": t.symbol, "type": t.type,
             "quantity": t.quantity, "price": t.price, "fees": t.fees,
             "currency": t.currency, "date": t.executed_at.isoformat(),
             "total": t.quantity * t.price,
+            "total_chf": round((t.quantity * t.price) * fx.get(t.currency, 1.0), 2),
+            "fees_chf": round(t.fees * fx.get(t.currency, 1.0), 2),
         }
         for t in trades
     ]
+
+
+@public_router.get("/portfolio/{token}/economy-history")
+async def get_public_economy_history(token: str, limit: int = 20, db: AsyncSession = Depends(get_db)):
+    """Public economy analysis history."""
+    result = await db.execute(
+        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    result = await db.execute(
+        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "economy"))
+        .order_by(desc(MarketAnalysis.created_at)).limit(limit)
+    )
+    return [
+        {"id": a.id, "analysis_type": a.analysis_type, "content": a.content, "created_at": a.created_at.isoformat()}
+        for a in result.scalars().all()
+    ]
+
+
+@public_router.get("/portfolio/{token}/live-prices")
+async def get_public_live_prices(token: str, db: AsyncSession = Depends(get_db)):
+    """Public lightweight live prices for held positions."""
+    result = await db.execute(
+        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+    if not positions:
+        return {}
+
+    tickers = list({p.symbol for p in positions})
+    quotes = await get_quotes_batch(tickers, cache_ttl=15)
+
+    return {
+        sym: {
+            "price": q["price"],
+            "change": q.get("change", 0),
+            "change_pct": q.get("change_pct", 0),
+        }
+        for sym, q in quotes.items()
+    }
 
 
 @public_router.get("/portfolio/{token}/value-timeline")
@@ -850,7 +1017,7 @@ async def get_public_stock_analyses(token: str, symbol: str, limit: int = 20, db
         for s in a.content.get("stocks", []):
             if s.get("symbol") == symbol.upper():
                 out.append({
-                    "id": a.id,
+                    "analysis_id": a.id,
                     "stock": s,
                     "market_summary": a.content.get("market_summary", ""),
                     "market_sentiment": a.content.get("market_sentiment", ""),

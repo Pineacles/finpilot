@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { motion } from "motion/react";
 import { api, PortfolioSummary, PortfolioAnalysis, StockAnalysisEntry, Trade, ValueTimelinePoint } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar, Brush } from "recharts";
-import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight, Globe, Link2, ClipboardCheck, History, LineChart } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, Activity } from "lucide-react";
 
 const COLORS = ["#3b82f6","#f97316","#ef4444","#a855f7","#14b8a6","#f59e0b","#ec4899","#22c55e","#06b6d4","#8b5cf6","#e11d48","#84cc16","#6366f1","#d946ef","#0ea5e9","#fb923c"];
 const RANGES = [{value:"1d",label:"1D"},{value:"5d",label:"1W"},{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
@@ -25,6 +25,167 @@ function PnlBadge({value,pct}:{value:number;pct?:number}){
   const pos=value>=0;
   return <span className={`text-[13px] px-2.5 py-1 rounded-xl font-medium inline-flex items-center gap-1 ${pos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{pos?"+":""}{formatCurrency(value)}{pct!==undefined&&<span className="opacity-70">({pos?"+":""}{pct.toFixed(1)}%)</span>}</span>;
 }
+function ActionBadge({action,size="md"}:{action:string;size?:"sm"|"md"}){
+  const cls=action==="ADD"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":action==="SELL"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400";
+  const px=size==="sm"?"px-2 py-0.5 text-[11px]":"px-3 py-1 text-[13px]";
+  return <span className={`${px} rounded-xl font-semibold ${cls}`}>{action}</span>;
+}
+function SentimentBadge({sentiment,size="md"}:{sentiment:string;size?:"sm"|"md"}){
+  const cls=sentiment==="bullish"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":sentiment==="bearish"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400";
+  const px=size==="sm"?"px-2 py-0.5 text-[11px]":"px-3 py-1.5 text-[13px]";
+  return <span className={`${px} rounded-xl font-semibold capitalize ${cls}`}>{sentiment}</span>;
+}
+function StockAnalysisDetail({s}:{s:StockAnalysisEntry["stock"]}){
+  return(
+    <>
+      <p className="text-[14px] sm:text-[15px] leading-[1.85] text-foreground/80">{s.rationale}</p>
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        {s.key_risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Risks</p><ul className="space-y-1.5">{s.key_risks.map((r,i)=><li key={i} className="text-[13px] sm:text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
+        {s.key_catalysts.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Catalysts</p><ul className="space-y-1.5">{s.key_catalysts.map((c,i)=><li key={i} className="text-[13px] sm:text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{c}</li>)}</ul></div>}
+      </div>
+    </>
+  );
+}
+function EconomyDetail({c}:{c:PortfolioAnalysis["content"]}){
+  return(
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <SentimentBadge sentiment={c.market_sentiment}/>
+      </div>
+      <div className="p-5 rounded-2xl bg-accent/60">
+        <p className="text-[15px] leading-[1.85] text-foreground/90">{c.market_summary}</p>
+      </div>
+      {c.key_indicators&&c.key_indicators.length>0&&(
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+          {c.key_indicators.map((ind,i)=>(
+            <div key={i} className="p-4 rounded-2xl bg-accent/60 text-center">
+              <p className="text-[13px] text-muted-foreground mb-1">{ind.name}</p>
+              <p className="text-2xl font-bold">{ind.value}</p>
+              <p className={`text-[12px] font-medium mt-1 ${ind.trend==="up"?"text-gain":ind.trend==="down"?"text-loss":"text-muted-foreground"}`}>
+                {ind.trend==="up"?"Trending up":ind.trend==="down"?"Trending down":"Stable"}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+      {c.outlook&&(
+        <div className="p-5 rounded-2xl border border-border">
+          <p className="text-[14px] font-semibold mb-2">Outlook</p>
+          <p className="text-[15px] leading-[1.85] text-foreground/80">{c.outlook}</p>
+        </div>
+      )}
+      {(c.risks?.length||c.opportunities?.length)&&(
+        <div className="grid gap-5 md:grid-cols-2">
+          {c.risks&&c.risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Key Risks</p><ul className="space-y-1.5">{c.risks.map((r,i)=><li key={i} className="text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
+          {c.opportunities&&c.opportunities.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Opportunities</p><ul className="space-y-1.5">{c.opportunities.map((o,i)=><li key={i} className="text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{o}</li>)}</ul></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnimatedNumber({value,format}:{value:number;format:(n:number)=>string}){
+  const [display,setDisplay]=useState(value);
+  const startRef=useRef(value);
+  const startTimeRef=useRef(0);
+  const rafRef=useRef<number|undefined>(undefined);
+  useEffect(()=>{
+    if(value===display)return;
+    startRef.current=display;
+    startTimeRef.current=performance.now();
+    const target=value;
+    const start=display;
+    const duration=600;
+    const tick=(now:number)=>{
+      const elapsed=now-startTimeRef.current;
+      const t=Math.min(elapsed/duration,1);
+      const eased=1-Math.pow(1-t,3);
+      setDisplay(start+(target-start)*eased);
+      if(t<1)rafRef.current=requestAnimationFrame(tick);
+    };
+    rafRef.current=requestAnimationFrame(tick);
+    return()=>{if(rafRef.current)cancelAnimationFrame(rafRef.current);};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[value]);
+  return <>{format(display)}</>;
+}
+
+function useScrollableDeck<T extends HTMLElement>(){
+  const [el,setEl]=useState<T|null>(null);
+  const refCb=useCallback((node:T|null)=>{setEl(node);},[]);
+  const [atStart,setAtStart]=useState(true);
+  const [atEnd,setAtEnd]=useState(true);
+  const updateEdges=useCallback(()=>{
+    if(!el)return;
+    const start=el.scrollLeft<=1;
+    const end=el.scrollLeft+el.clientWidth>=el.scrollWidth-1;
+    // Direct DOM update for instant mask change (no React render lag)
+    el.classList.toggle("deck-at-start",start);
+    el.classList.toggle("deck-at-end",end);
+    setAtStart(start);
+    setAtEnd(end);
+  },[el]);
+  useEffect(()=>{
+    if(!el)return;
+    updateEdges();
+    const onScroll=()=>updateEdges();
+    el.addEventListener("scroll",onScroll,{passive:true});
+    window.addEventListener("resize",updateEdges);
+    // Wheel → horizontal scroll
+    const onWheel=(e:WheelEvent)=>{
+      if(Math.abs(e.deltaY)>Math.abs(e.deltaX)&&Math.abs(e.deltaY)>0){
+        e.preventDefault();
+        el.scrollLeft+=e.deltaY;
+      }
+    };
+    el.addEventListener("wheel",onWheel,{passive:false});
+    // Drag-to-scroll
+    let isDragging=false;
+    let startX=0;
+    let startScroll=0;
+    let moved=false;
+    const onMouseDown=(e:MouseEvent)=>{
+      const target=e.target as HTMLElement;
+      if(target.closest("button")||target.closest("a")||target.closest("input"))return;
+      isDragging=true;
+      moved=false;
+      startX=e.pageX;
+      startScroll=el.scrollLeft;
+      el.style.cursor="grabbing";
+      e.preventDefault();
+    };
+    const onMouseMove=(e:MouseEvent)=>{
+      if(!isDragging)return;
+      const dx=e.pageX-startX;
+      if(Math.abs(dx)>3)moved=true;
+      el.scrollLeft=startScroll-dx;
+    };
+    const onMouseUp=()=>{
+      if(!isDragging)return;
+      isDragging=false;
+      el.style.cursor="";
+      if(moved){
+        const stopClick=(ev:MouseEvent)=>{ev.stopPropagation();ev.preventDefault();window.removeEventListener("click",stopClick,true);};
+        window.addEventListener("click",stopClick,true);
+      }
+    };
+    el.addEventListener("mousedown",onMouseDown);
+    window.addEventListener("mousemove",onMouseMove);
+    window.addEventListener("mouseup",onMouseUp);
+    return()=>{
+      el.removeEventListener("scroll",onScroll);
+      window.removeEventListener("resize",updateEdges);
+      el.removeEventListener("wheel",onWheel);
+      el.removeEventListener("mousedown",onMouseDown);
+      window.removeEventListener("mousemove",onMouseMove);
+      window.removeEventListener("mouseup",onMouseUp);
+    };
+  },[el,updateEdges]);
+  const scrollByAmount=useCallback((amount:number)=>{
+    el?.scrollBy({left:amount,behavior:"smooth"});
+  },[el]);
+  return{ref:refCb,atStart,atEnd,updateEdges,scrollByAmount,el};
+}
 
 export default function PortfolioPage(){
   const [p,setP]=useState<PortfolioSummary|null>(null);
@@ -41,16 +202,28 @@ export default function PortfolioPage(){
   const [chartLoading,setChartLoading]=useState(false);
   const [historyData,setHistoryData]=useState<{date:string;value:number}[]>([]);
   const [stockAnalyses,setStockAnalyses]=useState<Record<string,StockAnalysisEntry>>({});
+  const [pastStockAnalyses,setPastStockAnalyses]=useState<Record<string,StockAnalysisEntry>>({});
+  const [showPastStocks,setShowPastStocks]=useState(false);
+  const [expandedStockCard,setExpandedStockCard]=useState<string|null>(null);
   const [latestEconomy,setLE]=useState<PortfolioAnalysis|null>(null);
+  const [economyHistory,setEconomyHistory]=useState<PortfolioAnalysis[]>([]);
+  const [showOlderEconomy,setShowOlderEconomy]=useState(false);
+  const [expandedEconomyId,setExpandedEconomyId]=useState<string|null>(null);
   const [olderSymbol,setOlderSymbol]=useState<string|null>(null);
   const [olderAnalyses,setOlderAnalyses]=useState<StockAnalysisEntry[]>([]);
   const [olderLoading,setOlderLoading]=useState(false);
+  const [expandedOlderId,setExpandedOlderId]=useState<string|null>(null);
   const [publicEnabled,setPublicEnabled]=useState(false);
   const [publicToken,setPublicToken]=useState<string|null>(null);
   const [publicToggling,setPublicToggling]=useState(false);
   const [copied,setCopied]=useState(false);
   const [trades,setTrades]=useState<Trade[]>([]);
   const [tradesLoading,setTradesLoading]=useState(false);
+  const [livePrices,setLivePrices]=useState<Record<string,{price:number;change:number;change_pct:number}>>({});
+  const [flashes,setFlashes]=useState<Record<string,"up"|"down">>({});
+  const prevPricesRef=useRef<Record<string,number>>({});
+  const stockDeck=useScrollableDeck<HTMLDivElement>();
+  const pastDeck=useScrollableDeck<HTMLDivElement>();
   const [timeline,setTimeline]=useState<ValueTimelinePoint[]>([]);
   const [tradeChartSymbol,setTradeChartSymbol]=useState<string|null>(null);
   const [tradeChartData,setTradeChartData]=useState<{date:string;close:number}[]>([]);
@@ -59,16 +232,52 @@ export default function PortfolioPage(){
 
   const load=useCallback(()=>{
     setLoading(true);
-    Promise.all([api.portfolio(),api.portfolioHistory(365),api.analysesByStock(),api.analysisLatest("economy"),api.trades(),api.portfolioValueTimeline()]).then(([port,h,sa,ae,tr,tl])=>{
+    Promise.all([api.portfolio(),api.portfolioHistory(365),api.analysesByStock(),api.analysisLatest("economy"),api.trades(),api.portfolioValueTimeline(),api.economyHistory(20)]).then(([port,h,sa,ae,tr,tl,eh])=>{
       setP(port);setHistoryData(h);
-      if(sa&&typeof sa==="object")setStockAnalyses(sa);
+      if(sa&&typeof sa==="object"){
+        setStockAnalyses(sa.current||{});
+        setPastStockAnalyses(sa.past||{});
+      }
       if(ae&&!("status" in ae&&(ae as any).status==="none"))setLE(ae);
       setTrades(tr);
       setTimeline(tl);
+      if(Array.isArray(eh))setEconomyHistory(eh);
     }).finally(()=>setLoading(false));
   },[]);
   useEffect(()=>{load();api.publicPortfolioStatus().then(s=>{setPublicEnabled(s.enabled);setPublicToken(s.token);}).catch(()=>{});},[load]);
   useEffect(()=>{const i=setInterval(load,120000);return()=>clearInterval(i);},[load]);
+  useEffect(()=>{
+    // Recompute edge states when content changes
+    const t=setTimeout(()=>{stockDeck.updateEdges();pastDeck.updateEdges();},50);
+    return()=>clearTimeout(t);
+  },[stockAnalyses,pastStockAnalyses,stockDeck,pastDeck]);
+
+  // Live ticker polling — fetch fresh prices every 5 seconds and animate changes
+  useEffect(()=>{
+    let cancelled=false;
+    const poll=async()=>{
+      try{
+        const data=await api.livePrices();
+        if(cancelled)return;
+        const newFlashes:Record<string,"up"|"down">={};
+        Object.entries(data).forEach(([sym,p])=>{
+          const old=prevPricesRef.current[sym];
+          if(old!==undefined&&p.price!==old){
+            newFlashes[sym]=p.price>old?"up":"down";
+          }
+          prevPricesRef.current[sym]=p.price;
+        });
+        setLivePrices(data);
+        if(Object.keys(newFlashes).length){
+          setFlashes(newFlashes);
+          setTimeout(()=>setFlashes({}),1500);
+        }
+      }catch{}
+    };
+    poll();
+    const i=setInterval(poll,5000);
+    return()=>{cancelled=true;clearInterval(i);};
+  },[]);
 
   const openChart=async(ticker:string,range=chartRange)=>{
     setChartTicker(ticker);setChartRange(range);setChartLoading(true);
@@ -87,7 +296,7 @@ export default function PortfolioPage(){
   };
   const handleUpdate=async(id:string)=>{await api.updatePosition(id,{quantity:editForm.quantity?parseFloat(editForm.quantity):undefined,avg_cost_price:editForm.avg_cost_price?parseFloat(editForm.avg_cost_price):undefined});setEditingId(null);load();};
   const handleDelete=async(id:string)=>{await api.deletePosition(id);load();};
-  const openOlderAnalyses=async(sym:string)=>{setOlderSymbol(sym);setOlderLoading(true);api.stockAnalyses(sym).then(setOlderAnalyses).finally(()=>setOlderLoading(false));};
+  const openOlderAnalyses=async(sym:string)=>{setOlderSymbol(sym);setOlderLoading(true);setExpandedOlderId(null);api.stockAnalyses(sym).then(setOlderAnalyses).finally(()=>setOlderLoading(false));};
   const openTradeChart=async(sym:string,range=tradeChartRange)=>{
     setTradeChartSymbol(sym);setTradeChartRange(range);setTradeChartLoading(true);
     try{const r=await api.priceChart(sym,range);setTradeChartData(r.data);}catch{setTradeChartData([]);}
@@ -95,20 +304,59 @@ export default function PortfolioPage(){
   };
   useEffect(()=>{if(tradeChartSymbol)openTradeChart(tradeChartSymbol,tradeChartRange);},[tradeChartRange]);
 
+  const liveTotals=useMemo(()=>{
+    if(!p)return{value:0,pnl:0,pnlPct:0};
+    let liveValue=0;
+    for(const pos of p.positions){
+      const live=livePrices[pos.symbol];
+      const refPrice=pos.last_price||pos.avg_cost_price||0;
+      const fx=refPrice&&pos.quantity?(pos.market_value/(refPrice*pos.quantity)):1;
+      const livePrice=live?.price??pos.last_price??pos.avg_cost_price??0;
+      liveValue+=livePrice*pos.quantity*fx;
+    }
+    const pnl=liveValue-p.total_cost;
+    const pnlPct=p.total_cost>0?(pnl/p.total_cost*100):0;
+    return{value:liveValue,pnl,pnlPct};
+  },[p,livePrices]);
+
   const pnlUp=(p?.total_pnl??0)>=0;
 
   if(loading&&!p)return <div className="space-y-6">{[...Array(4)].map((_,i)=><div key={i} className="h-32 rounded-3xl bg-muted animate-pulse"/>)}</div>;
 
   return (
     <div className="space-y-8">
+      <style>{`
+  .recharts-brush text { fill: var(--foreground); font-weight: 500; font-size: 11px; }
+  .recharts-brush-traveller { fill: var(--accent); }
+  .stock-deck::-webkit-scrollbar { height: 8px; }
+  .stock-deck::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .stock-deck::-webkit-scrollbar-track { background: transparent; }
+  @keyframes flash-up { 0% { background-color: rgba(34,197,94,0.25); } 100% { background-color: transparent; } }
+  @keyframes flash-down { 0% { background-color: rgba(239,68,68,0.25); } 100% { background-color: transparent; } }
+  .flash-up { animation: flash-up 1.5s ease-out; }
+  .flash-down { animation: flash-down 1.5s ease-out; }
+  .stock-deck { -webkit-mask-image: linear-gradient(to right, transparent 0%, black 4%, black 92%, transparent 100%); mask-image: linear-gradient(to right, transparent 0%, black 4%, black 92%, transparent 100%); cursor: grab; user-select: none; }
+  .stock-deck.deck-at-start { -webkit-mask-image: linear-gradient(to right, black 0%, black 92%, transparent 100%); mask-image: linear-gradient(to right, black 0%, black 92%, transparent 100%); }
+  .stock-deck.deck-at-end { -webkit-mask-image: linear-gradient(to right, transparent 0%, black 8%, black 100%); mask-image: linear-gradient(to right, transparent 0%, black 8%, black 100%); }
+  .stock-deck.deck-at-start.deck-at-end { -webkit-mask-image: none; mask-image: none; cursor: default; }
+`}</style>
       {/* Header */}
       <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-medium text-primary mb-1">Portfolio</p>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Investments & Holdings</h1>
-          <p className="text-[13px] text-muted-foreground mt-2 uppercase tracking-wider">Total Value</p>
-          <p className="text-3xl sm:text-4xl font-bold tracking-tight mt-1">{formatCurrency(p?.total_value??0)}</p>
-          <div className="flex items-center gap-3 mt-2"><PnlBadge value={p?.total_pnl??0} pct={p?.total_pnl_pct??0}/><span className="text-[13px] text-muted-foreground">all time</span></div>
+          <div className="flex items-center gap-2 mt-2">
+            <p className="text-[13px] text-muted-foreground uppercase tracking-wider">Total Value</p>
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tracking-wider">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+              </span>
+              LIVE
+            </span>
+          </div>
+          <p className="text-3xl sm:text-4xl font-bold tracking-tight mt-1 tabular-nums"><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
+          <div className="flex items-center gap-3 mt-2"><PnlBadge value={liveTotals.pnl} pct={liveTotals.pnlPct}/><span className="text-[13px] text-muted-foreground">all time</span></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Public toggle */}
@@ -137,8 +385,16 @@ export default function PortfolioPage(){
 
       {/* Summary */}
       <div className="grid gap-5 grid-cols-2 lg:grid-cols-4">
-        {[{l:"Invested",v:formatCurrency(p?.total_cost??0)},{l:"Cash",v:formatCurrency(p?.cash_balance??0)},{l:"Positions",v:String(p?.positions_count??0)},{l:"Total",v:formatCurrency((p?.total_value??0)+(p?.cash_balance??0))}].map((item,i)=>(
-          <GlassCard key={item.l} delay={0.05+i*0.05}><p className="text-[13px] text-muted-foreground mb-1">{item.l}</p><p className="text-2xl font-semibold">{item.v}</p></GlassCard>
+        {[
+          {l:"Invested",v:formatCurrency(p?.total_cost??0),live:false},
+          {l:"Cash",v:formatCurrency(p?.cash_balance??0),live:false},
+          {l:"Positions",v:String(p?.positions_count??0),live:false},
+          {l:"Total",v:liveTotals.value+(p?.cash_balance??0),live:true},
+        ].map((item,i)=>(
+          <GlassCard key={item.l} delay={0.05+i*0.05}>
+            <p className="text-[13px] text-muted-foreground mb-1">{item.l}</p>
+            <p className="text-2xl font-semibold tabular-nums">{item.live?<AnimatedNumber value={item.v as number} format={formatCurrency}/>:(item.v as string)}</p>
+          </GlassCard>
         ))}
       </div>
 
@@ -155,103 +411,184 @@ export default function PortfolioPage(){
         {/* Holdings */}
         <GlassCard delay={0.25} className="md:col-span-1 lg:col-span-2 !p-4">
           <p className="text-[13px] font-medium text-muted-foreground mb-3">Holdings</p>
-          <div className="space-y-1 max-h-[360px] overflow-y-auto">
-            {(p?.positions??[]).map(pos=>(
+          <div className="space-y-1 max-h-[420px] overflow-y-auto pr-1" style={{scrollbarGutter:"stable"}}>
+            {(p?.positions??[]).map(pos=>{
+              const live=livePrices[pos.symbol];
+              const livePrice=live?.price??pos.last_price??0;
+              const liveChange=live?.change??pos.change;
+              const liveChangePct=live?.change_pct??pos.change_pct;
+              const livePnlPct=pos.avg_cost_price?((livePrice/pos.avg_cost_price-1)*100):pos.pnl_pct;
+              const flash=flashes[pos.symbol];
+              return(
               editingId===pos.id?(
                 <div key={pos.id} className="flex items-center gap-2 p-3 rounded-2xl bg-accent flex-wrap"><span className="font-bold text-sm w-14">{pos.symbol}</span><Input value={editForm.quantity} onChange={e=>setEditForm({...editForm,quantity:e.target.value})} className="h-8 w-16 text-sm rounded-xl" placeholder="Qty"/><Input value={editForm.avg_cost_price} onChange={e=>setEditForm({...editForm,avg_cost_price:e.target.value})} className="h-8 w-20 text-sm rounded-xl" placeholder="Price"/><button onClick={()=>handleUpdate(pos.id)} className="cursor-pointer"><Check className="h-4 w-4 text-gain"/></button><button onClick={()=>setEditingId(null)} className="cursor-pointer"><X className="h-4 w-4 text-muted-foreground"/></button></div>
               ):(
-                <div key={pos.id} className={`flex items-center gap-2 sm:gap-3 p-3 rounded-2xl cursor-pointer transition-all duration-200 group hover:bg-accent ${chartTicker===pos.symbol?"bg-accent":""}`} onClick={()=>openChart(pos.symbol)}>
-                  <div className="min-w-[60px] sm:min-w-[80px]"><p className="font-semibold text-[14px] sm:text-[15px]">{pos.symbol}</p><p className="text-[11px] sm:text-[12px] text-muted-foreground truncate max-w-[60px] sm:max-w-[80px]">{pos.name}</p></div>
-                  <div className="hidden md:block"><Sparkline data={pos.sparkline} positive={pos.change>=0}/></div>
-                  <div className="text-right flex-1"><p className="text-[13px] sm:text-[14px] font-medium tabular-nums">{pos.last_price?.toFixed(2)}</p><p className={`text-[11px] sm:text-[12px] ${pos.change>=0?"text-gain":"text-loss"}`}>{pos.change>=0?"+":""}{pos.change_pct.toFixed(1)}%</p></div>
-                  <div className="text-right hidden sm:block min-w-[80px]"><p className="text-[14px] font-medium tabular-nums">{formatCurrency(pos.market_value)}</p><PnlBadge value={pos.unrealized_pnl}/></div>
-                  <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e=>e.stopPropagation()}><button className="cursor-pointer p-1" onClick={()=>{setEditingId(pos.id);setEditForm({quantity:String(pos.quantity),avg_cost_price:String(pos.avg_cost_price)});}}><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button><button className="cursor-pointer p-1" onClick={()=>handleDelete(pos.id)}><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button></div>
+                <div key={pos.id} className={`flex items-center justify-between px-3 py-3 pr-4 rounded-2xl cursor-pointer transition-all duration-200 group hover:bg-accent ${chartTicker===pos.symbol?"bg-accent":""} ${flash==="up"?"flash-up":flash==="down"?"flash-down":""}`} onClick={()=>openChart(pos.symbol)}>
+                  <div className="min-w-[70px] shrink-0">
+                    <p className="font-semibold text-[15px]">{pos.symbol}</p>
+                    <p className="text-[11px] text-muted-foreground truncate max-w-[80px]">{pos.name}</p>
+                  </div>
+                  <div className="hidden lg:block shrink-0"><Sparkline data={pos.sparkline} positive={livePnlPct>=0}/></div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[14px] font-medium tabular-nums">{livePrice.toFixed(2)}<span className="text-[10px] text-muted-foreground ml-1">{pos.currency}</span></p>
+                    <p className="text-[11px] text-muted-foreground tabular-nums">cost {pos.avg_cost_price.toFixed(2)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-[15px] font-semibold tabular-nums">{formatCurrency(pos.market_value)}</p>
+                      <p className={`text-[13px] font-semibold tabular-nums ${livePnlPct>=0?"text-gain":"text-loss"}`}>{livePnlPct>=0?"+":""}{livePnlPct.toFixed(1)}%</p>
+                      <p className={`text-[11px] tabular-nums ${pos.unrealized_pnl>=0?"text-gain":"text-loss"}`}>{pos.unrealized_pnl>=0?"+":""}{formatCurrency(pos.unrealized_pnl)}</p>
+                      {pos.first_bought&&<p className="text-[10px] text-muted-foreground mt-0.5">since {new Date(pos.first_bought).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</p>}
+                    </div>
+                    <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e=>e.stopPropagation()}>
+                      <button className="cursor-pointer p-1 rounded-lg hover:bg-background" onClick={()=>{setEditingId(pos.id);setEditForm({quantity:String(pos.quantity),avg_cost_price:String(pos.avg_cost_price)});}}><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                      <button className="cursor-pointer p-1 rounded-lg hover:bg-background" onClick={()=>handleDelete(pos.id)}><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                    </div>
+                  </div>
                 </div>
-              )
-            ))}
+              ));
+            })}
+
           </div>
         </GlassCard>
 
         {/* Chart */}
         <GlassCard delay={0.3} className="md:col-span-2 lg:col-span-2 !p-4">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-center mb-2">
             <p className="text-[13px] font-medium text-muted-foreground flex items-center gap-1.5"><BarChart3 className="h-4 w-4"/>{chartTicker||"Select stock"}</p>
           </div>
           {!chartTicker?<div className="h-60 flex items-center justify-center text-muted-foreground">Click a holding</div>:(
             <>
-              {(()=>{const pos=p?.positions.find(pp=>pp.symbol===chartTicker);return pos?<div className="flex items-center gap-3 mb-3"><span className="text-2xl font-bold tabular-nums">{pos.last_price?.toFixed(2)}</span><span className={`text-sm font-medium ${pos.change>=0?"text-gain":"text-loss"}`}>{pos.change>=0?"+":""}{pos.change.toFixed(2)} ({pos.change_pct>=0?"+":""}{pos.change_pct.toFixed(1)}%)</span></div>:null;})()}
-              <div className="flex gap-1 mb-2">{RANGES.map(r=><button key={r.value} onClick={()=>setChartRange(r.value)} className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${chartRange===r.value?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}>{r.label}</button>)}</div>
+              {(()=>{
+                const pos=p?.positions.find(pp=>pp.symbol===chartTicker);
+                if(!pos)return null;
+                const live=livePrices[pos.symbol];
+                const lp=live?.price??pos.last_price??0;
+                const lc=live?.change??pos.change;
+                const lcp=live?.change_pct??pos.change_pct;
+                return <div className="flex items-center justify-center gap-3 mb-3"><span className="text-2xl font-bold tabular-nums">{lp.toFixed(2)}</span><span className={`text-sm font-medium ${lc>=0?"text-gain":"text-loss"}`}>{lc>=0?"+":""}{lc.toFixed(2)} ({lcp>=0?"+":""}{lcp.toFixed(1)}%)</span></div>;
+              })()}
+              <div className="flex justify-center gap-1 mb-2">{RANGES.map(r=><button key={r.value} onClick={()=>setChartRange(r.value)} className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${chartRange===r.value?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}>{r.label}</button>)}</div>
               <div className="h-52">{chartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:chartData.length===0?<p className="text-sm text-muted-foreground">No data</p>:(
-                <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData}><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg)"/></AreaChart></ResponsiveContainer>
+                <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData} margin={{top:5,right:10,left:10,bottom:5}}><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis hide domain={["auto","auto"]}/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg)"/></AreaChart></ResponsiveContainer>
               )}</div>
             </>
           )}
         </GlassCard>
       </div>
 
-      {/* Per-Stock Analysis */}
+      {/* Per-Stock Analysis (currently held) */}
       <div>
         <div className="flex items-center gap-3 mb-5">
           <div className="h-10 w-10 rounded-2xl bg-orange-100 dark:bg-orange-500/15 flex items-center justify-center"><Brain className="h-5 w-5 text-orange-600 dark:text-orange-400" strokeWidth={1.8}/></div>
           <h2 className="text-lg font-semibold">Stock Analyses</h2>
+          <span className="text-[13px] text-muted-foreground">{Object.keys(stockAnalyses).length} held</span>
         </div>
         {Object.keys(stockAnalyses).length===0?<GlassCard delay={0.35}><p className="text-muted-foreground py-6 text-center">No stock analyses yet. Your agent will store reports here.</p></GlassCard>:(
-          <div className="grid gap-5 grid-cols-1 md:grid-cols-2">
-            {Object.values(stockAnalyses).map(entry=>{const s=entry.stock;return(
-              <GlassCard key={entry.analysis_id} delay={0.35} className="space-y-3">
+          <div className="relative">
+            <div ref={stockDeck.ref} className={`flex gap-5 overflow-x-auto pb-3 -mx-4 px-4 stock-deck ${stockDeck.atStart?"deck-at-start":""} ${stockDeck.atEnd?"deck-at-end":""}`}>
+              {Object.values(stockAnalyses).map(entry=>{const s=entry.stock;return(
+              <GlassCard key={entry.analysis_id} delay={0.35} className="space-y-3 min-w-[400px] max-w-[440px] shrink-0">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div className="flex items-center gap-3">
                     <span className="text-lg font-bold">{s.symbol}</span>
-                    <span className={`text-[13px] px-3 py-1 rounded-xl font-semibold ${s.action==="ADD"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":s.action==="SELL"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400"}`}>{s.action}</span>
+                    <ActionBadge action={s.action}/>
                   </div>
                   <div className="text-left sm:text-right">
                     <span className="text-[13px] sm:text-[14px] text-muted-foreground">Entry {s.entry_price.toFixed(2)} / Now {s.current_price.toFixed(2)}</span>
                     <span className={`ml-2 sm:ml-3 text-[14px] sm:text-[15px] font-bold ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
                   </div>
                 </div>
-                <p className="text-[14px] sm:text-[15px] leading-[1.85] text-foreground/80">{s.rationale}</p>
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                  {s.key_risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Risks</p><ul className="space-y-1.5">{s.key_risks.map((r,i)=><li key={i} className="text-[13px] sm:text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
-                  {s.key_catalysts.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Catalysts</p><ul className="space-y-1.5">{s.key_catalysts.map((c,i)=><li key={i} className="text-[13px] sm:text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{c}</li>)}</ul></div>}
-                </div>
+                <StockAnalysisDetail s={s}/>
                 <div className="flex items-center justify-between pt-2 border-t border-border">
                   <span className="text-[12px] text-muted-foreground">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</span>
-                  <button onClick={()=>openOlderAnalyses(s.symbol)} className="text-[13px] font-medium text-primary hover:underline cursor-pointer flex items-center gap-1"><ArrowUpRight className="h-3.5 w-3.5"/>View older</button>
+                  <button onClick={()=>openOlderAnalyses(s.symbol)} className="text-[13px] font-medium text-primary hover:underline cursor-pointer flex items-center gap-1"><History className="h-3.5 w-3.5"/>View older</button>
                 </div>
               </GlassCard>
             );})}
+            </div>
+            {!stockDeck.atEnd&&Object.values(stockAnalyses).length>2&&<button onClick={()=>stockDeck.scrollByAmount(440)} className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-muted/80 text-muted-foreground border border-border hidden md:flex items-center justify-center cursor-pointer z-10 backdrop-blur-sm" aria-label="Scroll right"><ChevronRight className="h-4 w-4"/></button>}
           </div>
         )}
       </div>
 
-      {/* Older Analyses Dialog */}
-      <Dialog open={olderSymbol!==null} onOpenChange={open=>{if(!open)setOlderSymbol(null);}}>
-        <DialogContent className="rounded-3xl max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Older Analyses - {olderSymbol}</DialogTitle></DialogHeader>
-          {olderLoading?<div className="py-8 text-center text-muted-foreground">Loading...</div>:olderAnalyses.length===0?<p className="py-8 text-center text-muted-foreground">No older analyses found.</p>:(
-            <div className="space-y-4">
-              {olderAnalyses.map(entry=>{const s=entry.stock;return(
-                <div key={entry.analysis_id} className="p-4 sm:p-5 rounded-2xl border border-border space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg font-bold">{s.symbol}</span>
-                      <span className={`text-[13px] px-3 py-1 rounded-xl font-semibold ${s.action==="ADD"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":s.action==="SELL"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400"}`}>{s.action}</span>
-                    </div>
-                    <div className="text-left sm:text-right">
-                      <span className="text-[13px] sm:text-[14px] text-muted-foreground">Entry {s.entry_price.toFixed(2)} / Now {s.current_price.toFixed(2)}</span>
-                      <span className={`ml-2 sm:ml-3 text-[14px] sm:text-[15px] font-bold ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
-                    </div>
+      {/* Past Stocks (sold positions) */}
+      {Object.keys(pastStockAnalyses).length>0&&(
+        <div>
+          <button onClick={()=>setShowPastStocks(!showPastStocks)} className="flex items-center gap-3 mb-5 cursor-pointer group">
+            <div className="h-10 w-10 rounded-2xl bg-slate-100 dark:bg-slate-500/15 flex items-center justify-center"><Archive className="h-5 w-5 text-slate-600 dark:text-slate-400" strokeWidth={1.8}/></div>
+            <h2 className="text-lg font-semibold group-hover:text-primary transition-colors">Past Stocks</h2>
+            <span className="text-[13px] text-muted-foreground">{Object.keys(pastStockAnalyses).length} sold</span>
+            {showPastStocks?<ChevronDown className="h-5 w-5 text-muted-foreground"/>:<ChevronRight className="h-5 w-5 text-muted-foreground"/>}
+          </button>
+          {showPastStocks&&(
+            <div className="relative">
+              <div ref={pastDeck.ref} className={`flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 stock-deck ${pastDeck.atStart?"deck-at-start":""} ${pastDeck.atEnd?"deck-at-end":""}`}>
+                {Object.values(pastStockAnalyses).map(entry=>{
+                const s=entry.stock;
+                const isOpen=expandedStockCard===entry.analysis_id;
+                return(
+                  <div key={entry.analysis_id} className="glass bg-card rounded-2xl p-4 space-y-2 min-w-[340px] max-w-[380px] shrink-0">
+                    <button onClick={()=>setExpandedStockCard(isOpen?null:entry.analysis_id)} className="w-full flex items-center justify-between gap-3 cursor-pointer text-left">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {isOpen?<ChevronDown className="h-4 w-4 text-muted-foreground shrink-0"/>:<ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/>}
+                        <span className="text-[15px] font-bold">{s.symbol}</span>
+                        <ActionBadge action={s.action} size="sm"/>
+                        <span className={`text-[12px] font-semibold tabular-nums ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground shrink-0">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</span>
+                    </button>
+                    {!isOpen&&<p className="text-[12px] text-muted-foreground line-clamp-2 pl-6">{s.rationale}</p>}
+                    {isOpen&&(
+                      <div className="space-y-3 pt-2 border-t border-border">
+                        <p className="text-[12px] text-muted-foreground">Entry {s.entry_price.toFixed(2)} / Last {s.current_price.toFixed(2)}</p>
+                        <StockAnalysisDetail s={s}/>
+                        <button onClick={(e)=>{e.stopPropagation();openOlderAnalyses(s.symbol);}} className="text-[12px] font-medium text-primary hover:underline cursor-pointer flex items-center gap-1"><History className="h-3.5 w-3.5"/>View all analyses for {s.symbol}</button>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-[14px] sm:text-[15px] leading-[1.85] text-foreground/80">{s.rationale}</p>
-                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                    {s.key_risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Risks</p><ul className="space-y-1.5">{s.key_risks.map((r,i)=><li key={i} className="text-[13px] sm:text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
-                    {s.key_catalysts.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Catalysts</p><ul className="space-y-1.5">{s.key_catalysts.map((c,i)=><li key={i} className="text-[13px] sm:text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{c}</li>)}</ul></div>}
-                  </div>
-                  <p className="text-[12px] text-muted-foreground pt-1">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
-                </div>
-              );})}
+                );
+              })}
+              </div>
+              {!pastDeck.atEnd&&Object.values(pastStockAnalyses).length>2&&<button onClick={()=>pastDeck.scrollByAmount(380)} className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-muted/80 text-muted-foreground border border-border hidden md:flex items-center justify-center cursor-pointer z-10 backdrop-blur-sm" aria-label="Scroll right"><ChevronRight className="h-4 w-4"/></button>}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Older Analyses Dialog — collapsed summaries that expand on click */}
+      <Dialog open={olderSymbol!==null} onOpenChange={open=>{if(!open){setOlderSymbol(null);setExpandedOlderId(null);}}}>
+        <DialogContent className="rounded-3xl max-w-4xl max-h-[85vh] overflow-hidden p-0 flex flex-col">
+          <DialogHeader className="px-6 pt-6 pb-2 shrink-0"><DialogTitle>Analysis History — {olderSymbol}</DialogTitle></DialogHeader>
+          <div className="overflow-y-auto px-6 pb-6 flex-1">
+            {olderLoading?<div className="py-8 text-center text-muted-foreground">Loading...</div>:olderAnalyses.length===0?<p className="py-8 text-center text-muted-foreground">No analyses found.</p>:(
+              <div className="space-y-2">
+                {olderAnalyses.map(entry=>{
+                  const s=entry.stock;
+                  const isOpen=expandedOlderId===entry.analysis_id;
+                  return(
+                    <div key={entry.analysis_id} className="rounded-2xl border border-border overflow-hidden">
+                      <button onClick={()=>setExpandedOlderId(isOpen?null:entry.analysis_id)} className="w-full flex items-center justify-between gap-3 p-3 hover:bg-accent/50 cursor-pointer text-left">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {isOpen?<ChevronDown className="h-4 w-4 text-muted-foreground shrink-0"/>:<ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/>}
+                          <ActionBadge action={s.action} size="sm"/>
+                          <span className={`text-[13px] font-semibold tabular-nums ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
+                          <span className="text-[12px] text-muted-foreground truncate">{s.rationale.split(".")[0]}</span>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground shrink-0">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</span>
+                      </button>
+                      {isOpen&&(
+                        <div className="p-4 pt-3 border-t border-border bg-accent/20 space-y-3">
+                          <p className="text-[12px] text-muted-foreground">Entry {s.entry_price.toFixed(2)} / Now {s.current_price.toFixed(2)}</p>
+                          <StockAnalysisDetail s={s}/>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -264,37 +601,33 @@ export default function PortfolioPage(){
           </div>
           {latestEconomy && <span className="text-[13px] text-muted-foreground">{new Date(latestEconomy.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</span>}
         </div>
-        {!latestEconomy?<p className="text-muted-foreground py-6 text-center">No economy analysis yet.</p>:(
-          <div className="space-y-5">
-            <div className="flex items-center gap-3">
-              <span className={`text-[13px] px-3 py-1.5 rounded-xl font-semibold capitalize ${latestEconomy.content.market_sentiment==="bullish"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":latestEconomy.content.market_sentiment==="bearish"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"}`}>{latestEconomy.content.market_sentiment}</span>
-            </div>
-            <div className="p-5 rounded-2xl bg-accent/60">
-              <p className="text-[15px] leading-[1.85] text-foreground/90">{latestEconomy.content.market_summary}</p>
-            </div>
-            {latestEconomy.content.key_indicators&&latestEconomy.content.key_indicators.length>0&&(
-              <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-                {latestEconomy.content.key_indicators.map((ind,i)=>(
-                  <div key={i} className="p-4 rounded-2xl bg-accent/60 text-center">
-                    <p className="text-[13px] text-muted-foreground mb-1">{ind.name}</p>
-                    <p className="text-2xl font-bold">{ind.value}</p>
-                    <p className={`text-[12px] font-medium mt-1 ${ind.trend==="up"?"text-gain":ind.trend==="down"?"text-loss":"text-muted-foreground"}`}>
-                      {ind.trend==="up"?"Trending up":ind.trend==="down"?"Trending down":"Stable"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-            {latestEconomy.content.outlook&&(
-              <div className="p-5 rounded-2xl border border-border">
-                <p className="text-[14px] font-semibold mb-2">Outlook</p>
-                <p className="text-[15px] leading-[1.85] text-foreground/80">{latestEconomy.content.outlook}</p>
-              </div>
-            )}
-            {(latestEconomy.content.risks?.length||latestEconomy.content.opportunities?.length)&&(
-              <div className="grid gap-5 md:grid-cols-2">
-                {latestEconomy.content.risks&&latestEconomy.content.risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Key Risks</p><ul className="space-y-1.5">{latestEconomy.content.risks.map((r,i)=><li key={i} className="text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
-                {latestEconomy.content.opportunities&&latestEconomy.content.opportunities.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Opportunities</p><ul className="space-y-1.5">{latestEconomy.content.opportunities.map((o,i)=><li key={i} className="text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{o}</li>)}</ul></div>}
+        {!latestEconomy?<p className="text-muted-foreground py-6 text-center">No economy analysis yet.</p>:<EconomyDetail c={latestEconomy.content}/>}
+        {/* Older economy analyses — collapsed summaries */}
+        {economyHistory.length>1&&(
+          <div className="mt-6 pt-5 border-t border-border">
+            <button onClick={()=>setShowOlderEconomy(!showOlderEconomy)} className="flex items-center gap-2 text-[13px] font-medium text-primary hover:underline cursor-pointer">
+              {showOlderEconomy?<ChevronDown className="h-4 w-4"/>:<ChevronRight className="h-4 w-4"/>}
+              <History className="h-4 w-4"/>
+              {showOlderEconomy?"Hide":"View"} {economyHistory.length-1} older analyses
+            </button>
+            {showOlderEconomy&&(
+              <div className="mt-3 space-y-2">
+                {economyHistory.slice(1).map(entry=>{
+                  const isOpen=expandedEconomyId===entry.id;
+                  return(
+                    <div key={entry.id} className="rounded-2xl border border-border overflow-hidden">
+                      <button onClick={()=>setExpandedEconomyId(isOpen?null:entry.id)} className="w-full flex items-center justify-between gap-3 p-3 hover:bg-accent/50 cursor-pointer text-left">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {isOpen?<ChevronDown className="h-4 w-4 text-muted-foreground shrink-0"/>:<ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/>}
+                          <SentimentBadge sentiment={entry.content.market_sentiment} size="sm"/>
+                          <span className="text-[12px] text-muted-foreground truncate">{entry.content.market_summary?.split(".")[0]}</span>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground shrink-0">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</span>
+                      </button>
+                      {isOpen&&<div className="p-4 pt-3 border-t border-border bg-accent/20"><EconomyDetail c={entry.content}/></div>}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -406,7 +739,7 @@ export default function PortfolioPage(){
                     <th className="px-5 py-3.5 text-[12px] font-semibold text-muted-foreground uppercase tracking-wider text-right">Qty</th>
                     <th className="px-5 py-3.5 text-[12px] font-semibold text-muted-foreground uppercase tracking-wider text-right">Price</th>
                     <th className="px-5 py-3.5 text-[12px] font-semibold text-muted-foreground uppercase tracking-wider text-right">Fees</th>
-                    <th className="px-5 py-3.5 text-[12px] font-semibold text-muted-foreground uppercase tracking-wider text-right">Total</th>
+                    <th className="px-5 py-3.5 text-[12px] font-semibold text-muted-foreground uppercase tracking-wider text-right">Total (CHF)</th>
                     <th className="px-5 py-3.5 text-[12px] font-semibold text-muted-foreground uppercase tracking-wider text-center">Chart</th>
                   </tr>
                 </thead>
@@ -417,9 +750,9 @@ export default function PortfolioPage(){
                       <td className="px-5 py-3 text-[14px] font-semibold">{t.symbol}</td>
                       <td className="px-5 py-3"><span className={`text-[12px] px-2.5 py-1 rounded-lg font-semibold uppercase ${t.type==="buy"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":t.type==="sell"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":t.type==="deposit"?"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"}`}>{t.type}</span></td>
                       <td className="px-5 py-3 text-[13px] tabular-nums text-right">{t.quantity}</td>
-                      <td className="px-5 py-3 text-[13px] tabular-nums text-right">{t.price.toFixed(2)}</td>
-                      <td className="px-5 py-3 text-[13px] tabular-nums text-right text-muted-foreground">{t.fees>0?t.fees.toFixed(2):"—"}</td>
-                      <td className="px-5 py-3 text-[14px] font-medium tabular-nums text-right">{formatCurrency(t.total)}</td>
+                      <td className="px-5 py-3 text-[13px] tabular-nums text-right"><span>{t.price.toFixed(2)}</span>{t.currency!=="CHF"&&<span className="text-[11px] text-muted-foreground ml-1">{t.currency}</span>}</td>
+                      <td className="px-5 py-3 text-[13px] tabular-nums text-right text-muted-foreground">{t.fees>0?formatCurrency(t.fees_chf):"—"}</td>
+                      <td className="px-5 py-3 text-[14px] font-medium tabular-nums text-right">{formatCurrency(t.total_chf)}</td>
                       <td className="px-5 py-3 text-center">{t.symbol!=="CASH"&&<button onClick={()=>openTradeChart(t.symbol)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer" title={`Chart for ${t.symbol}`}><LineChart className="h-4 w-4 text-primary"/></button>}</td>
                     </tr>
                   ))}

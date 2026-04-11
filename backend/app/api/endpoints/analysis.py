@@ -39,15 +39,27 @@ async def list_analyses(
     analysis_type: str | None = None,
     limit: int = 10,
     offset: int = 0,
+    full: bool = False,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List analysis history. Optional filter by type."""
+    """List analysis history. Optional filter by type. Set full=true to include content."""
     query = select(MarketAnalysis).where(MarketAnalysis.user_id == user.id)
     if analysis_type:
         query = query.where(MarketAnalysis.analysis_type == analysis_type)
     query = query.order_by(desc(MarketAnalysis.created_at)).limit(limit).offset(offset)
     result = await db.execute(query)
+    rows = result.scalars().all()
+    if full:
+        return [
+            {
+                "id": a.id,
+                "analysis_type": a.analysis_type,
+                "content": a.content,
+                "created_at": a.created_at.isoformat(),
+            }
+            for a in rows
+        ]
     return [
         {
             "id": a.id,
@@ -56,7 +68,7 @@ async def list_analyses(
             "stocks_count": len(a.content.get("stocks", [])) if isinstance(a.content, dict) else 0,
             "created_at": a.created_at.isoformat(),
         }
-        for a in result.scalars().all()
+        for a in rows
     ]
 
 

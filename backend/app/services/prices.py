@@ -15,14 +15,15 @@ _HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 # In-memory cache: ticker -> {data, fetched_at}
 _price_cache: dict[str, dict] = {}
-CACHE_TTL = 120  # 2 minutes
+CACHE_TTL = 30  # 30 seconds — frequent enough for live feel without hammering Yahoo
 
 
-async def get_quote(ticker: str) -> dict | None:
-    """Get current price + metadata for a ticker."""
+async def get_quote(ticker: str, cache_ttl: int | None = None) -> dict | None:
+    """Get current price + metadata for a ticker. Optional cache_ttl override."""
     now = time.time()
+    ttl = cache_ttl if cache_ttl is not None else CACHE_TTL
     cached = _price_cache.get(ticker)
-    if cached and now - cached["fetched_at"] < CACHE_TTL:
+    if cached and now - cached["fetched_at"] < ttl:
         return cached["data"]
 
     try:
@@ -59,11 +60,11 @@ async def get_quote(ticker: str) -> dict | None:
         return cached["data"] if cached else None
 
 
-async def get_quotes_batch(tickers: list[str]) -> dict[str, dict]:
+async def get_quotes_batch(tickers: list[str], cache_ttl: int | None = None) -> dict[str, dict]:
     """Get quotes for multiple tickers. Returns ticker -> quote dict."""
     results = {}
     for t in tickers:
-        q = await get_quote(t)
+        q = await get_quote(t, cache_ttl=cache_ttl)
         if q:
             results[t] = q
     return results
@@ -129,11 +130,14 @@ async def get_history(ticker: str, range: str = "1y", interval: str = "1d") -> l
             quotes = result["indicators"]["quote"][0]
             closes = quotes.get("close", [])
 
+            # Use richer date format for intraday intervals so multiple points per day are distinct
+            is_intraday = interval.endswith("m") and not interval.endswith("mo") or interval.endswith("h")
+            fmt = "%Y-%m-%d %H:%M" if is_intraday else "%Y-%m-%d"
             history = []
             for i, ts in enumerate(timestamps):
                 if i < len(closes) and closes[i] is not None:
                     history.append({
-                        "date": datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d"),
+                        "date": datetime.fromtimestamp(ts, tz=timezone.utc).strftime(fmt),
                         "close": round(closes[i], 2),
                     })
             return history
