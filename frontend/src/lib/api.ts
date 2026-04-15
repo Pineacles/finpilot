@@ -205,14 +205,6 @@ export const api = {
     request<MacroRegime>("/api/macro/regime"),
   blackSwan: (lookbackDays = 252) =>
     request<BlackSwanResult>(`/api/dashboard/portfolio/risk/black-swan?lookback_days=${lookbackDays}`),
-
-  // Phase 2: PCA + Cointegration
-  pca: () =>
-    request<PCAResult>("/api/dashboard/portfolio/risk/pca"),
-  cointegrationPairs: (symbols?: string) =>
-    request<CointegrationResult>(`/api/dashboard/pairs/cointegration${symbols ? `?symbols=${encodeURIComponent(symbols)}` : ""}`),
-  spreadHistory: (a: string, b: string, hedgeRatio: number, days = 90) =>
-    request<SpreadPoint[]>(`/api/dashboard/pairs/cointegration/spread?a=${a}&b=${b}&hedge_ratio=${hedgeRatio}&days=${days}`),
 };
 
 // Types
@@ -435,57 +427,4 @@ export interface BlackSwanResult {
   severity: "info" | "warn" | "critical";
   reasons: BlackSwanReason[];
   computed_at: string;
-}
-
-// ── Phase 2: PCA + Cointegration types ──────────────────────────
-
-export interface PCALoading {
-  symbol: string;
-  loading: number;
-}
-
-export interface PCAFactor {
-  idx: number;
-  variance_explained_pct: number;
-  loadings: PCALoading[];
-  interpretation: string | null;
-}
-
-export interface PCAResult {
-  factors?: PCAFactor[];
-  total_variance_explained_pct?: number;
-  concentration_risk?: {
-    top_factor_pct: number;
-    herfindahl_index: number;
-  };
-  sample_size?: number;
-  holdings_used?: string[];
-  computed_at?: string;
-  error?: string;
-}
-
-export interface CointPair {
-  a: string;
-  b: string;
-  p_value: number;
-  hedge_ratio: number;
-  current_spread: number;
-  spread_zscore: number;
-  half_life_days: number | null;
-  signal: "long_a_short_b" | "short_a_long_b" | "neutral";
-  last_252d_corr: number;
-}
-
-export interface CointegrationResult {
-  pairs: CointPair[];
-  universe: string[];
-  sample_size: number;
-  computed_at: string;
-}
-
-export interface SpreadPoint {
-  date: string;
-  spread: number;
-  upper: number;
-  lower: number;
 }
