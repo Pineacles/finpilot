@@ -4,7 +4,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.endpoints import auth, health, dashboard, portfolio, sync, transactions, finance, agent, analysis, user_settings, stats, csv_import, categorize, merchants, docs
-from app.api.endpoints.portfolio import macro_router
 from app.core.config import settings
 from app.services.gmail_scheduler import start_scheduler, stop_scheduler
 
@@ -49,4 +48,3 @@ app.include_router(categorize.router)
 app.include_router(merchants.router)
 app.include_router(docs.router)
 app.include_router(portfolio.public_router)
-app.include_router(macro_router)
