@@ -43,8 +43,6 @@ export const api = {
 
   // Dashboard
   overview: () => request<Overview>("/api/dashboard/overview"),
-  setAccountBalance: (accountId: string, balance: number) =>
-    request<{ status: string; previous_balance: number; new_balance: number; adjustment: number }>(`/api/dashboard/accounts/${accountId}/set-balance`, { method: "POST", body: JSON.stringify({ balance }) }),
   portfolio: () => request<PortfolioSummary>("/api/dashboard/portfolio"),
   portfolioHistory: (days = 90) => request<PortfolioSnapshot[]>(`/api/dashboard/portfolio/history?days=${days}`),
   portfolioValueTimeline: () => request<ValueTimelinePoint[]>("/api/dashboard/portfolio/value-timeline"),
@@ -188,23 +186,13 @@ export const api = {
   economyHistory: (limit = 20) => request<PortfolioAnalysis[]>(`/api/dashboard/analysis?analysis_type=economy&limit=${limit}&full=true`),
 
   // Settings
-  getSettings: () => request<{ api_key?: string; settings: Record<string, string>; groups: Record<string, { label: string; keys: string[] }> }>("/api/settings"),
+  getSettings: () => request<{ settings: Record<string, string>; groups: Record<string, { label: string; keys: string[] }> }>("/api/settings"),
   updateSettings: (settings: Record<string, string>) =>
     request<{ status: string; updated: string[] }>("/api/settings", { method: "PUT", body: JSON.stringify({ settings }) }),
 
   // Sync
   syncGmail: () => request<{ status: string; new_transactions: number; balance: number | null; errors: string[] }>("/api/sync/gmail", { method: "POST" }),
   syncStatus: () => request<SyncStatus[]>("/api/sync/status"),
-
-  // Quant risk & macro
-  cvar: (lookbackDays = 252) =>
-    request<CVaRResult>(`/api/dashboard/portfolio/risk/cvar?lookback_days=${lookbackDays}`),
-  kelly: (symbol: string, expectedReturnPct: number, conviction = 0.5) =>
-    request<KellyResult>(`/api/dashboard/portfolio/risk/kelly?symbol=${encodeURIComponent(symbol)}&expected_return_pct=${expectedReturnPct}&conviction=${conviction}`),
-  macroRegime: () =>
-    request<MacroRegime>("/api/macro/regime"),
-  blackSwan: (lookbackDays = 252) =>
-    request<BlackSwanResult>(`/api/dashboard/portfolio/risk/black-swan?lookback_days=${lookbackDays}`),
 };
 
 // Types
@@ -366,65 +354,3 @@ export interface PublicPortfolio {
 
 export interface SyncResult { status: string; records_synced: number; message: string }
 export interface SyncStatus { source: string; status: string; records_synced: number; synced_at: string | null; error_message: string | null }
-
-// ── Quant Risk & Macro types ──────────────────────────────────────
-
-export interface CVaRResult {
-  cvar_95: number;
-  cvar_99: number;
-  var_95: number;
-  var_99: number;
-  lookback_days: number;
-  sample_size: number;
-  total_portfolio_chf: number;
-  cvar_95_pct: number;
-  cvar_99_pct: number;
-  error?: string;
-}
-
-export interface KellyResult {
-  symbol: string;
-  kelly_fraction: number;
-  half_kelly_fraction: number;
-  suggested_chf: number;
-  suggested_shares: number;
-  volatility_60d: number;
-  max_position_pct: number;
-  expected_return_pct: number;
-  conviction: number;
-  current_price: number | null;
-  current_price_chf: number | null;
-  lookback_days: number;
-  error?: string;
-  available_days?: number;
-}
-
-export interface MacroRegime {
-  regime: "Expansionary" | "Late-Cycle" | "Contractionary" | "Recovery" | "Unknown";
-  indicators: {
-    yield_curve_bps: number | null;
-    tnx_pct: number | null;
-    irx_pct: number | null;
-    vix: number | null;
-    vix_zscore_60d: number | null;
-  };
-  sector_tilts: string[];
-  confidence: number;
-  computed_at: string;
-  note: string;
-}
-
-export interface BlackSwanReason {
-  type: string;
-  value: number;
-  threshold: number;
-  description: string;
-  symbol?: string;
-}
-
-export interface BlackSwanResult {
-  active: boolean;
-  severity: "info" | "warn" | "critical";
-  reasons: BlackSwanReason[];
-  computed_at: string;
-}

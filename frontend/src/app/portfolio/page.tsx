@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { motion } from "motion/react";
-import { api, PortfolioSummary, PortfolioAnalysis, StockAnalysisEntry, Trade, ValueTimelinePoint, CVaRResult, KellyResult } from "@/lib/api";
+import { api, PortfolioSummary, PortfolioAnalysis, StockAnalysisEntry, Trade, ValueTimelinePoint } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -233,27 +233,6 @@ export default function PortfolioPage(){
   const [tradeChartRange,setTradeChartRange]=useState("1y");
   const [tradeChartLoading,setTradeChartLoading]=useState(false);
   const [timelineRange,setTimelineRange]=useState<"1W"|"1M"|"3M"|"6M"|"1Y"|"ALL">("3M");
-  const [cvarData,setCvarData]=useState<CVaRResult|null>(null);
-  const [cvarLoading,setCvarLoading]=useState(false);
-  const [kellyData,setKellyData]=useState<KellyResult|null>(null);
-  const [kellyLoading,setKellyLoading]=useState(false);
-  const [kellyForm,setKellyForm]=useState({symbol:"",expectedReturn:"15",conviction:"0.7"});
-  const [kellyError,setKellyError]=useState("");
-
-  const fetchCvar=useCallback(()=>{
-    setCvarLoading(true);
-    api.cvar().then(setCvarData).catch(()=>{}).finally(()=>setCvarLoading(false));
-  },[]);
-
-  const handleKelly=useCallback(async()=>{
-    if(!kellyForm.symbol)return;
-    setKellyLoading(true);setKellyError("");setKellyData(null);
-    try{
-      const r=await api.kelly(kellyForm.symbol,parseFloat(kellyForm.expectedReturn)||15,parseFloat(kellyForm.conviction)||0.7);
-      setKellyData(r);
-    }catch(e){setKellyError(e instanceof Error?e.message:"Failed");}
-    finally{setKellyLoading(false);}
-  },[kellyForm]);
 
   const load=useCallback(()=>{
     setLoading(true);
@@ -798,88 +777,6 @@ export default function PortfolioPage(){
             </div>
           </GlassCard>
         )}
-      </div>
-
-      {/* Risk Metrics: CVaR + Kelly */}
-      <div className="grid gap-5 md:grid-cols-2">
-        {/* CVaR Card */}
-        <GlassCard delay={0.5}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center"><Activity className="h-5 w-5 text-rose-600 dark:text-rose-400" strokeWidth={1.8}/></div>
-              <div><p className="text-[13px] font-medium text-muted-foreground">CVaR / Expected Shortfall</p><p className="text-[11px] text-muted-foreground">1-year lookback · historical simulation</p></div>
-            </div>
-            <button onClick={fetchCvar} disabled={cvarLoading} className="h-8 w-8 rounded-xl bg-accent flex items-center justify-center hover:bg-muted transition-colors cursor-pointer disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${cvarLoading?"animate-spin":""}`}/></button>
-          </div>
-          {cvarData===null&&!cvarLoading&&(
-            <div className="text-center py-6"><p className="text-[13px] text-muted-foreground mb-3">Compute tail-risk metrics for your portfolio</p><button onClick={fetchCvar} className="h-9 px-5 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:brightness-110 transition-all cursor-pointer">Compute CVaR</button></div>
-          )}
-          {cvarLoading&&<div className="flex items-center justify-center py-8 text-muted-foreground text-[13px]">Computing...</div>}
-          {cvarData&&!cvarLoading&&(
-            cvarData.error?<p className="text-[13px] text-loss py-4">{cvarData.error==="no_positions"?"No positions to analyze.":"Insufficient price history."}</p>:(
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">CVaR 95%</p>
-                  <p className="text-lg font-bold tabular-nums text-loss">{formatCurrency(cvarData.cvar_95)}</p>
-                  <p className="text-[11px] text-muted-foreground">{cvarData.cvar_95_pct.toFixed(2)}% of portfolio</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">CVaR 99%</p>
-                  <p className="text-lg font-bold tabular-nums text-loss">{formatCurrency(cvarData.cvar_99)}</p>
-                  <p className="text-[11px] text-muted-foreground">{cvarData.cvar_99_pct.toFixed(2)}% of portfolio</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-accent">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">VaR 95%</p>
-                  <p className="text-base font-semibold tabular-nums text-loss">{formatCurrency(cvarData.var_95)}</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-accent">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">VaR 99%</p>
-                  <p className="text-base font-semibold tabular-nums text-loss">{formatCurrency(cvarData.var_99)}</p>
-                </div>
-              </div>
-              <p className="text-[11px] text-muted-foreground">{cvarData.sample_size} trading days · portfolio {formatCurrency(cvarData.total_portfolio_chf)}</p>
-            </div>)
-          )}
-        </GlassCard>
-
-        {/* Half-Kelly Card */}
-        <GlassCard delay={0.55}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-2xl bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center"><Zap className="h-5 w-5 text-violet-600 dark:text-violet-400" strokeWidth={1.8}/></div>
-            <div><p className="text-[13px] font-medium text-muted-foreground">Half-Kelly Position Sizer</p><p className="text-[11px] text-muted-foreground">optimal bet fraction · max 20% of portfolio</p></div>
-          </div>
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2">
-              <div><label className="text-[11px] text-muted-foreground block mb-1">Ticker</label><input value={kellyForm.symbol} onChange={e=>setKellyForm({...kellyForm,symbol:e.target.value.toUpperCase()})} placeholder="NVDA" className="w-full h-9 rounded-xl bg-accent px-3 text-[13px] outline-none focus:ring-2 focus:ring-primary/40 uppercase"/></div>
-              <div><label className="text-[11px] text-muted-foreground block mb-1">Exp. Return %</label><input type="number" value={kellyForm.expectedReturn} onChange={e=>setKellyForm({...kellyForm,expectedReturn:e.target.value})} className="w-full h-9 rounded-xl bg-accent px-3 text-[13px] outline-none focus:ring-2 focus:ring-primary/40"/></div>
-              <div><label className="text-[11px] text-muted-foreground block mb-1">Conviction 0–1</label><input type="number" step="0.1" min="0" max="1" value={kellyForm.conviction} onChange={e=>setKellyForm({...kellyForm,conviction:e.target.value})} className="w-full h-9 rounded-xl bg-accent px-3 text-[13px] outline-none focus:ring-2 focus:ring-primary/40"/></div>
-            </div>
-            <button onClick={handleKelly} disabled={kellyLoading||!kellyForm.symbol} className="w-full h-9 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:brightness-110 transition-all cursor-pointer disabled:opacity-50">{kellyLoading?"Computing...":"Calculate"}</button>
-            {kellyError&&<p className="text-[12px] text-loss">{kellyError}</p>}
-            {kellyData&&!kellyLoading&&(
-              kellyData.error?<p className="text-[13px] text-loss">{kellyData.error==="insufficient_history"?`Insufficient history (${kellyData.available_days} days available)`:`Error: ${kellyData.error}`}</p>:(
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <div className="p-3 rounded-2xl bg-violet-50 dark:bg-violet-500/10">
-                  <p className="text-[11px] text-muted-foreground mb-1">Half-Kelly fraction</p>
-                  <p className="text-lg font-bold tabular-nums">{(kellyData.half_kelly_fraction*100).toFixed(2)}%</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-violet-50 dark:bg-violet-500/10">
-                  <p className="text-[11px] text-muted-foreground mb-1">Suggested size</p>
-                  <p className="text-lg font-bold tabular-nums">{formatCurrency(kellyData.suggested_chf)}</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-accent">
-                  <p className="text-[11px] text-muted-foreground mb-1">Est. shares</p>
-                  <p className="text-base font-semibold tabular-nums">{kellyData.suggested_shares}</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-accent">
-                  <p className="text-[11px] text-muted-foreground mb-1">60d vol (ann.)</p>
-                  <p className="text-base font-semibold tabular-nums">{kellyData.volatility_60d.toFixed(1)}%</p>
-                </div>
-              </div>)
-            )}
-          </div>
-        </GlassCard>
       </div>
 
       {/* Trade Chart Dialog */}
