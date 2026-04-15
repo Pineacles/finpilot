@@ -376,3 +376,286 @@ async def compute_black_swan(
         "reasons": reasons,
         "computed_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ── 5. PCA Factor Model ──────────────────────────────────────────
+
+_pca_cache: dict = {}
+PCA_TTL = 3600  # 1 hour
+
+
+async def compute_pca(
+    positions: list[dict],  # [{symbol}]
+    lookback_days: int = 252,
+) -> dict:
+    """Run PCA on portfolio returns matrix.
+
+    Returns top-5 factors with variance explained, loadings, and
+    concentration risk metrics. Drops holdings with insufficient history.
+    """
+    if not positions:
+        return {"error": "no_positions"}
+
+    cache_key = "pca:" + ",".join(sorted(p["symbol"] for p in positions))
+    now = time.time()
+    cached = _pca_cache.get(cache_key)
+    if cached and now - cached["fetched_at"] < PCA_TTL:
+        return cached["data"]
+
+    from sklearn.decomposition import PCA
+    import numpy as np
+
+    returns_map: dict[str, np.ndarray] = {}
+    for pos in positions:
+        sym = pos["symbol"]
+        closes = await _get_closes(sym, lookback_days + 5)
+        if len(closes) < 30:
+            logger.warning(f"PCA: skipping {sym} — only {len(closes)} days")
+            continue
+        rets = _daily_returns(closes)
+        if len(rets) >= 30:
+            returns_map[sym] = rets
+
+    if len(returns_map) < 2:
+        return {"error": "insufficient_holdings"}
+
+    symbols = list(returns_map.keys())
+    min_len = min(len(r) for r in returns_map.values())
+    min_len = min(min_len, lookback_days)
+    matrix = np.column_stack([returns_map[s][-min_len:] for s in symbols])
+
+    # Standardise (PCA on correlation structure)
+    mu = matrix.mean(axis=0)
+    sigma = matrix.std(axis=0, ddof=1)
+    sigma[sigma < 1e-12] = 1.0
+    X = (matrix - mu) / sigma
+
+    n_components = min(5, len(symbols))
+    pca = PCA(n_components=n_components)
+    pca.fit(X)
+
+    factors = []
+    for idx in range(n_components):
+        loadings = [
+            {"symbol": sym, "loading": round(float(pca.components_[idx, j]), 4)}
+            for j, sym in enumerate(symbols)
+        ]
+        loadings.sort(key=lambda x: abs(x["loading"]), reverse=True)
+
+        var_pct = round(float(pca.explained_variance_ratio_[idx]) * 100, 2)
+
+        # Simple interpretation heuristic
+        signs = [l["loading"] for l in loadings]
+        interpretation = None
+        if idx == 0:
+            if all(s > 0 for s in signs) or all(s < 0 for s in signs):
+                interpretation = "Market beta"
+            else:
+                interpretation = "Sector rotation"
+
+        factors.append({
+            "idx": idx,
+            "variance_explained_pct": var_pct,
+            "loadings": loadings,
+            "interpretation": interpretation,
+        })
+
+    total_var = round(float(sum(pca.explained_variance_ratio_[:n_components])) * 100, 2)
+    top_factor_pct = factors[0]["variance_explained_pct"]
+    var_ratios = [f["variance_explained_pct"] / 100 for f in factors]
+    herfindahl = round(float(sum(v ** 2 for v in var_ratios)), 4)
+
+    result = {
+        "factors": factors,
+        "total_variance_explained_pct": total_var,
+        "concentration_risk": {
+            "top_factor_pct": top_factor_pct,
+            "herfindahl_index": herfindahl,
+        },
+        "sample_size": int(min_len),
+        "holdings_used": symbols,
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    _pca_cache[cache_key] = {"data": result, "fetched_at": now}
+    return result
+
+
+# ── 6. Cointegration Pairs ───────────────────────────────────────
+
+_coint_cache: dict = {}
+COINT_TTL = 3600  # 1 hour
+
+SMI_UNIVERSE = [
+    "NESN.SW", "ROG.SW", "NOVN.SW", "UBSG.SW", "ZURN.SW",
+    "ABBN.SW", "CFR.SW", "GIVN.SW", "SREN.SW", "HOLN.SW",
+]
+
+
+async def compute_cointegration(
+    symbols: list[str] | None = None,
+    lookback_days: int = 252,
+) -> dict:
+    """Engle-Granger cointegration test on all pairs in the universe.
+
+    Returns pairs with p-value < 0.05, sorted by |spread_zscore|.
+    """
+    if symbols is None or len(symbols) == 0:
+        symbols = SMI_UNIVERSE
+
+    symbols = [s.upper() for s in symbols]
+    cache_key = "coint:" + ",".join(sorted(symbols))
+    now = time.time()
+    cached = _coint_cache.get(cache_key)
+    if cached and now - cached["fetched_at"] < COINT_TTL:
+        return cached["data"]
+
+    from statsmodels.tsa.stattools import coint
+    import numpy as np
+
+    # Fetch log-prices
+    log_prices: dict[str, np.ndarray] = {}
+    for sym in symbols:
+        closes = await _get_closes(sym, lookback_days + 5)
+        if len(closes) >= 60:
+            arr = np.array(closes[-lookback_days:], dtype=float)
+            log_prices[sym] = np.log(arr)
+        else:
+            logger.warning(f"Coint: skipping {sym} — only {len(closes)} days")
+
+    valid_syms = list(log_prices.keys())
+    if len(valid_syms) < 2:
+        return {"pairs": [], "universe": symbols, "sample_size": lookback_days,
+                "computed_at": datetime.now(timezone.utc).isoformat()}
+
+    pairs = []
+    for i in range(len(valid_syms)):
+        for j in range(i + 1, len(valid_syms)):
+            sym_a, sym_b = valid_syms[i], valid_syms[j]
+            lp_a = log_prices[sym_a]
+            lp_b = log_prices[sym_b]
+            min_len = min(len(lp_a), len(lp_b))
+            lp_a = lp_a[-min_len:]
+            lp_b = lp_b[-min_len:]
+
+            try:
+                score, p_value, _ = coint(lp_a, lp_b)
+            except Exception as e:
+                logger.warning(f"Coint {sym_a}/{sym_b} failed: {e}")
+                continue
+
+            if p_value >= 0.05:
+                continue
+
+            # OLS hedge ratio: regress lp_b on lp_a
+            try:
+                coeffs = np.polyfit(lp_a, lp_b, 1)
+                hedge_ratio = float(coeffs[0])
+            except Exception:
+                hedge_ratio = 1.0
+
+            spread = lp_b - hedge_ratio * lp_a
+
+            # Rolling 60d z-score (use last 60 days of spread)
+            window = min(60, len(spread))
+            spread_window = spread[-window:]
+            mu_s = float(np.mean(spread_window))
+            std_s = float(np.std(spread_window, ddof=1))
+            current_spread = float(spread[-1])
+            spread_zscore = round((current_spread - mu_s) / std_s, 3) if std_s > 1e-12 else 0.0
+
+            # OU half-life: AR(1) on spread diff
+            try:
+                from statsmodels.regression.linear_model import OLS
+                from statsmodels.tools import add_constant
+                spread_lag = spread[:-1]
+                spread_diff = np.diff(spread)
+                X_ar = add_constant(spread_lag)
+                ar_fit = OLS(spread_diff, X_ar).fit()
+                phi = float(ar_fit.params[1])
+                if phi < 0:
+                    half_life = round(-np.log(2) / np.log(1 + phi), 1)
+                else:
+                    half_life = None
+            except Exception:
+                half_life = None
+
+            # Trading signal
+            if abs(spread_zscore) > 2:
+                signal = "long_a_short_b" if spread_zscore > 0 else "short_a_long_b"
+            else:
+                signal = "neutral"
+
+            # 252d correlation
+            ret_a = np.diff(lp_a)
+            ret_b = np.diff(lp_b)
+            corr = round(float(np.corrcoef(ret_a, ret_b)[0, 1]), 4)
+
+            pairs.append({
+                "a": sym_a,
+                "b": sym_b,
+                "p_value": round(float(p_value), 5),
+                "hedge_ratio": round(hedge_ratio, 4),
+                "current_spread": round(current_spread, 6),
+                "spread_zscore": spread_zscore,
+                "half_life_days": half_life,
+                "signal": signal,
+                "last_252d_corr": corr,
+            })
+
+    # Sort by |zscore| desc, limit 20
+    pairs.sort(key=lambda x: abs(x["spread_zscore"]), reverse=True)
+    pairs = pairs[:20]
+
+    result = {
+        "pairs": pairs,
+        "universe": valid_syms,
+        "sample_size": lookback_days,
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    _coint_cache[cache_key] = {"data": result, "fetched_at": now}
+    return result
+
+
+async def get_spread_history(
+    sym_a: str,
+    sym_b: str,
+    hedge_ratio: float,
+    days: int = 90,
+) -> list[dict]:
+    """Return last `days` of spread + ±2σ bands for chart rendering."""
+    closes_a = await _get_closes(sym_a, days + 5)
+    closes_b = await _get_closes(sym_b, days + 5)
+    min_len = min(len(closes_a), len(closes_b), days)
+    if min_len < 10:
+        return []
+
+    import numpy as np
+    lp_a = np.log(np.array(closes_a[-min_len:], dtype=float))
+    lp_b = np.log(np.array(closes_b[-min_len:], dtype=float))
+    spread = lp_b - hedge_ratio * lp_a
+
+    mu = float(np.mean(spread))
+    std = float(np.std(spread, ddof=1))
+
+    # Approximate dates (trading days back from today)
+    from datetime import date, timedelta
+    today = date.today()
+    bdays: list[date] = []
+    d = today
+    while len(bdays) < min_len:
+        if d.weekday() < 5:
+            bdays.append(d)
+        d -= timedelta(days=1)
+    bdays = list(reversed(bdays))
+
+    return [
+        {
+            "date": bdays[i].isoformat(),
+            "spread": round(float(spread[i]), 6),
+            "upper": round(mu + 2 * std, 6),
+            "lower": round(mu - 2 * std, 6),
+        }
+        for i in range(min_len)
+    ]
