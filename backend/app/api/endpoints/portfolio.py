@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
 from app.models.account import Account
-from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot, MarketAnalysis
+from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot, MarketAnalysis, PostMortem, BuyAssessment
 from app.models.user import User
 from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate
 
@@ -1054,3 +1054,54 @@ async def get_public_stock_analyses(token: str, symbol: str, limit: int = 20, db
                     "created_at": a.created_at.isoformat(),
                 })
     return out
+
+
+@public_router.get("/portfolio/{token}/journal")
+async def get_public_journal(token: str, db: AsyncSession = Depends(get_db)):
+    """Public read-only journal — post-mortems and buy assessments for a shared portfolio."""
+    result = await db.execute(
+        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    pm_result = await db.execute(
+        select(PostMortem).where(PostMortem.user_id == user.id)
+        .order_by(desc(PostMortem.created_at)).limit(50)
+    )
+    post_mortems = [
+        {
+            "id": pm.id,
+            "symbol": pm.symbol,
+            "entry_price": pm.entry_price,
+            "exit_price": pm.exit_price,
+            "pnl_pct": pm.pnl_pct,
+            "notes": pm.notes,
+            "created_at": pm.created_at.isoformat(),
+        }
+        for pm in pm_result.scalars().all()
+    ]
+
+    ba_result = await db.execute(
+        select(BuyAssessment).where(BuyAssessment.user_id == user.id)
+        .order_by(desc(BuyAssessment.created_at)).limit(50)
+    )
+    buy_assessments = [
+        {
+            "id": ba.id,
+            "symbol": ba.symbol,
+            "recommendation": ba.recommendation,
+            "target_price": ba.target_price,
+            "stop_loss": ba.stop_loss,
+            "thesis": ba.thesis,
+            "risk_factors": ba.risk_factors,
+            "conviction": ba.conviction,
+            "time_horizon": ba.time_horizon,
+            "assessed_at": ba.assessed_at.isoformat(),
+            "created_at": ba.created_at.isoformat(),
+        }
+        for ba in ba_result.scalars().all()
+    ]
+
+    return {"post_mortems": post_mortems, "buy_assessments": buy_assessments}

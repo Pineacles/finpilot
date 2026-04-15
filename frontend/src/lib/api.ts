@@ -44,6 +44,11 @@ export const api = {
   // Dashboard
   overview: () => request<Overview>("/api/dashboard/overview"),
   portfolio: () => request<PortfolioSummary>("/api/dashboard/portfolio"),
+  setAccountBalance: (accountId: string, balance: number) =>
+    request<{ status: string }>(`/api/dashboard/accounts/${accountId}/set-balance`, {
+      method: "POST",
+      body: JSON.stringify({ balance }),
+    }),
   portfolioHistory: (days = 90) => request<PortfolioSnapshot[]>(`/api/dashboard/portfolio/history?days=${days}`),
   portfolioValueTimeline: () => request<ValueTimelinePoint[]>("/api/dashboard/portfolio/value-timeline"),
   trade: (data: { symbol: string; type: string; quantity: number; price?: number; currency?: string; date?: string; fees?: number; deduct_from_cash?: boolean }) =>
@@ -186,13 +191,46 @@ export const api = {
   economyHistory: (limit = 20) => request<PortfolioAnalysis[]>(`/api/dashboard/analysis?analysis_type=economy&limit=${limit}&full=true`),
 
   // Settings
-  getSettings: () => request<{ settings: Record<string, string>; groups: Record<string, { label: string; keys: string[] }> }>("/api/settings"),
+  getSettings: () => request<{ settings: Record<string, string>; groups: Record<string, { label: string; keys: string[] }>; api_key?: string }>("/api/settings"),
   updateSettings: (settings: Record<string, string>) =>
     request<{ status: string; updated: string[] }>("/api/settings", { method: "PUT", body: JSON.stringify({ settings }) }),
 
   // Sync
   syncGmail: () => request<{ status: string; new_transactions: number; balance: number | null; errors: string[] }>("/api/sync/gmail", { method: "POST" }),
   syncStatus: () => request<SyncStatus[]>("/api/sync/status"),
+
+  // Post-Mortems
+  postMortems: (params?: { symbol?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.symbol) qs.set("symbol", params.symbol);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    return request<PostMortem[]>(`/api/dashboard/post-mortems?${qs}`);
+  },
+  createPostMortem: (body: PostMortemInput) =>
+    request<PostMortem>("/api/dashboard/post-mortems", { method: "POST", body: JSON.stringify(body) }),
+  updatePostMortem: (id: string, body: Partial<PostMortemInput>) =>
+    request<PostMortem>(`/api/dashboard/post-mortems/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deletePostMortem: (id: string) =>
+    request<void>(`/api/dashboard/post-mortems/${id}`, { method: "DELETE" }),
+
+  // Buy Assessments
+  buyAssessments: (params?: { symbol?: string; recommendation?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.symbol) qs.set("symbol", params.symbol);
+    if (params?.recommendation) qs.set("recommendation", params.recommendation);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    return request<BuyAssessment[]>(`/api/dashboard/buy-assessments?${qs}`);
+  },
+  createBuyAssessment: (body: BuyAssessmentInput) =>
+    request<BuyAssessment>("/api/dashboard/buy-assessments", { method: "POST", body: JSON.stringify(body) }),
+  updateBuyAssessment: (id: string, body: Partial<BuyAssessmentInput>) =>
+    request<BuyAssessment>(`/api/dashboard/buy-assessments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteBuyAssessment: (id: string) =>
+    request<void>(`/api/dashboard/buy-assessments/${id}`, { method: "DELETE" }),
+
+  // Public journal
+  publicJournal: (token: string) =>
+    fetch(`/api/public/portfolio/${token}/journal`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<{ post_mortems: PostMortem[]; buy_assessments: BuyAssessment[] }>; }),
 };
 
 // Types
@@ -354,3 +392,51 @@ export interface PublicPortfolio {
 
 export interface SyncResult { status: string; records_synced: number; message: string }
 export interface SyncStatus { source: string; status: string; records_synced: number; synced_at: string | null; error_message: string | null }
+
+export interface PostMortem {
+  id: string;
+  user_id: string;
+  symbol: string;
+  analysis_id: string | null;
+  entry_price: number;
+  exit_price: number;
+  pnl_pct: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface PostMortemInput {
+  symbol: string;
+  entry_price: number;
+  exit_price: number;
+  notes?: string;
+  analysis_id?: string;
+}
+
+export interface BuyAssessment {
+  id: string;
+  user_id: string;
+  symbol: string;
+  recommendation: "buy" | "hold" | "watch" | "avoid";
+  target_price: number | null;
+  stop_loss: number | null;
+  thesis: string;
+  risk_factors: string | null;
+  conviction: number;
+  time_horizon: "short" | "medium" | "long" | null;
+  assessed_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BuyAssessmentInput {
+  symbol: string;
+  recommendation: "buy" | "hold" | "watch" | "avoid";
+  target_price?: number;
+  stop_loss?: number;
+  thesis: string;
+  risk_factors?: string;
+  conviction: number;
+  time_horizon?: "short" | "medium" | "long";
+  assessed_at?: string;
+}
