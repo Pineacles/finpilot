@@ -21,6 +21,7 @@ class StockPosition(Base):
     last_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_price_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     unrealized_pnl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    earnings_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -49,6 +50,40 @@ class PortfolioSnapshot(Base):
     total_cost: Mapped[float] = mapped_column(Float, nullable=False)
     total_pnl: Mapped[float] = mapped_column(Float, nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+
+
+class PostMortem(Base):
+    """Post-mortem record for closed losing positions — for learning from mistakes."""
+    __tablename__ = "post_mortems"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    analysis_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("market_analyses.id"), nullable=True)
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    exit_price: Mapped[float] = mapped_column(Float, nullable=False)
+    pnl_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class BuyAssessment(Base):
+    """Forward-looking buy assessment — records what the agent recommends buying."""
+    __tablename__ = "buy_assessments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    recommendation: Mapped[str] = mapped_column(String(10), nullable=False)  # buy|hold|watch|avoid
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stop_loss: Mapped[float | None] = mapped_column(Float, nullable=True)
+    thesis: Mapped[str] = mapped_column(String(4000), nullable=False)
+    risk_factors: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    conviction: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-5
+    time_horizon: Mapped[str | None] = mapped_column(String(10), nullable=True)  # short|medium|long
+    assessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class MarketAnalysis(Base):

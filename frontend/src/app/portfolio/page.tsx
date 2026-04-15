@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { motion } from "motion/react";
-import { api, PortfolioSummary, PortfolioAnalysis, StockAnalysisEntry, Trade, ValueTimelinePoint } from "@/lib/api";
+import { api, PortfolioSummary, PortfolioAnalysis, StockAnalysisEntry, Trade, ValueTimelinePoint, PostMortem, BuyAssessment, PostMortemInput, BuyAssessmentInput } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar } from "recharts";
-import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, Activity } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, Activity, BookOpen, Target } from "lucide-react";
 
 const COLORS = ["#3b82f6","#f97316","#ef4444","#a855f7","#14b8a6","#f59e0b","#ec4899","#22c55e","#06b6d4","#8b5cf6","#e11d48","#84cc16","#6366f1","#d946ef","#0ea5e9","#fb923c"];
 const RANGES = [{value:"1d",label:"1D"},{value:"5d",label:"1W"},{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
@@ -234,6 +234,24 @@ export default function PortfolioPage(){
   const [tradeChartLoading,setTradeChartLoading]=useState(false);
   const [timelineRange,setTimelineRange]=useState<"1W"|"1M"|"3M"|"6M"|"1Y"|"ALL">("3M");
 
+  // Journal state
+  const [postMortems,setPostMortems]=useState<PostMortem[]>([]);
+  const [buyAssessments,setBuyAssessments]=useState<BuyAssessment[]>([]);
+  const [showPMModal,setShowPMModal]=useState(false);
+  const [showBAModal,setShowBAModal]=useState(false);
+  const [editingPM,setEditingPM]=useState<PostMortem|null>(null);
+  const [editingBA,setEditingBA]=useState<BuyAssessment|null>(null);
+  const [pmForm,setPMForm]=useState({symbol:"",entry_price:"",exit_price:"",notes:""});
+  const [baForm,setBAForm]=useState({symbol:"",recommendation:"buy" as BuyAssessmentInput["recommendation"],target_price:"",stop_loss:"",thesis:"",risk_factors:"",conviction:"3",time_horizon:"" as BuyAssessmentInput["time_horizon"]|""});
+  const [pmSubmitting,setPMSubmitting]=useState(false);
+  const [baSubmitting,setBASubmitting]=useState(false);
+  const [pmError,setPMError]=useState("");
+  const [baError,setBAError]=useState("");
+  const [expandedPMId,setExpandedPMId]=useState<string|null>(null);
+  const [expandedBAId,setExpandedBAId]=useState<string|null>(null);
+  const [deletingPMId,setDeletingPMId]=useState<string|null>(null);
+  const [deletingBAId,setDeletingBAId]=useState<string|null>(null);
+
   const load=useCallback(()=>{
     setLoading(true);
     Promise.all([api.portfolio(),api.portfolioHistory(365),api.analysesByStock(),api.analysisLatest("economy"),api.trades(),api.portfolioValueTimeline(),api.economyHistory(20)]).then(([port,h,sa,ae,tr,tl,eh])=>{
@@ -248,7 +266,12 @@ export default function PortfolioPage(){
       if(Array.isArray(eh))setEconomyHistory(eh);
     }).finally(()=>setLoading(false));
   },[]);
-  useEffect(()=>{load();api.publicPortfolioStatus().then(s=>{setPublicEnabled(s.enabled);setPublicToken(s.token);}).catch(()=>{});},[load]);
+  useEffect(()=>{
+    load();
+    api.publicPortfolioStatus().then(s=>{setPublicEnabled(s.enabled);setPublicToken(s.token);}).catch(()=>{});
+    api.postMortems().then(setPostMortems).catch(()=>{});
+    api.buyAssessments().then(setBuyAssessments).catch(()=>{});
+  },[load]);
   useEffect(()=>{const i=setInterval(load,120000);return()=>clearInterval(i);},[load]);
   useEffect(()=>{
     // Recompute edge states when content changes
@@ -736,6 +759,110 @@ export default function PortfolioPage(){
         </div>);
       })()}
 
+      {/* Buy Assessments */}
+      <div>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-10 w-10 rounded-2xl bg-emerald-100 dark:bg-emerald-500/15 flex items-center justify-center"><Target className="h-5 w-5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.8}/></div>
+          <h2 className="text-lg font-semibold">Buy Assessments</h2>
+          <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{buyAssessments.length}</span>
+          <button onClick={()=>{setEditingBA(null);setBAForm({symbol:"",recommendation:"buy",target_price:"",stop_loss:"",thesis:"",risk_factors:"",conviction:"3",time_horizon:""});setBAError("");setShowBAModal(true);}} className="ml-auto p-2 rounded-xl bg-accent hover:bg-accent/80 transition-colors cursor-pointer"><Plus className="h-4 w-4"/></button>
+        </div>
+        {buyAssessments.length===0?(
+          <GlassCard delay={0.43}><p className="text-muted-foreground py-6 text-center text-[14px]">No buy assessments yet — the agent will write these for you.</p></GlassCard>
+        ):(
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {buyAssessments.map(ba=>{
+              const recColor=ba.recommendation==="buy"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":ba.recommendation==="hold"?"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400":ba.recommendation==="watch"?"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400";
+              const isExpanded=expandedBAId===ba.id;
+              return(
+                <GlassCard key={ba.id} delay={0} className="relative group !p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-lg font-bold">{ba.symbol}</span>
+                      <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold capitalize ${recColor}`}>{ba.recommendation}</span>
+                      {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground capitalize">{ba.time_horizon}</span>}
+                    </div>
+                    <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+                      <button onClick={()=>{setEditingBA(ba);setBAForm({symbol:ba.symbol,recommendation:ba.recommendation,target_price:ba.target_price?.toString()||"",stop_loss:ba.stop_loss?.toString()||"",thesis:ba.thesis,risk_factors:ba.risk_factors||"",conviction:String(ba.conviction),time_horizon:ba.time_horizon||""});setBAError("");setShowBAModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                      {deletingBAId===ba.id?(
+                        <button onClick={async()=>{await api.deleteBuyAssessment(ba.id);setBuyAssessments(p=>p.filter(x=>x.id!==ba.id));setDeletingBAId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
+                      ):(
+                        <button onClick={()=>setDeletingBAId(ba.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                      )}
+                    </div>
+                  </div>
+                  {(ba.target_price||ba.stop_loss)&&(
+                    <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
+                      {ba.target_price&&<span>Target: <span className="text-foreground font-medium">{ba.target_price.toFixed(2)}</span></span>}
+                      {ba.stop_loss&&<span>Stop: <span className="text-foreground font-medium">{ba.stop_loss.toFixed(2)}</span></span>}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1">
+                    {[1,2,3,4,5].map(d=><div key={d} className={`h-2 w-2 rounded-full ${d<=ba.conviction?"bg-primary":"bg-border"}`}/>)}
+                    <span className="text-[11px] text-muted-foreground ml-1">conviction</span>
+                  </div>
+                  <div>
+                    <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-3"}`}>{ba.thesis}</p>
+                    {ba.thesis.length>120&&<button onClick={()=>setExpandedBAId(isExpanded?null:ba.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-auto">{new Date(ba.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
+                </GlassCard>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Post-Mortems */}
+      <div>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center"><BookOpen className="h-5 w-5 text-rose-600 dark:text-rose-400" strokeWidth={1.8}/></div>
+          <h2 className="text-lg font-semibold">Post-Mortems</h2>
+          <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{postMortems.length}</span>
+          <button onClick={()=>{setEditingPM(null);setPMForm({symbol:"",entry_price:"",exit_price:"",notes:""});setPMError("");setShowPMModal(true);}} className="ml-auto p-2 rounded-xl bg-accent hover:bg-accent/80 transition-colors cursor-pointer"><Plus className="h-4 w-4"/></button>
+        </div>
+        {postMortems.length===0?(
+          <GlassCard delay={0.44}><p className="text-muted-foreground py-6 text-center text-[14px]">No post-mortems yet — the agent writes these when a position is closed.</p></GlassCard>
+        ):(
+          <div className="space-y-3">
+            {postMortems.map(pm=>{
+              const isPos=pm.pnl_pct>=0;
+              const isExpanded=expandedPMId===pm.id;
+              return(
+                <GlassCard key={pm.id} delay={0} className="relative group !p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[15px] font-bold">{pm.symbol}</span>
+                      <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold ${isPos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{isPos?"+":""}{pm.pnl_pct.toFixed(2)}%</span>
+                    </div>
+                    <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+                      <button onClick={()=>{setEditingPM(pm);setPMForm({symbol:pm.symbol,entry_price:String(pm.entry_price),exit_price:String(pm.exit_price),notes:pm.notes||""});setPMError("");setShowPMModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                      {deletingPMId===pm.id?(
+                        <button onClick={async()=>{await api.deletePostMortem(pm.id);setPostMortems(p=>p.filter(x=>x.id!==pm.id));setDeletingPMId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
+                      ):(
+                        <button onClick={()=>setDeletingPMId(pm.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                    <span>Entry: <span className="text-foreground font-medium">{pm.entry_price.toFixed(2)}</span></span>
+                    <ArrowUpRight className="h-3.5 w-3.5"/>
+                    <span>Exit: <span className="text-foreground font-medium">{pm.exit_price.toFixed(2)}</span></span>
+                  </div>
+                  {pm.notes&&(
+                    <div>
+                      <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-4"}`}>{pm.notes}</p>
+                      {pm.notes.length>160&&<button onClick={()=>setExpandedPMId(isExpanded?null:pm.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">{new Date(pm.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
+                </GlassCard>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Transaction History */}
       <div>
         <div className="flex items-center gap-3 mb-5">
@@ -788,6 +915,71 @@ export default function PortfolioPage(){
             {tradeChartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:tradeChartData.length===0?<p className="text-sm text-muted-foreground text-center py-8">No data available</p>:(
               <ResponsiveContainer width="100%" height="100%"><AreaChart data={tradeChartData}><defs><linearGradient id="sg-trade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg-trade)"/></AreaChart></ResponsiveContainer>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Buy Assessment Modal */}
+      <Dialog open={showBAModal} onOpenChange={open=>{if(!open){setShowBAModal(false);setEditingBA(null);}}}>
+        <DialogContent className="rounded-3xl max-w-lg">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Target className="h-5 w-5 text-emerald-500"/>{editingBA?"Edit Buy Assessment":"New Buy Assessment"}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Symbol *</label><Input placeholder="NVDA" value={baForm.symbol} onChange={e=>setBAForm({...baForm,symbol:e.target.value.toUpperCase()})} className="rounded-xl h-11"/></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Recommendation *</label><select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={baForm.recommendation} onChange={e=>setBAForm({...baForm,recommendation:e.target.value as BuyAssessmentInput["recommendation"]})}>{["buy","hold","watch","avoid"].map(r=><option key={r} value={r} className="capitalize">{r}</option>)}</select></div>
+              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Time Horizon</label><select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={baForm.time_horizon} onChange={e=>setBAForm({...baForm,time_horizon:e.target.value as BuyAssessmentInput["time_horizon"]|""})}><option value="">—</option>{["short","medium","long"].map(h=><option key={h} value={h} className="capitalize">{h}</option>)}</select></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Target Price</label><Input type="number" placeholder="0.00" value={baForm.target_price} onChange={e=>setBAForm({...baForm,target_price:e.target.value})} className="rounded-xl h-11"/></div>
+              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Stop Loss</label><Input type="number" placeholder="0.00" value={baForm.stop_loss} onChange={e=>setBAForm({...baForm,stop_loss:e.target.value})} className="rounded-xl h-11"/></div>
+            </div>
+            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Conviction (1–5) *</label><div className="flex items-center gap-2">{[1,2,3,4,5].map(n=><button key={n} type="button" onClick={()=>setBAForm({...baForm,conviction:String(n)})} className={`h-9 w-9 rounded-xl text-[14px] font-semibold transition-all cursor-pointer ${Number(baForm.conviction)>=n?"bg-primary text-primary-foreground":"bg-accent text-muted-foreground"}`}>{n}</button>)}</div></div>
+            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Thesis *</label><textarea rows={4} placeholder="Why this asset is worth buying..." value={baForm.thesis} onChange={e=>setBAForm({...baForm,thesis:e.target.value})} className="w-full rounded-xl bg-accent px-3 py-2.5 text-[14px] resize-none border-0 outline-none focus:ring-2 focus:ring-primary/30"/></div>
+            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Risk Factors</label><textarea rows={2} placeholder="Key risks to the thesis..." value={baForm.risk_factors} onChange={e=>setBAForm({...baForm,risk_factors:e.target.value})} className="w-full rounded-xl bg-accent px-3 py-2.5 text-[14px] resize-none border-0 outline-none focus:ring-2 focus:ring-primary/30"/></div>
+            {baError&&<p className="text-[13px] text-loss">{baError}</p>}
+            <button disabled={baSubmitting} onClick={async()=>{
+              if(!baForm.symbol.trim()){setBAError("Symbol is required");return;}
+              if(!baForm.thesis.trim()){setBAError("Thesis is required");return;}
+              setBAError("");setBASubmitting(true);
+              try{
+                const payload:BuyAssessmentInput={symbol:baForm.symbol,recommendation:baForm.recommendation,thesis:baForm.thesis,conviction:Number(baForm.conviction),...(baForm.target_price?{target_price:Number(baForm.target_price)}:{}),...(baForm.stop_loss?{stop_loss:Number(baForm.stop_loss)}:{}),...(baForm.risk_factors?{risk_factors:baForm.risk_factors}:{}),...(baForm.time_horizon?{time_horizon:baForm.time_horizon as BuyAssessmentInput["time_horizon"]}:{})};
+                if(editingBA){const updated=await api.updateBuyAssessment(editingBA.id,payload);setBuyAssessments(p=>p.map(x=>x.id===editingBA.id?updated:x));}
+                else{const created=await api.createBuyAssessment(payload);setBuyAssessments(p=>[created,...p]);}
+                setShowBAModal(false);setEditingBA(null);
+              }catch(e:any){setBAError(e.message||"Failed to save");}
+              finally{setBASubmitting(false);}
+            }} className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-[15px] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50">{baSubmitting?"Saving...":(editingBA?"Update":"Create")}</button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Post-Mortem Modal */}
+      <Dialog open={showPMModal} onOpenChange={open=>{if(!open){setShowPMModal(false);setEditingPM(null);}}}>
+        <DialogContent className="rounded-3xl max-w-lg">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><BookOpen className="h-5 w-5 text-rose-500"/>{editingPM?"Edit Post-Mortem":"New Post-Mortem"}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Symbol *</label><Input placeholder="NVDA" value={pmForm.symbol} onChange={e=>setPMForm({...pmForm,symbol:e.target.value.toUpperCase()})} className="rounded-xl h-11" disabled={!!editingPM}/></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Entry Price *</label><Input type="number" placeholder="0.00" value={pmForm.entry_price} onChange={e=>setPMForm({...pmForm,entry_price:e.target.value})} className="rounded-xl h-11"/></div>
+              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Exit Price *</label><Input type="number" placeholder="0.00" value={pmForm.exit_price} onChange={e=>setPMForm({...pmForm,exit_price:e.target.value})} className="rounded-xl h-11"/></div>
+            </div>
+            {pmForm.entry_price&&pmForm.exit_price&&Number(pmForm.entry_price)>0&&(
+              <div className="p-3 rounded-xl bg-accent text-[13px]">P&L: <span className={`font-semibold ${((Number(pmForm.exit_price)-Number(pmForm.entry_price))/Number(pmForm.entry_price)*100)>=0?"text-gain":"text-loss"}`}>{((Number(pmForm.exit_price)-Number(pmForm.entry_price))/Number(pmForm.entry_price)*100).toFixed(2)}%</span></div>
+            )}
+            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Notes (lessons learned)</label><textarea rows={4} placeholder="What went wrong, what you'd do differently..." value={pmForm.notes} onChange={e=>setPMForm({...pmForm,notes:e.target.value})} className="w-full rounded-xl bg-accent px-3 py-2.5 text-[14px] resize-none border-0 outline-none focus:ring-2 focus:ring-primary/30"/></div>
+            {pmError&&<p className="text-[13px] text-loss">{pmError}</p>}
+            <button disabled={pmSubmitting} onClick={async()=>{
+              if(!pmForm.symbol.trim()){setPMError("Symbol is required");return;}
+              if(!pmForm.entry_price||!pmForm.exit_price){setPMError("Entry and exit prices are required");return;}
+              setPMError("");setPMSubmitting(true);
+              try{
+                const payload:PostMortemInput={symbol:pmForm.symbol,entry_price:Number(pmForm.entry_price),exit_price:Number(pmForm.exit_price),...(pmForm.notes?{notes:pmForm.notes}:{})};
+                if(editingPM){const updated=await api.updatePostMortem(editingPM.id,payload);setPostMortems(p=>p.map(x=>x.id===editingPM.id?updated:x));}
+                else{const created=await api.createPostMortem(payload);setPostMortems(p=>[created,...p]);}
+                setShowPMModal(false);setEditingPM(null);
+              }catch(e:any){setPMError(e.message||"Failed to save");}
+              finally{setPMSubmitting(false);}
+            }} className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-[15px] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50">{pmSubmitting?"Saving...":(editingPM?"Update":"Create")}</button>
           </div>
         </DialogContent>
       </Dialog>

@@ -3,10 +3,10 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { motion } from "motion/react";
-import { api, PublicPortfolio, StockAnalysisEntry, Trade, PortfolioSnapshot, ValueTimelinePoint, PortfolioAnalysis } from "@/lib/api";
+import { api, PublicPortfolio, StockAnalysisEntry, Trade, PortfolioSnapshot, ValueTimelinePoint, PortfolioAnalysis, PostMortem, BuyAssessment } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar } from "recharts";
-import { TrendingUp, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, History, LineChart, X, ChevronDown, ChevronRight, Archive, Activity } from "lucide-react";
+import { TrendingUp, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, History, LineChart, X, ChevronDown, ChevronRight, Archive, Activity, BookOpen, Target } from "lucide-react";
 
 const COLORS = ["#3b82f6","#f97316","#ef4444","#a855f7","#14b8a6","#f59e0b","#ec4899","#22c55e","#06b6d4","#8b5cf6","#e11d48","#84cc16","#6366f1","#d946ef","#0ea5e9","#fb923c"];
 const RANGES = [{value:"1d",label:"1D"},{value:"5d",label:"1W"},{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
@@ -220,6 +220,10 @@ export default function PublicPortfolioPage(){
   const [tradeChartRange,setTradeChartRange]=useState("1y");
   const [tradeChartLoading,setTradeChartLoading]=useState(false);
   const [timelineRange,setTimelineRange]=useState<"1W"|"1M"|"3M"|"6M"|"1Y"|"ALL">("3M");
+  const [postMortems,setPostMortems]=useState<PostMortem[]>([]);
+  const [buyAssessments,setBuyAssessments]=useState<BuyAssessment[]>([]);
+  const [expandedPMId,setExpandedPMId]=useState<string|null>(null);
+  const [expandedBAId,setExpandedBAId]=useState<string|null>(null);
 
   useEffect(()=>{
     if(!token)return;
@@ -228,6 +232,7 @@ export default function PublicPortfolioPage(){
     api.publicPortfolioHistory(token).then(setHistoryData).catch(()=>{});
     api.publicValueTimeline(token).then(setTimeline).catch(()=>{});
     api.publicEconomyHistory(token).then(setEconomyHistory).catch(()=>{});
+    api.publicJournal(token).then(j=>{setPostMortems(j.post_mortems);setBuyAssessments(j.buy_assessments);}).catch(()=>{});
   },[token]);
 
   // Live ticker polling — fetch fresh prices every 5 seconds and animate changes
@@ -667,6 +672,84 @@ export default function PublicPortfolioPage(){
           </GlassCard>
         </div>);
       })()}
+
+      {/* Buy Assessments (read-only) */}
+      {buyAssessments.length>0&&(
+        <div>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="h-10 w-10 rounded-2xl bg-emerald-100 dark:bg-emerald-500/15 flex items-center justify-center"><Target className="h-5 w-5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.8}/></div>
+            <h2 className="text-lg font-semibold">Buy Assessments</h2>
+            <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{buyAssessments.length}</span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {buyAssessments.map(ba=>{
+              const recColor=ba.recommendation==="buy"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":ba.recommendation==="hold"?"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400":ba.recommendation==="watch"?"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400";
+              const isExpanded=expandedBAId===ba.id;
+              return(
+                <GlassCard key={ba.id} delay={0} className="!p-4 flex flex-col gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-lg font-bold">{ba.symbol}</span>
+                    <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold capitalize ${recColor}`}>{ba.recommendation}</span>
+                    {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground capitalize">{ba.time_horizon}</span>}
+                  </div>
+                  {(ba.target_price||ba.stop_loss)&&(
+                    <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
+                      {ba.target_price&&<span>Target: <span className="text-foreground font-medium">{ba.target_price.toFixed(2)}</span></span>}
+                      {ba.stop_loss&&<span>Stop: <span className="text-foreground font-medium">{ba.stop_loss.toFixed(2)}</span></span>}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1">
+                    {[1,2,3,4,5].map(d=><div key={d} className={`h-2 w-2 rounded-full ${d<=ba.conviction?"bg-primary":"bg-border"}`}/>)}
+                    <span className="text-[11px] text-muted-foreground ml-1">conviction</span>
+                  </div>
+                  <div>
+                    <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-3"}`}>{ba.thesis}</p>
+                    {ba.thesis.length>120&&<button onClick={()=>setExpandedBAId(isExpanded?null:ba.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-auto">{new Date(ba.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
+                </GlassCard>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Post-Mortems (read-only) */}
+      {postMortems.length>0&&(
+        <div>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center"><BookOpen className="h-5 w-5 text-rose-600 dark:text-rose-400" strokeWidth={1.8}/></div>
+            <h2 className="text-lg font-semibold">Post-Mortems</h2>
+            <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{postMortems.length}</span>
+          </div>
+          <div className="space-y-3">
+            {postMortems.map(pm=>{
+              const isPos=pm.pnl_pct>=0;
+              const isExpanded=expandedPMId===pm.id;
+              return(
+                <GlassCard key={pm.id} delay={0} className="!p-4 flex flex-col gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[15px] font-bold">{pm.symbol}</span>
+                    <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold ${isPos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{isPos?"+":""}{pm.pnl_pct.toFixed(2)}%</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                    <span>Entry: <span className="text-foreground font-medium">{pm.entry_price.toFixed(2)}</span></span>
+                    <ArrowUpRight className="h-3.5 w-3.5"/>
+                    <span>Exit: <span className="text-foreground font-medium">{pm.exit_price.toFixed(2)}</span></span>
+                  </div>
+                  {pm.notes&&(
+                    <div>
+                      <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-4"}`}>{pm.notes}</p>
+                      {pm.notes.length>160&&<button onClick={()=>setExpandedPMId(isExpanded?null:pm.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">{new Date(pm.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
+                </GlassCard>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Transaction History */}
       {trades.length>0&&(
