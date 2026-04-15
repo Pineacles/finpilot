@@ -170,6 +170,7 @@ async def get_portfolio(
             "weight_pct": (mv_chf / total_value * 100) if total_value else 0,
             "first_bought": td.get("first_buy"),
             "trade_count": td.get("trades", 0),
+            "earnings_date": p.earnings_date.isoformat() if p.earnings_date else None,
             "sparkline": sparklines.get(p.symbol, []),
         })
 
@@ -255,6 +256,15 @@ async def execute_trade(
     price = body.price or quote["price"]
     total_cost = price * body.quantity + body.fees
 
+    # Convert trade amount to CHF for the cash position (which is always CHF-denominated)
+    CASH_CCY = "CHF"
+    trade_ccy = body.currency.upper()
+    if trade_ccy != CASH_CCY:
+        fx = await get_fx_rate(trade_ccy, CASH_CCY)
+    else:
+        fx = 1.0
+    total_cost_chf = total_cost * fx
+
     # Get or create position
     result = await db.execute(
         select(StockPosition).where(and_(
@@ -265,15 +275,15 @@ async def execute_trade(
     position = result.scalar_one_or_none()
 
     if trade_type == "buy":
-        # Deduct from cash if enabled
+        # Deduct from cash if enabled (cash is CHF-denominated, convert trade amount)
         if body.deduct_from_cash:
             cash = await _get_cash_position(db, user.id, account.id)
-            if cash.quantity < total_cost:
+            if cash.quantity < total_cost_chf:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Insufficient cash: {cash.quantity:.2f} CHF, need {total_cost:.2f}. Deposit cash first or disable deduct_from_cash."
+                    detail=f"Insufficient cash: {cash.quantity:.2f} CHF, need {total_cost_chf:.2f} CHF. Deposit cash first or disable deduct_from_cash."
                 )
-            cash.quantity -= total_cost
+            cash.quantity -= total_cost_chf
 
         if position:
             # Update avg cost: weighted average
@@ -295,10 +305,11 @@ async def execute_trade(
         if not position or position.quantity < body.quantity:
             raise HTTPException(status_code=400, detail=f"Insufficient shares: {position.quantity if position else 0}")
 
-        # Add proceeds to cash
+        # Add proceeds to cash in CHF (convert from trade currency)
         if body.deduct_from_cash:
+            proceeds_chf = ((price * body.quantity) - body.fees) * fx
             cash = await _get_cash_position(db, user.id, account.id)
-            cash.quantity += (price * body.quantity) - body.fees
+            cash.quantity += proceeds_chf
 
         position.quantity -= body.quantity
         if position.quantity <= 0:
@@ -462,10 +473,25 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
 
     # symbol -> {date_str -> close_price}
     price_history: dict[str, dict[str, float]] = {}
+    # symbol -> currency (for FX conversion)
+    symbol_currency: dict[str, str] = {}
     for sym in symbols:
         hist = await get_history(sym, range=yf_range, interval="1d")
         if hist:
             price_history[sym] = {h["date"]: h["close"] for h in hist}
+
+    # Collect unique trade currencies and prefetch FX rates to CHF
+    # (Cash position is always CHF-denominated; stock trades may be in any currency)
+    trade_currencies: set[str] = {t.currency.upper() for t in all_trades if t.symbol != "CASH"}
+    for t in all_trades:
+        if t.symbol != "CASH":
+            symbol_currency[t.symbol] = t.currency.upper()
+    fx_rates: dict[str, float] = {}
+    for ccy in trade_currencies:
+        fx_rates[ccy] = await get_fx_rate(ccy, "CHF")
+
+    def _to_chf(amount: float, ccy: str) -> float:
+        return amount * fx_rates.get(ccy.upper(), 1.0)
 
     # Collect all unique dates from price history
     all_dates: set[str] = set()
@@ -480,10 +506,10 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
 
     sorted_dates = sorted(all_dates)
 
-    # Walk through dates, building cumulative positions
+    # Walk through dates, building cumulative positions (all values in CHF)
     holdings: dict[str, float] = {}  # symbol -> quantity
-    cost_basis: dict[str, float] = {}  # symbol -> total cost
-    cash = 0.0
+    cost_basis: dict[str, float] = {}  # symbol -> total cost in CHF
+    cash = 0.0  # CHF cash balance
     trade_idx = 0
 
     timeline = []
@@ -496,25 +522,32 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
                 break
 
             if t.symbol == "CASH":
+                # CASH deposits/withdrawals are already CHF-denominated
                 if t.type == "deposit":
                     cash += t.quantity
                 elif t.type == "withdraw":
                     cash -= t.quantity
             elif t.type == "buy":
+                trade_ccy = t.currency.upper()
+                cost_native = t.quantity * t.price + t.fees
+                cost_chf = _to_chf(cost_native, trade_ccy)
                 holdings[t.symbol] = holdings.get(t.symbol, 0) + t.quantity
-                cost_basis[t.symbol] = cost_basis.get(t.symbol, 0) + (t.quantity * t.price)
-                cash -= (t.quantity * t.price + t.fees)
+                # Include fees in cost_basis (CHF) so the "cost" line stays flat at net deposits
+                cost_basis[t.symbol] = cost_basis.get(t.symbol, 0) + cost_chf
+                cash -= cost_chf
             elif t.type == "sell":
+                trade_ccy = t.currency.upper()
                 qty = holdings.get(t.symbol, 0)
-                avg_cost = cost_basis.get(t.symbol, 0) / qty if qty > 0 else 0
-                sold_cost = min(t.quantity, qty) * avg_cost
+                avg_cost_chf = cost_basis.get(t.symbol, 0) / qty if qty > 0 else 0
+                sold_cost_chf = min(t.quantity, qty) * avg_cost_chf
+                proceeds_chf = _to_chf(t.quantity * t.price - t.fees, trade_ccy)
                 holdings[t.symbol] = max(0, qty - t.quantity)
-                cost_basis[t.symbol] = max(0, cost_basis.get(t.symbol, 0) - sold_cost)
-                cash += (t.quantity * t.price - t.fees)
+                cost_basis[t.symbol] = max(0, cost_basis.get(t.symbol, 0) - sold_cost_chf)
+                cash += proceeds_chf
 
             trade_idx += 1
 
-        # Calculate portfolio value on this date
+        # Calculate portfolio value on this date (all in CHF)
         total_value = cash
         total_cost = cash  # cash is at-cost
         for sym, qty in holdings.items():
@@ -527,7 +560,10 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
                 # Find the most recent price before this date
                 prev_dates = [pd for pd in sorted(prices.keys()) if pd <= d]
                 price = prices[prev_dates[-1]] if prev_dates else 0
-            total_value += qty * price
+            # Historical price is in stock's native currency; convert to CHF using current FX rate
+            # (Using current FX rate as a simplification — historical FX rates are out of scope)
+            sym_ccy = symbol_currency.get(sym, "USD")
+            total_value += _to_chf(qty * price, sym_ccy)
             total_cost += cost_basis.get(sym, 0)
 
         # Find trades on this date for markers
@@ -793,6 +829,7 @@ async def get_public_portfolio(token: str, db: AsyncSession = Depends(get_db)):
             "weight_pct": (mv_chf / total_value * 100) if total_value else 0,
             "first_bought": td.get("first_buy"),
             "trade_count": td.get("trades", 0),
+            "earnings_date": p.earnings_date.isoformat() if p.earnings_date else None,
             "sparkline": sparklines.get(p.symbol, []),
         })
 
