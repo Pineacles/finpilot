@@ -508,8 +508,8 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
 
     # Walk through dates, building cumulative positions (all values in CHF)
     holdings: dict[str, float] = {}  # symbol -> quantity
-    cost_basis: dict[str, float] = {}  # symbol -> total cost in CHF
     cash = 0.0  # CHF cash balance
+    net_deposits = 0.0  # cumulative deposits minus withdrawals (CHF)
     trade_idx = 0
 
     timeline = []
@@ -525,31 +525,25 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
                 # CASH deposits/withdrawals are already CHF-denominated
                 if t.type == "deposit":
                     cash += t.quantity
+                    net_deposits += t.quantity
                 elif t.type == "withdraw":
                     cash -= t.quantity
+                    net_deposits -= t.quantity
             elif t.type == "buy":
                 trade_ccy = t.currency.upper()
-                cost_native = t.quantity * t.price + t.fees
-                cost_chf = _to_chf(cost_native, trade_ccy)
+                cost_chf = _to_chf(t.quantity * t.price + t.fees, trade_ccy)
                 holdings[t.symbol] = holdings.get(t.symbol, 0) + t.quantity
-                # Include fees in cost_basis (CHF) so the "cost" line stays flat at net deposits
-                cost_basis[t.symbol] = cost_basis.get(t.symbol, 0) + cost_chf
                 cash -= cost_chf
             elif t.type == "sell":
                 trade_ccy = t.currency.upper()
-                qty = holdings.get(t.symbol, 0)
-                avg_cost_chf = cost_basis.get(t.symbol, 0) / qty if qty > 0 else 0
-                sold_cost_chf = min(t.quantity, qty) * avg_cost_chf
                 proceeds_chf = _to_chf(t.quantity * t.price - t.fees, trade_ccy)
-                holdings[t.symbol] = max(0, qty - t.quantity)
-                cost_basis[t.symbol] = max(0, cost_basis.get(t.symbol, 0) - sold_cost_chf)
+                holdings[t.symbol] = max(0, holdings.get(t.symbol, 0) - t.quantity)
                 cash += proceeds_chf
 
             trade_idx += 1
 
         # Calculate portfolio value on this date (all in CHF)
         total_value = cash
-        total_cost = cash  # cash is at-cost
         for sym, qty in holdings.items():
             if qty <= 0:
                 continue
@@ -564,7 +558,6 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
             # (Using current FX rate as a simplification — historical FX rates are out of scope)
             sym_ccy = symbol_currency.get(sym, "USD")
             total_value += _to_chf(qty * price, sym_ccy)
-            total_cost += cost_basis.get(sym, 0)
 
         # Find trades on this date for markers
         day_trades = [
@@ -576,8 +569,8 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
         timeline.append({
             "date": d,
             "value": round(total_value, 2),
-            "cost": round(total_cost, 2),
-            "pnl": round(total_value - total_cost, 2),
+            "cost": round(net_deposits, 2),
+            "pnl": round(total_value - net_deposits, 2),
             "trades": day_trades if day_trades else None,
         })
 
