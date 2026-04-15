@@ -1165,6 +1165,75 @@ async def portfolio_black_swan(
     return await compute_black_swan(pos_data, total_value, lookback_days=lookback_days)
 
 
+# ── Risk: PCA Factor Model ───────────────────────────────────────
+
+@router.get("/risk/pca")
+async def portfolio_pca(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """PCA factor decomposition of portfolio returns.
+
+    Runs sklearn PCA (n_components=5) on 252d daily returns for all holdings.
+    Returns factor loadings, variance explained, and concentration risk.
+    Cached 1 hour. Holdings with <30d history are dropped gracefully.
+    """
+    from app.services.quant_risk import compute_pca
+
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+    if not positions:
+        return {"error": "no_positions"}
+
+    pos_data = [{"symbol": p.symbol} for p in positions]
+    return await compute_pca(pos_data)
+
+
+# ── Pairs: Cointegration Analysis ────────────────────────────────
+
+pairs_router = APIRouter(prefix="/api/dashboard/pairs", tags=["pairs"])
+
+
+@pairs_router.get("/cointegration")
+async def pairs_cointegration(
+    symbols: str | None = None,
+    user: User = Depends(get_current_user),
+):
+    """Engle-Granger cointegration pairs analysis.
+
+    Default universe: SMI top 10 names. Pass ?symbols=A,B,C to override.
+    Returns pairs with p-value < 0.05, sorted by |spread_zscore| descending.
+    Includes OR half-life, hedge ratio, and trading signal.
+    Cached 1 hour.
+    """
+    from app.services.quant_risk import compute_cointegration
+
+    sym_list = [s.strip() for s in symbols.split(",")] if symbols else None
+    return await compute_cointegration(sym_list)
+
+
+@pairs_router.get("/cointegration/spread")
+async def pairs_spread_history(
+    a: str,
+    b: str,
+    hedge_ratio: float,
+    days: int = 90,
+    user: User = Depends(get_current_user),
+):
+    """Return spread history for a cointegrated pair (for chart rendering).
+
+    Returns list of {date, spread, upper (mu+2σ), lower (mu-2σ)}.
+    """
+    from app.services.quant_risk import get_spread_history
+    return await get_spread_history(a.upper(), b.upper(), hedge_ratio, days)
+
+
 # ── Macro: Regime detection (separate router) ────────────────────
 
 macro_router = APIRouter(prefix="/api/macro", tags=["macro"])
