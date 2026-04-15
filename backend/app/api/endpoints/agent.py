@@ -1477,47 +1477,6 @@ async def agent_portfolio_pca(
     return await compute_pca(pos_data)
 
 
-# ── Phase 3: News Sentiment (FinBERT) ───────────────────────────
-
-@router.get("/portfolio/sentiment/{symbol}")
-async def agent_sentiment(
-    symbol: str,
-    days: int = 7,
-    user: User = Depends(get_user_by_api_key),
-):
-    """FinBERT news sentiment for a single symbol (agent, X-API-Key)."""
-    from app.services.sentiment import analyze_symbol_sentiment
-    return await analyze_symbol_sentiment(symbol.upper(), days)
-
-
-@router.get("/portfolio/sentiment-batch")
-async def agent_sentiment_batch(
-    symbols: str,
-    days: int = 7,
-    user: User = Depends(get_user_by_api_key),
-):
-    """FinBERT news sentiment for multiple symbols (agent, X-API-Key). ?symbols=AAPL,NVDA"""
-    from app.services.sentiment import analyze_symbol_sentiment
-
-    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
-    if not sym_list:
-        return {"results": {}, "errors": {}}
-
-    results: dict = {}
-    errors: dict = {}
-    for sym in sym_list:
-        try:
-            r = await analyze_symbol_sentiment(sym, days)
-            if "error" in r:
-                errors[sym] = r["error"]
-            else:
-                results[sym] = r
-        except Exception as exc:
-            errors[sym] = str(exc)
-
-    return {"results": results, "errors": errors}
-
-
 @router.get("/pairs/cointegration")
 async def agent_pairs_cointegration(
     symbols: str | None = None,
