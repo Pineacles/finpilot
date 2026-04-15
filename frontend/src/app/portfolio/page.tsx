@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { motion } from "motion/react";
-import { api, PortfolioSummary, PortfolioAnalysis, StockAnalysisEntry, Trade, ValueTimelinePoint, CVaRResult, KellyResult, PCAResult, CointegrationResult, CointPair, SpreadPoint } from "@/lib/api";
+import { api, PortfolioSummary, PortfolioAnalysis, StockAnalysisEntry, Trade, ValueTimelinePoint, CVaRResult, SentimentResult, SentimentHeadline } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar, LineChart as ReLineChart } from "recharts";
-import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, Activity } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar } from "recharts";
+import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, Activity } from "lucide-react";
 
 const COLORS = ["#3b82f6","#f97316","#ef4444","#a855f7","#14b8a6","#f59e0b","#ec4899","#22c55e","#06b6d4","#8b5cf6","#e11d48","#84cc16","#6366f1","#d946ef","#0ea5e9","#fb923c"];
 const RANGES = [{value:"1d",label:"1D"},{value:"5d",label:"1W"},{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
@@ -84,6 +84,40 @@ function EconomyDetail({c}:{c:PortfolioAnalysis["content"]}){
   );
 }
 
+function SentimentDot({tone}:{tone:number|undefined}){
+  if(tone===undefined)return null;
+  const cls=tone>0.2?"bg-emerald-500":tone<-0.2?"bg-rose-500":"bg-slate-400";
+  const label=tone>0?"+"+""+tone.toFixed(2):""+tone.toFixed(2);
+  return <span className={`inline-block w-2 h-2 rounded-full ${cls} shrink-0`} title={`Tone: ${label}`}/>;
+}
+function SentimentInline({sym,data,onClick}:{sym:string;data:Record<string,import("@/lib/api").SentimentResult>;onClick:(s:string)=>void}){
+  const s=data[sym];
+  if(!s||s.error||s.news_count===0)return null;
+  const tone=s.mean_tone??0;
+  const toneStr=tone>=0?"+"+tone.toFixed(2):""+tone.toFixed(2);
+  const dotCls=tone>0.2?"bg-emerald-500":tone<-0.2?"bg-rose-500":"bg-slate-400";
+  const textCls=tone>0.2?"text-emerald-600 dark:text-emerald-400":tone<-0.2?"text-rose-600 dark:text-rose-400":"text-muted-foreground";
+  // Tiny sparkline from daily
+  const daily=s.daily??[];
+  const sparkPts=daily.map(d=>d.mean_polarity);
+  const sparkPositive=tone>=0;
+  return(
+    <button
+      className="flex items-center gap-1.5 px-2 py-1 rounded-xl hover:bg-accent/80 transition-colors shrink-0 cursor-pointer"
+      onClick={e=>{e.stopPropagation();onClick(sym);}}
+      title={`News sentiment: ${toneStr} (${s.news_count} news)`}
+    >
+      <span className={`w-2 h-2 rounded-full shrink-0 ${dotCls}`}/>
+      <span className={`text-[11px] font-medium tabular-nums ${textCls}`}>{toneStr}</span>
+      <span className="text-[10px] text-muted-foreground">{s.news_count}</span>
+      {sparkPts.length>=2&&(()=>{
+        const h=20,w=40,min=Math.min(...sparkPts),max=Math.max(...sparkPts),range=max-min||0.01;
+        const pts=sparkPts.map((v,i)=>`${(i/(sparkPts.length-1))*w},${h-((v-min)/range)*h}`).join(" ");
+        return <svg width={w} height={h} className="shrink-0 hidden md:block"><polyline fill="none" stroke={sparkPositive?"#22c55e":"#ef4444"} strokeWidth="1.5" points={pts}/></svg>;
+      })()}
+    </button>
+  );
+}
 function AnimatedNumber({value,format}:{value:number;format:(n:number)=>string}){
   const [display,setDisplay]=useState(value);
   const startRef=useRef(value);
@@ -235,61 +269,15 @@ export default function PortfolioPage(){
   const [timelineRange,setTimelineRange]=useState<"1W"|"1M"|"3M"|"6M"|"1Y"|"ALL">("3M");
   const [cvarData,setCvarData]=useState<CVaRResult|null>(null);
   const [cvarLoading,setCvarLoading]=useState(false);
-  const [kellyData,setKellyData]=useState<KellyResult|null>(null);
-  const [kellyLoading,setKellyLoading]=useState(false);
-  const [kellyForm,setKellyForm]=useState({symbol:"",expectedReturn:"15",conviction:"0.7"});
-  const [kellyError,setKellyError]=useState("");
 
-  // PCA state
-  const [pcaData,setPcaData]=useState<PCAResult|null>(null);
-  const [pcaLoading,setPcaLoading]=useState(false);
-  const [pcaExpanded,setPcaExpanded]=useState<number|null>(null);
-
-  // Cointegration state
-  const [pairsData,setPairsData]=useState<CointegrationResult|null>(null);
-  const [pairsLoading,setPairsLoading]=useState(false);
-  const [pairsSymbols,setPairsSymbols]=useState("");
-  const [expandedPair,setExpandedPair]=useState<string|null>(null);
-  const [spreadHistory,setSpreadHistory]=useState<Record<string,SpreadPoint[]>>({});
-  const [spreadLoading,setSpreadLoading]=useState<string|null>(null);
+  // Phase 3: News Sentiment
+  const [sentimentData,setSentimentData]=useState<Record<string,SentimentResult>>({});
+  const [sentimentSymbol,setSentimentSymbol]=useState<string|null>(null);
 
   const fetchCvar=useCallback(()=>{
     setCvarLoading(true);
     api.cvar().then(setCvarData).catch(()=>{}).finally(()=>setCvarLoading(false));
   },[]);
-
-  const handleKelly=useCallback(async()=>{
-    if(!kellyForm.symbol)return;
-    setKellyLoading(true);setKellyError("");setKellyData(null);
-    try{
-      const r=await api.kelly(kellyForm.symbol,parseFloat(kellyForm.expectedReturn)||15,parseFloat(kellyForm.conviction)||0.7);
-      setKellyData(r);
-    }catch(e){setKellyError(e instanceof Error?e.message:"Failed");}
-    finally{setKellyLoading(false);}
-  },[kellyForm]);
-
-  const fetchPca=useCallback(()=>{
-    setPcaLoading(true);
-    api.pca().then(setPcaData).catch(()=>{}).finally(()=>setPcaLoading(false));
-  },[]);
-
-  const fetchPairs=useCallback(()=>{
-    setPairsLoading(true);
-    api.cointegrationPairs(pairsSymbols||undefined).then(setPairsData).catch(()=>{}).finally(()=>setPairsLoading(false));
-  },[pairsSymbols]);
-
-  const togglePairExpand=useCallback(async(pair:CointPair)=>{
-    const key=`${pair.a}/${pair.b}`;
-    if(expandedPair===key){setExpandedPair(null);return;}
-    setExpandedPair(key);
-    if(!spreadHistory[key]){
-      setSpreadLoading(key);
-      try{
-        const hist=await api.spreadHistory(pair.a,pair.b,pair.hedge_ratio,90);
-        setSpreadHistory(prev=>({...prev,[key]:hist}));
-      }catch{} finally{setSpreadLoading(null);}
-    }
-  },[expandedPair,spreadHistory]);
 
   const load=useCallback(()=>{
     setLoading(true);
@@ -306,7 +294,21 @@ export default function PortfolioPage(){
     }).finally(()=>setLoading(false));
   },[]);
   useEffect(()=>{load();api.publicPortfolioStatus().then(s=>{setPublicEnabled(s.enabled);setPublicToken(s.token);}).catch(()=>{});},[load]);
+
+  // Load sentiment after positions are available
+  useEffect(()=>{
+    if(!p?.positions?.length)return;
+    const symbols=p.positions.filter(pos=>pos.symbol!=="CASH").map(pos=>pos.symbol);
+    if(!symbols.length)return;
+    api.sentimentBatch(symbols,7).then(batch=>{
+      const merged:Record<string,SentimentResult>={};
+      Object.entries(batch.results).forEach(([sym,r])=>{merged[sym]=r;});
+      Object.entries(batch.errors).forEach(([sym,err])=>{merged[sym]={symbol:sym,news_count:0,error:err};});
+      setSentimentData(merged);
+    }).catch(()=>{});
+  },[p?.positions?.length]);
   useEffect(()=>{const i=setInterval(load,120000);return()=>clearInterval(i);},[load]);
+  useEffect(()=>{fetchCvar();},[fetchCvar]);
   useEffect(()=>{
     // Recompute edge states when content changes
     const t=setTimeout(()=>{stockDeck.updateEdges();pastDeck.updateEdges();},50);
@@ -495,6 +497,7 @@ export default function PortfolioPage(){
                     <p className="text-[11px] text-muted-foreground tabular-nums">cost {pos.avg_cost_price.toFixed(2)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {pos.symbol!=="CASH"&&<SentimentInline sym={pos.symbol} data={sentimentData} onClick={setSentimentSymbol}/>}
                     <div className="text-right hidden sm:block">
                       <p className="text-[15px] font-semibold tabular-nums">{formatCurrency(pos.market_value)}</p>
                       <p className={`text-[13px] font-semibold tabular-nums ${livePnlPct>=0?"text-gain":"text-loss"}`}>{livePnlPct>=0?"+":""}{livePnlPct.toFixed(1)}%</p>
@@ -836,229 +839,40 @@ export default function PortfolioPage(){
         )}
       </div>
 
-      {/* Risk Metrics: CVaR + Kelly */}
-      <div className="grid gap-5 md:grid-cols-2">
-        {/* CVaR Card */}
-        <GlassCard delay={0.5}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center"><Activity className="h-5 w-5 text-rose-600 dark:text-rose-400" strokeWidth={1.8}/></div>
-              <div><p className="text-[13px] font-medium text-muted-foreground">CVaR / Expected Shortfall</p><p className="text-[11px] text-muted-foreground">1-year lookback · historical simulation</p></div>
-            </div>
-            <button onClick={fetchCvar} disabled={cvarLoading} className="h-8 w-8 rounded-xl bg-accent flex items-center justify-center hover:bg-muted transition-colors cursor-pointer disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${cvarLoading?"animate-spin":""}`}/></button>
-          </div>
-          {cvarData===null&&!cvarLoading&&(
-            <div className="text-center py-6"><p className="text-[13px] text-muted-foreground mb-3">Compute tail-risk metrics for your portfolio</p><button onClick={fetchCvar} className="h-9 px-5 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:brightness-110 transition-all cursor-pointer">Compute CVaR</button></div>
-          )}
-          {cvarLoading&&<div className="flex items-center justify-center py-8 text-muted-foreground text-[13px]">Computing...</div>}
-          {cvarData&&!cvarLoading&&(
-            cvarData.error?<p className="text-[13px] text-loss py-4">{cvarData.error==="no_positions"?"No positions to analyze.":"Insufficient price history."}</p>:(
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">CVaR 95%</p>
-                  <p className="text-lg font-bold tabular-nums text-loss">{formatCurrency(cvarData.cvar_95)}</p>
-                  <p className="text-[11px] text-muted-foreground">{cvarData.cvar_95_pct.toFixed(2)}% of portfolio</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">CVaR 99%</p>
-                  <p className="text-lg font-bold tabular-nums text-loss">{formatCurrency(cvarData.cvar_99)}</p>
-                  <p className="text-[11px] text-muted-foreground">{cvarData.cvar_99_pct.toFixed(2)}% of portfolio</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-accent">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">VaR 95%</p>
-                  <p className="text-base font-semibold tabular-nums text-loss">{formatCurrency(cvarData.var_95)}</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-accent">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">VaR 99%</p>
-                  <p className="text-base font-semibold tabular-nums text-loss">{formatCurrency(cvarData.var_99)}</p>
-                </div>
-              </div>
-              <p className="text-[11px] text-muted-foreground">{cvarData.sample_size} trading days · portfolio {formatCurrency(cvarData.total_portfolio_chf)}</p>
-            </div>)
-          )}
-        </GlassCard>
-
-        {/* Half-Kelly Card */}
-        <GlassCard delay={0.55}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-2xl bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center"><Zap className="h-5 w-5 text-violet-600 dark:text-violet-400" strokeWidth={1.8}/></div>
-            <div><p className="text-[13px] font-medium text-muted-foreground">Half-Kelly Position Sizer</p><p className="text-[11px] text-muted-foreground">optimal bet fraction · max 20% of portfolio</p></div>
-          </div>
-          <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2">
-              <div><label className="text-[11px] text-muted-foreground block mb-1">Ticker</label><input value={kellyForm.symbol} onChange={e=>setKellyForm({...kellyForm,symbol:e.target.value.toUpperCase()})} placeholder="NVDA" className="w-full h-9 rounded-xl bg-accent px-3 text-[13px] outline-none focus:ring-2 focus:ring-primary/40 uppercase"/></div>
-              <div><label className="text-[11px] text-muted-foreground block mb-1">Exp. Return %</label><input type="number" value={kellyForm.expectedReturn} onChange={e=>setKellyForm({...kellyForm,expectedReturn:e.target.value})} className="w-full h-9 rounded-xl bg-accent px-3 text-[13px] outline-none focus:ring-2 focus:ring-primary/40"/></div>
-              <div><label className="text-[11px] text-muted-foreground block mb-1">Conviction 0–1</label><input type="number" step="0.1" min="0" max="1" value={kellyForm.conviction} onChange={e=>setKellyForm({...kellyForm,conviction:e.target.value})} className="w-full h-9 rounded-xl bg-accent px-3 text-[13px] outline-none focus:ring-2 focus:ring-primary/40"/></div>
-            </div>
-            <button onClick={handleKelly} disabled={kellyLoading||!kellyForm.symbol} className="w-full h-9 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:brightness-110 transition-all cursor-pointer disabled:opacity-50">{kellyLoading?"Computing...":"Calculate"}</button>
-            {kellyError&&<p className="text-[12px] text-loss">{kellyError}</p>}
-            {kellyData&&!kellyLoading&&(
-              kellyData.error?<p className="text-[13px] text-loss">{kellyData.error==="insufficient_history"?`Insufficient history (${kellyData.available_days} days available)`:`Error: ${kellyData.error}`}</p>:(
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <div className="p-3 rounded-2xl bg-violet-50 dark:bg-violet-500/10">
-                  <p className="text-[11px] text-muted-foreground mb-1">Half-Kelly fraction</p>
-                  <p className="text-lg font-bold tabular-nums">{(kellyData.half_kelly_fraction*100).toFixed(2)}%</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-violet-50 dark:bg-violet-500/10">
-                  <p className="text-[11px] text-muted-foreground mb-1">Suggested size</p>
-                  <p className="text-lg font-bold tabular-nums">{formatCurrency(kellyData.suggested_chf)}</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-accent">
-                  <p className="text-[11px] text-muted-foreground mb-1">Est. shares</p>
-                  <p className="text-base font-semibold tabular-nums">{kellyData.suggested_shares}</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-accent">
-                  <p className="text-[11px] text-muted-foreground mb-1">60d vol (ann.)</p>
-                  <p className="text-base font-semibold tabular-nums">{kellyData.volatility_60d.toFixed(1)}%</p>
-                </div>
-              </div>)
-            )}
-          </div>
-        </GlassCard>
-      </div>
-
-      {/* PCA Factor Model */}
-      <GlassCard delay={0.6}>
+      {/* Risk Metrics: CVaR */}
+      <GlassCard delay={0.5}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-sky-100 dark:bg-sky-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-sky-600 dark:text-sky-400" strokeWidth={1.8}/></div>
-            <div><p className="text-[13px] font-medium text-muted-foreground">PCA Factor Exposure</p><p className="text-[11px] text-muted-foreground">252d returns · top 5 principal components</p></div>
+            <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center"><Activity className="h-5 w-5 text-rose-600 dark:text-rose-400" strokeWidth={1.8}/></div>
+            <div><p className="text-[13px] font-medium text-muted-foreground">CVaR / Expected Shortfall</p><p className="text-[11px] text-muted-foreground">1-year lookback · historical simulation</p></div>
           </div>
-          <button onClick={fetchPca} disabled={pcaLoading} className="h-8 w-8 rounded-xl bg-accent flex items-center justify-center hover:bg-muted transition-colors cursor-pointer disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${pcaLoading?"animate-spin":""}`}/></button>
+          <button onClick={fetchCvar} disabled={cvarLoading} className="h-8 w-8 rounded-xl bg-accent flex items-center justify-center hover:bg-muted transition-colors cursor-pointer disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${cvarLoading?"animate-spin":""}`}/></button>
         </div>
-        {pcaData===null&&!pcaLoading&&(
-          <div className="text-center py-6"><p className="text-[13px] text-muted-foreground mb-3">Decompose portfolio into principal risk factors</p><button onClick={fetchPca} className="h-9 px-5 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:brightness-110 transition-all cursor-pointer">Run PCA</button></div>
-        )}
-        {pcaLoading&&<div className="flex items-center justify-center py-8 text-muted-foreground text-[13px]">Computing PCA...</div>}
-        {pcaData&&!pcaLoading&&(
-          pcaData.error?<p className="text-[13px] text-loss py-4">{pcaData.error==="insufficient_holdings"?"Need at least 2 holdings with sufficient history.":pcaData.error==="no_positions"?"No positions found.":pcaData.error}</p>:(
+        {cvarLoading&&<div className="flex items-center justify-center py-8 text-muted-foreground text-[13px]">Computing...</div>}
+        {cvarData&&!cvarLoading&&(
+          cvarData.error?<p className="text-[13px] text-loss py-4">{cvarData.error==="no_positions"?"No positions to analyze.":"Insufficient price history."}</p>:(
           <div className="space-y-3">
-            {pcaData.concentration_risk&&(
-              <div className="grid grid-cols-2 gap-3 mb-2">
-                <div className="p-3 rounded-2xl bg-sky-50 dark:bg-sky-500/10">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Top Factor</p>
-                  <p className="text-lg font-bold tabular-nums">{pcaData.concentration_risk.top_factor_pct.toFixed(1)}%</p>
-                  <p className="text-[11px] text-muted-foreground">of variance</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-sky-50 dark:bg-sky-500/10">
-                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Total ({pcaData.factors?.length} PCs)</p>
-                  <p className="text-lg font-bold tabular-nums">{pcaData.total_variance_explained_pct?.toFixed(1)}%</p>
-                  <p className="text-[11px] text-muted-foreground">HHI {pcaData.concentration_risk.herfindahl_index.toFixed(3)}</p>
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">CVaR 95%</p>
+                <p className="text-lg font-bold tabular-nums text-loss">{formatCurrency(cvarData.cvar_95)}</p>
+                <p className="text-[11px] text-muted-foreground">{cvarData.cvar_95_pct.toFixed(2)}% of portfolio</p>
               </div>
-            )}
-            <div className="space-y-2">
-              {pcaData.factors?.slice(0,3).map(f=>(
-                <div key={f.idx} className="rounded-2xl bg-accent/60 overflow-hidden">
-                  <button onClick={()=>setPcaExpanded(pcaExpanded===f.idx?null:f.idx)} className="w-full flex items-center gap-3 p-3 hover:bg-accent transition-colors cursor-pointer">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[12px] font-medium">PC{f.idx+1}{f.interpretation?` — ${f.interpretation}`:""}</span>
-                        <span className="text-[12px] font-bold tabular-nums">{f.variance_explained_pct.toFixed(1)}%</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-border overflow-hidden">
-                        <div className="h-full rounded-full bg-sky-500 transition-all" style={{width:`${Math.min(f.variance_explained_pct,100)}%`}}/>
-                      </div>
-                    </div>
-                    {pcaExpanded===f.idx?<ChevronDown className="h-4 w-4 text-muted-foreground shrink-0"/>:<ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/>}
-                  </button>
-                  {pcaExpanded===f.idx&&(
-                    <div className="px-3 pb-3 space-y-1">
-                      {f.loadings.slice(0,5).map(l=>(
-                        <div key={l.symbol} className="flex items-center gap-2">
-                          <span className="text-[11px] font-mono w-20 shrink-0">{l.symbol}</span>
-                          <div className="flex-1 h-1.5 rounded-full bg-border overflow-hidden">
-                            <div className="h-full rounded-full transition-all" style={{width:`${Math.min(Math.abs(l.loading)*100,100)}%`,background:l.loading>=0?"#3b82f6":"#ef4444",marginLeft:l.loading<0?`${(1-Math.abs(l.loading))*100}%`:undefined}}/>
-                          </div>
-                          <span className={`text-[11px] tabular-nums w-12 text-right ${l.loading>=0?"text-blue-600":"text-rose-500"}`}>{l.loading>=0?"+":""}{l.loading.toFixed(3)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">CVaR 99%</p>
+                <p className="text-lg font-bold tabular-nums text-loss">{formatCurrency(cvarData.cvar_99)}</p>
+                <p className="text-[11px] text-muted-foreground">{cvarData.cvar_99_pct.toFixed(2)}% of portfolio</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-accent">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">VaR 95%</p>
+                <p className="text-base font-semibold tabular-nums text-loss">{formatCurrency(cvarData.var_95)}</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-accent">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">VaR 99%</p>
+                <p className="text-base font-semibold tabular-nums text-loss">{formatCurrency(cvarData.var_99)}</p>
+              </div>
             </div>
-            <p className="text-[11px] text-muted-foreground">{pcaData.sample_size} trading days · {pcaData.holdings_used?.length} holdings</p>
-          </div>)
-        )}
-      </GlassCard>
-
-      {/* Cointegration Pairs */}
-      <GlassCard delay={0.65}>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-teal-100 dark:bg-teal-500/15 flex items-center justify-center"><Link2 className="h-5 w-5 text-teal-600 dark:text-teal-400" strokeWidth={1.8}/></div>
-            <div><p className="text-[13px] font-medium text-muted-foreground">Cointegration Pairs</p><p className="text-[11px] text-muted-foreground">Engle-Granger · SMI universe · p &lt; 0.05</p></div>
-          </div>
-          <button onClick={fetchPairs} disabled={pairsLoading} className="h-8 w-8 rounded-xl bg-accent flex items-center justify-center hover:bg-muted transition-colors cursor-pointer disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${pairsLoading?"animate-spin":""}`}/></button>
-        </div>
-        <div className="flex gap-2 mb-3">
-          <input value={pairsSymbols} onChange={e=>setPairsSymbols(e.target.value)} placeholder="Custom symbols: NESN.SW,ROG.SW,... (leave blank for SMI top 10)" className="flex-1 h-8 rounded-xl bg-accent px-3 text-[12px] outline-none focus:ring-2 focus:ring-primary/40"/>
-          <button onClick={fetchPairs} disabled={pairsLoading} className="h-8 px-4 rounded-xl bg-primary text-primary-foreground text-[12px] font-medium hover:brightness-110 transition-all cursor-pointer disabled:opacity-50">{pairsLoading?"Running...":"Scan"}</button>
-        </div>
-        {pairsData===null&&!pairsLoading&&(
-          <div className="text-center py-4"><p className="text-[13px] text-muted-foreground">Click Scan to find cointegrated pairs in the SMI universe</p></div>
-        )}
-        {pairsLoading&&<div className="flex items-center justify-center py-8 text-muted-foreground text-[13px]">Running Engle-Granger tests...</div>}
-        {pairsData&&!pairsLoading&&(
-          pairsData.pairs.length===0?(
-            <p className="text-[13px] text-muted-foreground py-4 text-center">No cointegrated pairs found (p &lt; 0.05) in this universe.</p>
-          ):(
-          <div className="space-y-2">
-            <div className="grid grid-cols-[1fr_80px_100px_80px_90px] gap-2 px-2 text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
-              <span>Pair</span><span className="text-right">p-value</span><span className="text-right">Z-score</span><span className="text-right">Half-life</span><span className="text-right">Signal</span>
-            </div>
-            {pairsData.pairs.map(pair=>{
-              const key=`${pair.a}/${pair.b}`;
-              const isExpanded=expandedPair===key;
-              const absZ=Math.abs(pair.spread_zscore);
-              const zColor=absZ>2?"text-rose-500 font-bold":absZ>1?"text-amber-500 font-semibold":"text-foreground";
-              const sigColor=pair.signal==="neutral"?"text-muted-foreground":pair.signal==="long_a_short_b"?"text-emerald-600 dark:text-emerald-400":"text-rose-500";
-              const sigLabel=pair.signal==="neutral"?"—":pair.signal==="long_a_short_b"?`L ${pair.a}`:`L ${pair.b}`;
-              return(
-                <div key={key} className="rounded-2xl bg-accent/50 overflow-hidden">
-                  <button onClick={()=>togglePairExpand(pair)} className="w-full grid grid-cols-[1fr_80px_100px_80px_90px] gap-2 px-2 py-2.5 hover:bg-accent transition-colors cursor-pointer items-center">
-                    <span className="text-[12px] font-medium text-left">{pair.a} / {pair.b}</span>
-                    <span className="text-[12px] tabular-nums text-right text-muted-foreground">{pair.p_value.toFixed(4)}</span>
-                    <div className="flex items-center justify-end gap-1">
-                      <div className="h-1.5 w-12 rounded-full bg-border overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{width:`${Math.min(absZ/3*100,100)}%`,background:absZ>2?"#ef4444":absZ>1?"#f59e0b":"#3b82f6"}}/>
-                      </div>
-                      <span className={`text-[12px] tabular-nums w-10 text-right ${zColor}`}>{pair.spread_zscore.toFixed(2)}</span>
-                    </div>
-                    <span className="text-[12px] tabular-nums text-right text-muted-foreground">{pair.half_life_days!=null?`${pair.half_life_days}d`:"—"}</span>
-                    <span className={`text-[11px] font-medium text-right truncate ${sigColor}`}>{sigLabel}</span>
-                  </button>
-                  {isExpanded&&(
-                    <div className="px-3 pb-3 space-y-2">
-                      <div className="flex gap-4 text-[11px] text-muted-foreground">
-                        <span>Hedge ratio: <b className="text-foreground">{pair.hedge_ratio.toFixed(4)}</b></span>
-                        <span>252d corr: <b className="text-foreground">{pair.last_252d_corr.toFixed(3)}</b></span>
-                        <span>Spread: <b className="text-foreground">{pair.current_spread.toFixed(4)}</b></span>
-                      </div>
-                      {spreadLoading===key&&<div className="text-[12px] text-muted-foreground py-2">Loading spread chart...</div>}
-                      {spreadHistory[key]&&spreadHistory[key].length>0&&(
-                        <div className="h-40">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <ReLineChart data={spreadHistory[key]}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/>
-                              <XAxis dataKey="date" tick={{fontSize:9}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/>
-                              <YAxis tick={{fontSize:9}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/>
-                              <Tooltip formatter={(v:unknown)=>typeof v==="number"?v.toFixed(5):String(v)} labelFormatter={(d:unknown)=>String(d)}/>
-                              <ReferenceLine y={spreadHistory[key][0]?.upper} stroke="#ef4444" strokeDasharray="4 2" label={{value:"+2σ",fill:"#ef4444",fontSize:9}}/>
-                              <ReferenceLine y={spreadHistory[key][0]?.lower} stroke="#ef4444" strokeDasharray="4 2" label={{value:"-2σ",fill:"#ef4444",fontSize:9}}/>
-                              <Line type="monotone" dataKey="spread" stroke="#14b8a6" strokeWidth={1.5} dot={false}/>
-                            </ReLineChart>
-                          </ResponsiveContainer>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            <p className="text-[11px] text-muted-foreground pt-1">{pairsData.pairs.length} cointegrated pairs · universe: {pairsData.universe.length} symbols · {pairsData.sample_size}d lookback</p>
+            <p className="text-[11px] text-muted-foreground">{cvarData.sample_size} trading days · portfolio {formatCurrency(cvarData.total_portfolio_chf)}</p>
           </div>)
         )}
       </GlassCard>
@@ -1072,6 +886,40 @@ export default function PortfolioPage(){
             {tradeChartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:tradeChartData.length===0?<p className="text-sm text-muted-foreground text-center py-8">No data available</p>:(
               <ResponsiveContainer width="100%" height="100%"><AreaChart data={tradeChartData}><defs><linearGradient id="sg-trade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg-trade)"/></AreaChart></ResponsiveContainer>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sentiment Headlines Dialog */}
+      <Dialog open={sentimentSymbol!==null} onOpenChange={open=>{if(!open)setSentimentSymbol(null);}}>
+        <DialogContent className="rounded-3xl max-w-2xl max-h-[80vh] overflow-hidden p-0 flex flex-col">
+          <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary"/>
+              {sentimentSymbol} — News Sentiment
+              {sentimentSymbol&&sentimentData[sentimentSymbol]&&!sentimentData[sentimentSymbol].error&&(
+                <span className={`ml-auto text-[14px] font-bold tabular-nums ${(sentimentData[sentimentSymbol].mean_tone??0)>=0?"text-emerald-600 dark:text-emerald-400":"text-rose-600 dark:text-rose-400"}`}>
+                  {(sentimentData[sentimentSymbol].mean_tone??0)>=0?"+":""}{(sentimentData[sentimentSymbol].mean_tone??0).toFixed(3)}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto px-6 pb-6 space-y-2">
+            {sentimentSymbol&&sentimentData[sentimentSymbol]?.headlines?.map((h,i)=>{
+              const pol=h.polarity;
+              const dotCls=pol>0.2?"bg-emerald-500":pol<-0.2?"bg-rose-500":"bg-slate-400";
+              return(
+                <div key={i} className="flex items-start gap-3 p-3 rounded-2xl bg-accent/60 hover:bg-accent transition-colors">
+                  <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${dotCls}`}/>
+                  <div className="flex-1 min-w-0">
+                    {h.link?<a href={h.link} target="_blank" rel="noopener noreferrer" className="text-[13px] font-medium leading-[1.5] hover:underline text-foreground">{h.title}</a>:<p className="text-[13px] font-medium leading-[1.5]">{h.title}</p>}
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{h.source}{h.published_at&&<> · {new Date(h.published_at).toLocaleDateString("en-CH",{day:"numeric",month:"short"})}</>}</p>
+                  </div>
+                  <span className={`text-[12px] font-semibold tabular-nums shrink-0 ${pol>=0?"text-emerald-600 dark:text-emerald-400":"text-rose-600 dark:text-rose-400"}`}>{pol>=0?"+":""}{pol.toFixed(2)}</span>
+                </div>
+              );
+            })}
+            {sentimentSymbol&&sentimentData[sentimentSymbol]?.error&&<p className="text-[13px] text-muted-foreground py-4 text-center">{sentimentData[sentimentSymbol].error==="no_data"?"No recent news available.":sentimentData[sentimentSymbol].error==="model_load_failed"?"Sentiment model unavailable.":"Failed to load sentiment."}</p>}
           </div>
         </DialogContent>
       </Dialog>
