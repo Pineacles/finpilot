@@ -12,6 +12,7 @@ import {
   CreditCard,
   TrendingUp,
   Banknote,
+  Pencil,
 } from "lucide-react";
 
 function Skeleton({ className }: { className?: string }) {
@@ -31,9 +32,9 @@ function GlassCard({ children, className = "", delay = 0 }: { children: React.Re
   );
 }
 
-function MetricCard({ icon: Icon, iconBg, iconColor, label, value, sub, delay, live }: {
+function MetricCard({ icon: Icon, iconBg, iconColor, label, value, sub, delay, live, onEdit }: {
   icon: React.ElementType; iconBg: string; iconColor: string;
-  label: string; value: React.ReactNode; sub?: React.ReactNode; delay: number; live?: boolean;
+  label: string; value: React.ReactNode; sub?: React.ReactNode; delay: number; live?: boolean; onEdit?: () => void;
 }) {
   return (
     <GlassCard delay={delay}>
@@ -41,6 +42,11 @@ function MetricCard({ icon: Icon, iconBg, iconColor, label, value, sub, delay, l
         <div className={`h-14 w-14 rounded-2xl ${iconBg} flex items-center justify-center`}>
           <Icon className={`h-7 w-7 ${iconColor}`} strokeWidth={1.8} />
         </div>
+        {onEdit && (
+          <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-accent cursor-pointer transition-colors">
+            <Pencil className="h-4 w-4 text-muted-foreground" />
+          </button>
+        )}
       </div>
       <div className="flex items-center gap-2 mb-1">
         <p className="text-sm text-muted-foreground">{label}</p>
@@ -89,11 +95,18 @@ export default function OverviewPage() {
   const [loading, setLoading] = useState(true);
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; change: number; change_pct: number }>>({});
   const prevPricesRef = useRef<Record<string, number>>({});
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [editBalance, setEditBalance] = useState("");
+  const [savingBalance, setSavingBalance] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.overview(), api.portfolio()])
-      .then(([ov, port]) => { setData(ov); setPortfolio(port); })
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.overview(),
+      api.portfolio().catch(() => null),
+    ]).then(([ov, port]) => {
+      setData(ov);
+      if (port) setPortfolio(port);
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   // Live ticker polling — fetch fresh prices every 5 seconds
@@ -115,18 +128,37 @@ export default function OverviewPage() {
   // Compute live totals from portfolio + live prices
   const liveTotals = useMemo(() => {
     if (!portfolio) return { value: 0, pnl: 0, pnlPct: 0 };
-    let liveValue = 0;
+    let stockLiveValue = 0;
     for (const pos of portfolio.positions) {
       const live = livePrices[pos.symbol];
       const refPrice = pos.last_price || pos.avg_cost_price || 0;
       const fx = refPrice && pos.quantity ? (pos.market_value / (refPrice * pos.quantity)) : 1;
       const livePrice = live?.price ?? pos.last_price ?? pos.avg_cost_price ?? 0;
-      liveValue += livePrice * pos.quantity * fx;
+      stockLiveValue += livePrice * pos.quantity * fx;
     }
-    const pnl = liveValue - portfolio.total_cost;
+    // PnL is stock-performance only (cost basis is stocks only)
+    const pnl = stockLiveValue - portfolio.total_cost;
     const pnlPct = portfolio.total_cost > 0 ? (pnl / portfolio.total_cost * 100) : 0;
-    return { value: liveValue, pnl, pnlPct };
+    // Total portfolio value includes uninvested cash (already in CHF)
+    const value = stockLiveValue + (portfolio.cash_balance ?? 0);
+    return { value, pnl, pnlPct };
   }, [portfolio, livePrices]);
+
+  const handleSetBalance = async () => {
+    if (!editingAccountId || !editBalance) return;
+    setSavingBalance(true);
+    try {
+      await api.setAccountBalance(editingAccountId, parseFloat(editBalance));
+      // Reload data
+      const [ov, port] = await Promise.all([api.overview(), api.portfolio()]);
+      setData(ov);
+      setPortfolio(port);
+      setEditingAccountId(null);
+      setEditBalance("");
+    } catch {} finally {
+      setSavingBalance(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -176,6 +208,7 @@ export default function OverviewPage() {
           icon={Landmark} iconBg="bg-blue-100 dark:bg-blue-500/15" iconColor="text-blue-600 dark:text-blue-400"
           label="Bank Account" value={formatCurrency(bankTotal)} delay={0.1}
           sub={bankAccounts.length > 0 ? <p className="text-sm text-muted-foreground">{bankAccounts[0].name}</p> : undefined}
+          onEdit={bankAccounts.length > 0 ? () => { setEditingAccountId(bankAccounts[0].id); setEditBalance(String(Math.round(bankTotal))); } : undefined}
         />
         <MetricCard
           icon={TrendingUp} iconBg="bg-orange-100 dark:bg-orange-500/15" iconColor="text-orange-600 dark:text-orange-400"
@@ -188,6 +221,38 @@ export default function OverviewPage() {
           }
         />
       </div>
+
+      {/* Balance Edit Modal */}
+      {editingAccountId && (
+        <GlassCard delay={0}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-[15px] font-semibold">Set Account Balance</h3>
+            <button onClick={() => setEditingAccountId(null)} className="p-1.5 rounded-lg hover:bg-accent cursor-pointer">
+              <span className="text-muted-foreground text-sm">Cancel</span>
+            </button>
+          </div>
+          <p className="text-[13px] text-muted-foreground mb-3">
+            Enter the actual current balance. An adjustment transaction will be created to match.
+          </p>
+          <div className="flex gap-3">
+            <input
+              type="number"
+              value={editBalance}
+              onChange={(e) => setEditBalance(e.target.value)}
+              className="flex-1 h-11 rounded-xl bg-accent px-4 text-[15px] outline-none focus:ring-2 focus:ring-primary/40 tabular-nums"
+              placeholder="e.g. 1234.56"
+              autoFocus
+            />
+            <button
+              onClick={handleSetBalance}
+              disabled={savingBalance || !editBalance}
+              className="h-11 px-6 rounded-xl bg-primary text-primary-foreground font-medium text-[14px] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
+            >
+              {savingBalance ? "Saving..." : "Set Balance"}
+            </button>
+          </div>
+        </GlassCard>
+      )}
 
       {/* Credit Card row (if exists) */}
       {ccAccounts.length > 0 && (
@@ -203,7 +268,15 @@ export default function OverviewPage() {
               </p>
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">{ccTotal < 0 ? "Outstanding balance" : "No balance"}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">{ccTotal < 0 ? "Outstanding balance" : "No balance"}</p>
+            <button
+              onClick={() => { setEditingAccountId(ccAccounts[0].id); setEditBalance(String(Math.round(Math.abs(ccTotal)))); }}
+              className="p-1 rounded-lg hover:bg-accent cursor-pointer transition-colors"
+            >
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
         </GlassCard>
       )}
 
