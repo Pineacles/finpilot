@@ -6,7 +6,7 @@ import { formatCurrency, formatPct } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar, Brush } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar } from "recharts";
 import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, Activity } from "lucide-react";
 
 const COLORS = ["#3b82f6","#f97316","#ef4444","#a855f7","#14b8a6","#f59e0b","#ec4899","#22c55e","#06b6d4","#8b5cf6","#e11d48","#84cc16","#6366f1","#d946ef","#0ea5e9","#fb923c"];
@@ -131,9 +131,12 @@ function useScrollableDeck<T extends HTMLElement>(){
     const onScroll=()=>updateEdges();
     el.addEventListener("scroll",onScroll,{passive:true});
     window.addEventListener("resize",updateEdges);
-    // Wheel → horizontal scroll
+    // Wheel → horizontal scroll (release to page scroll at edges)
     const onWheel=(e:WheelEvent)=>{
       if(Math.abs(e.deltaY)>Math.abs(e.deltaX)&&Math.abs(e.deltaY)>0){
+        const atStartNow=el.scrollLeft<=0;
+        const atEndNow=el.scrollLeft+el.clientWidth>=el.scrollWidth-1;
+        if((e.deltaY>0&&atEndNow)||(e.deltaY<0&&atStartNow))return;
         e.preventDefault();
         el.scrollLeft+=e.deltaY;
       }
@@ -229,6 +232,7 @@ export default function PortfolioPage(){
   const [tradeChartData,setTradeChartData]=useState<{date:string;close:number}[]>([]);
   const [tradeChartRange,setTradeChartRange]=useState("1y");
   const [tradeChartLoading,setTradeChartLoading]=useState(false);
+  const [timelineRange,setTimelineRange]=useState<"1W"|"1M"|"3M"|"6M"|"1Y"|"ALL">("3M");
 
   const load=useCallback(()=>{
     setLoading(true);
@@ -634,9 +638,9 @@ export default function PortfolioPage(){
         )}
       </GlassCard>
 
-      {/* Portfolio Timeline — unified chart with zoom, P&L bars, and all transaction markers */}
+      {/* Portfolio Timeline — unified chart with range presets, P&L bars, and all transaction markers */}
       {timeline.length>0&&(()=>{
-        const chartData=timeline.map((pt,i)=>{
+        const allChartData=timeline.map((pt,i)=>{
           const prev=i>0?timeline[i-1]:pt;
           const dailyChange=pt.value-prev.value;
           const tradeLabels=pt.trades?.map(t=>{
@@ -645,10 +649,15 @@ export default function PortfolioPage(){
           }).join("\n")||null;
           return {date:pt.date,value:pt.value,cost:pt.cost,pnl:pt.pnl,dailyChange,gain:dailyChange>=0?dailyChange:0,loss:dailyChange<0?dailyChange:0,tradeLabels,hasTrades:!!pt.trades?.length,trades:pt.trades};
         });
+        // Filter by range preset — slice from the end to get the last N days
+        const daysMap:Record<string,number>={"1W":7,"1M":30,"3M":90,"6M":180,"1Y":365,"ALL":10000};
+        const days=daysMap[timelineRange];
+        const chartData=allChartData.slice(Math.max(0,allChartData.length-days));
         const lastPt=timeline[timeline.length-1];
-        const firstPt=timeline[0];
-        const totalReturn=lastPt.value-firstPt.value;
-        const totalReturnPct=firstPt.value>0?((lastPt.value/firstPt.value-1)*100):0;
+        const rangeFirst=chartData[0];
+        const rangeLast=chartData[chartData.length-1];
+        const totalReturn=rangeLast?rangeLast.value-rangeFirst.value:0;
+        const totalReturnPct=rangeFirst&&rangeFirst.value>0?((rangeLast.value/rangeFirst.value-1)*100):0;
         return(
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
@@ -663,6 +672,15 @@ export default function PortfolioPage(){
             </div>
           </div>
           <GlassCard delay={0.42} className="!p-4">
+            <div className="flex items-center justify-center gap-1 mb-3">
+              {(["1W","1M","3M","6M","1Y","ALL"] as const).map(r=>(
+                <button
+                  key={r}
+                  onClick={()=>setTimelineRange(r)}
+                  className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${timelineRange===r?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}
+                >{r}</button>
+              ))}
+            </div>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartData} margin={{top:10,right:10,bottom:0,left:0}}>
@@ -694,14 +712,12 @@ export default function PortfolioPage(){
                   <Area yAxisId="value" type="monotone" dataKey="value" stroke={lastPt.pnl>=0?"#22c55e":"#ef4444"} strokeWidth={2} fill={lastPt.pnl>=0?"url(#sg-tl-gain)":"url(#sg-tl-loss)"}/>
                   {/* Cost basis line */}
                   <Line yAxisId="value" type="monotone" dataKey="cost" stroke="var(--muted-foreground)" strokeWidth={1} strokeDasharray="4 3" dot={false}/>
-                  {/* Transaction markers */}
-                  {timeline.filter(pt=>pt.trades&&pt.trades.length>0).map((pt,i)=>{
+                  {/* Transaction markers — only show if within filtered range */}
+                  {timeline.filter(pt=>pt.trades&&pt.trades.length>0&&chartData.some(cd=>cd.date===pt.date)).map((pt,i)=>{
                     const t=pt.trades![0];
                     const color=t.symbol==="CASH"?(t.type==="deposit"?"#3b82f6":"#f59e0b"):t.type==="buy"?"#22c55e":"#ef4444";
                     return <ReferenceLine key={`tl-${i}`} yAxisId="value" x={pt.date} stroke={color} strokeDasharray="3 3" strokeWidth={1.5}/>;
                   })}
-                  {/* Zoom brush */}
-                  <Brush dataKey="date" height={28} stroke="var(--border)" fill="var(--card)" tickFormatter={(d:string)=>d.slice(5,10)} travellerWidth={10} startIndex={Math.max(0,chartData.length-90)}/>
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -714,7 +730,7 @@ export default function PortfolioPage(){
               <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#ef4444]"/><span className="text-[11px] text-muted-foreground">Sell</span></div>
               <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#3b82f6]"/><span className="text-[11px] text-muted-foreground">Deposit</span></div>
               <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#f59e0b]"/><span className="text-[11px] text-muted-foreground">Withdraw</span></div>
-              <span className="text-[11px] text-muted-foreground ml-auto">Drag the bar below to zoom</span>
+              <span className="text-[11px] text-muted-foreground ml-auto">Showing {timelineRange==="ALL"?"all history":`last ${timelineRange}`}</span>
             </div>
           </GlassCard>
         </div>);
