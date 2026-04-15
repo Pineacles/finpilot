@@ -225,7 +225,7 @@ async def log_transaction(
 
 
 async def _upsert_merchant_rule(
-    db: AsyncSession, merchant_name: str, original_name: str | None, category_id: str,
+    db: AsyncSession, user_id: str, merchant_name: str, original_name: str | None, category_id: str,
 ):
     """Create or update a Merchant DB entry so future imports auto-categorize.
 
@@ -248,7 +248,7 @@ async def _upsert_merchant_rule(
 
     # Check if a merchant with this name already exists
     result = await db.execute(
-        select(Merchant).where(Merchant.name == merchant_name)
+        select(Merchant).where(and_(Merchant.name == merchant_name, Merchant.user_id == user_id))
     )
     existing = result.scalar_one_or_none()
 
@@ -260,6 +260,7 @@ async def _upsert_merchant_rule(
         existing.default_category_id = category_id
     else:
         db.add(Merchant(
+            user_id=user_id,
             name=merchant_name,
             patterns="|".join(sorted(patterns_set)),
             default_category_id=category_id,
@@ -361,7 +362,7 @@ async def agent_categorize(
     # Upsert Merchant DB rule so future imports auto-categorize correctly
     final_merchant_name = new_merchant or matched_merchant or merchant
     if final_merchant_name and final_merchant_name != "Pending":
-        await _upsert_merchant_rule(db, final_merchant_name, matched_merchant or merchant, cat.id)
+        await _upsert_merchant_rule(db, user.id, final_merchant_name, matched_merchant or merchant, cat.id)
 
     await db.commit()
 
@@ -416,8 +417,24 @@ async def agent_trade(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Execute a portfolio trade. Same as dashboard but with API key auth."""
+    """Execute a portfolio trade with price collar validation (5% from market)."""
     from app.api.endpoints.portfolio import execute_trade, TradeRequest
+    from app.services.portfolio_analytics import check_price_collar
+    from app.services.prices import get_quote
+
+    # Price collar check for buy/sell (skip for deposit/withdraw)
+    if body.type in ("buy", "sell") and body.price > 0:
+        quote = await get_quote(body.symbol.upper())
+        if quote:
+            collar = check_price_collar(body.price, quote["price"], collar_pct=5.0)
+            if not collar["pass"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Price collar rejected: {collar['reason']}. "
+                           f"Submitted {body.price}, market {collar['market_price']}. "
+                           f"Max deviation: {collar['collar_pct']}%"
+                )
+
     trade_req = TradeRequest(**body.model_dump())
     return await execute_trade(body=trade_req, user=user, db=db)
 
@@ -568,12 +585,14 @@ class StockAnalysis(BaseModel):
     rationale: str = ""
     key_risks: list[str] = []
     key_catalysts: list[str] = []
+    conviction_score: int | None = None  # 1-10, per-stock conviction
 
 
 class AnalysisCreate(BaseModel):
     analysis_type: str = "portfolio"  # portfolio | economy
     market_summary: str
     market_sentiment: str  # bullish | bearish | neutral
+    conviction_score: int | None = None  # 1-10, overall analysis conviction
     stocks: list[StockAnalysis] = []
     # Economy-specific fields
     key_indicators: list[dict] | None = None  # [{"name": "GDP", "value": "2.1%", "trend": "up"}]
@@ -601,6 +620,7 @@ async def store_analysis(
     content = {
         "market_summary": body.market_summary,
         "market_sentiment": body.market_sentiment,
+        "conviction_score": body.conviction_score,
         "analyzed_at": body.analyzed_at or datetime.now(timezone.utc).isoformat(),
     }
 
@@ -622,6 +642,109 @@ async def store_analysis(
     await db.commit()
 
     return {"status": "ok", "id": analysis.id, "type": body.analysis_type}
+
+
+# ── Post-Mortem (loss tracking) ──────────────────────────────────
+
+class PostMortemCreate(BaseModel):
+    symbol: str
+    analysis_id: str | None = None  # original analysis that recommended the position
+    entry_price: float
+    exit_price: float
+    notes: str | None = None
+
+
+@router.post("/post-mortem")
+async def create_post_mortem(
+    body: PostMortemCreate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Record a post-mortem for a closed losing position. For learning from mistakes."""
+    from app.models.stock import PostMortem
+
+    pnl_pct = ((body.exit_price - body.entry_price) / body.entry_price * 100) if body.entry_price else 0
+
+    pm = PostMortem(
+        user_id=user.id,
+        symbol=body.symbol.upper(),
+        analysis_id=body.analysis_id,
+        entry_price=body.entry_price,
+        exit_price=body.exit_price,
+        pnl_pct=round(pnl_pct, 2),
+        notes=body.notes,
+    )
+    db.add(pm)
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "id": pm.id,
+        "symbol": pm.symbol,
+        "pnl_pct": pm.pnl_pct,
+    }
+
+
+@router.get("/post-mortems")
+async def list_post_mortems(
+    symbol: str | None = None,
+    limit: int = 50,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """List post-mortems. Optional symbol filter."""
+    from app.models.stock import PostMortem
+
+    query = select(PostMortem).where(PostMortem.user_id == user.id)
+    if symbol:
+        query = query.where(PostMortem.symbol == symbol.upper())
+    query = query.order_by(desc(PostMortem.created_at)).limit(limit)
+    result = await db.execute(query)
+
+    return [
+        {
+            "id": pm.id,
+            "symbol": pm.symbol,
+            "analysis_id": pm.analysis_id,
+            "entry_price": pm.entry_price,
+            "exit_price": pm.exit_price,
+            "pnl_pct": pm.pnl_pct,
+            "notes": pm.notes,
+            "created_at": pm.created_at.isoformat(),
+        }
+        for pm in result.scalars().all()
+    ]
+
+
+# ── Earnings Date ────────────────────────────────────────────────
+
+class EarningsDateUpdate(BaseModel):
+    symbol: str
+    earnings_date: str  # ISO date YYYY-MM-DD
+
+
+@router.post("/earnings-date")
+async def set_earnings_date(
+    body: EarningsDateUpdate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set the next earnings date for a held position. Agent populates this."""
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol == body.symbol.upper(),
+        ))
+    )
+    pos = result.scalar_one_or_none()
+    if not pos:
+        raise HTTPException(status_code=404, detail=f"Position {body.symbol} not found")
+
+    from datetime import date as date_cls
+    pos.earnings_date = date_cls.fromisoformat(body.earnings_date)
+    await db.commit()
+
+    return {"status": "ok", "symbol": pos.symbol, "earnings_date": pos.earnings_date.isoformat()}
 
 
 @router.get("/analysis/latest")
@@ -1005,3 +1128,313 @@ async def delete_milestone(
     await db.delete(m)
     await db.commit()
     return {"status": "ok", "deleted": m.name}
+
+
+# ── Portfolio Analytics ──────────────────────────────────────────
+
+@router.get("/portfolio/optimize")
+async def portfolio_optimize(
+    l2_reg: float = 0.1,
+    risk_free_rate: float = 0.01,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Convex optimization with L2 regularization. Returns optimal weights + Sharpe ratio."""
+    from app.services.portfolio_analytics import optimize_portfolio
+
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+    if not positions:
+        return {"error": "No positions to optimize"}
+
+    symbols = [p.symbol for p in positions]
+    total_value = sum((p.last_price or p.avg_cost_price) * p.quantity for p in positions)
+    current_weights = {}
+    for p in positions:
+        mv = (p.last_price or p.avg_cost_price) * p.quantity
+        current_weights[p.symbol] = round(mv / total_value, 4) if total_value else 0
+
+    return await optimize_portfolio(symbols, current_weights, total_value, l2_reg, risk_free_rate)
+
+
+@router.get("/portfolio/risk-parity")
+async def portfolio_risk_parity(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Risk-parity weights — equal risk contribution per position."""
+    from app.services.portfolio_analytics import risk_parity_weights
+
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+    if not positions:
+        return {"error": "No positions"}
+
+    return await risk_parity_weights([p.symbol for p in positions])
+
+
+@router.get("/portfolio/correlation")
+async def portfolio_correlation(
+    threshold: float = 0.7,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Correlation matrix + overconcentration flags for held positions."""
+    from app.services.portfolio_analytics import correlation_analysis
+
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+    if not positions:
+        return {"error": "No positions"}
+
+    return await correlation_analysis([p.symbol for p in positions], threshold)
+
+
+@router.get("/portfolio/attribution")
+async def portfolio_attribution(
+    benchmark: str = "SPY",
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Performance attribution — alpha/beta breakdown per stock vs benchmark."""
+    from app.services.portfolio_analytics import performance_attribution
+
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+    if not positions:
+        return {"error": "No positions"}
+
+    total_value = sum((p.last_price or p.avg_cost_price) * p.quantity for p in positions)
+    pos_data = []
+    for p in positions:
+        mv = (p.last_price or p.avg_cost_price) * p.quantity
+        pnl_pct = ((p.last_price or p.avg_cost_price) / p.avg_cost_price - 1) * 100 if p.avg_cost_price else 0
+        pos_data.append({
+            "symbol": p.symbol,
+            "weight": mv / total_value if total_value else 0,
+            "pnl_pct": pnl_pct,
+        })
+
+    return await performance_attribution(pos_data, benchmark)
+
+
+@router.get("/portfolio/fx-impact")
+async def portfolio_fx_impact(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """FX-adjusted P&L with USD/CHF carry penalty for all positions."""
+    from app.services.portfolio_analytics import fx_impact_analysis
+    from app.services.prices import get_fx_rate
+
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+    if not positions:
+        return {"error": "No positions"}
+
+    pos_data = []
+    for p in positions:
+        fx = await get_fx_rate(p.currency, "CHF") if p.currency != "CHF" else 1.0
+        mv_chf = (p.last_price or p.avg_cost_price) * p.quantity * fx
+        pos_data.append({
+            "symbol": p.symbol,
+            "currency": p.currency,
+            "market_value": mv_chf,
+        })
+
+    return await fx_impact_analysis(pos_data)
+
+
+@router.get("/portfolio/earnings-calendar")
+async def portfolio_earnings_calendar(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upcoming earnings dates for all held positions."""
+    from app.services.portfolio_analytics import earnings_calendar
+
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+    if not positions:
+        return {"error": "No positions"}
+
+    # Also update the earnings_date on each position if fetched
+    cal = await earnings_calendar([p.symbol for p in positions])
+
+    # Update stored earnings dates
+    for entry in cal:
+        if entry.get("earnings_date"):
+            for p in positions:
+                if p.symbol == entry["symbol"]:
+                    from datetime import date as date_cls
+                    p.earnings_date = date_cls.fromisoformat(entry["earnings_date"])
+    await db.commit()
+
+    return {"calendar": cal, "positions_count": len(positions)}
+
+
+# ── Risk & Macro — v2 ────────────────────────────────────────────
+
+@router.get("/portfolio/cvar")
+async def agent_portfolio_cvar(
+    lookback_days: int = 252,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """CVaR (Expected Shortfall) at 95% and 99% for the portfolio.
+
+    Returns CHF-denominated expected loss figures (negative = loss).
+    Uses historical daily returns weighted by current CHF market value.
+    """
+    from app.services.quant_risk import compute_cvar
+    from app.services.prices import get_fx_rate
+
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+    if not positions:
+        return {"error": "no_positions"}
+
+    BASE_CCY = "CHF"
+    total_value = 0.0
+    pos_data = []
+    for p in positions:
+        fx = await get_fx_rate(p.currency, BASE_CCY) if p.currency != BASE_CCY else 1.0
+        mv_chf = (p.last_price or p.avg_cost_price) * p.quantity * fx
+        total_value += mv_chf
+        pos_data.append({"symbol": p.symbol, "market_value_chf": mv_chf})
+
+    return await compute_cvar(pos_data, total_value, lookback_days=lookback_days)
+
+
+@router.get("/portfolio/kelly")
+async def agent_portfolio_kelly(
+    symbol: str,
+    expected_return_pct: float,
+    conviction: float = 0.5,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Half-Kelly position size for a candidate trade.
+
+    symbol: ticker (e.g. NVDA)
+    expected_return_pct: your expected annual return in percent (e.g. 15 for 15%)
+    conviction: 0..1 confidence scalar (default 0.5)
+
+    Returns suggested CHF amount and share count, capped at 20% of portfolio.
+    """
+    from app.services.quant_risk import compute_kelly
+    from app.services.prices import get_fx_rate
+
+    result = await db.execute(
+        select(StockPosition).where(StockPosition.user_id == user.id)
+    )
+    positions = result.scalars().all()
+    total_value = 0.0
+    BASE_CCY = "CHF"
+    for p in positions:
+        fx = await get_fx_rate(p.currency, BASE_CCY) if p.currency != BASE_CCY else 1.0
+        if p.symbol == "CASH":
+            total_value += p.quantity
+        else:
+            total_value += (p.last_price or p.avg_cost_price) * p.quantity * fx
+
+    return await compute_kelly(
+        symbol=symbol.upper(),
+        expected_return_pct=expected_return_pct,
+        conviction=max(0.0, min(1.0, conviction)),
+        portfolio_value_chf=total_value,
+    )
+
+
+@router.get("/macro/regime")
+async def agent_macro_regime(
+    user: User = Depends(get_user_by_api_key),
+):
+    """Current macro regime classification (yield curve + VIX). Cached 1 hour.
+
+    Regimes: Expansionary / Late-Cycle / Contractionary / Recovery
+    Includes sector tilt recommendations and confidence score.
+    """
+    from app.services.quant_risk import compute_macro_regime
+    return await compute_macro_regime()
+
+
+@router.get("/portfolio/black-swan")
+async def agent_portfolio_black_swan(
+    lookback_days: int = 252,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Detect black-swan conditions in the portfolio.
+
+    Triggers when ANY of:
+    - VIX z-score (60d) > 3
+    - Portfolio CVaR_95 > 8% of total value
+    - Any holding's daily return z-score (60d) < -4
+
+    Returns severity: 'info' | 'warn' | 'critical'
+    """
+    from app.services.quant_risk import compute_black_swan
+    from app.services.prices import get_fx_rate
+
+    result = await db.execute(
+        select(StockPosition).where(and_(
+            StockPosition.user_id == user.id,
+            StockPosition.symbol != "CASH",
+            StockPosition.quantity > 0,
+        ))
+    )
+    positions = result.scalars().all()
+
+    BASE_CCY = "CHF"
+    total_value = 0.0
+    pos_data = []
+    for p in positions:
+        fx = await get_fx_rate(p.currency, BASE_CCY) if p.currency != BASE_CCY else 1.0
+        mv_chf = (p.last_price or p.avg_cost_price) * p.quantity * fx
+        total_value += mv_chf
+        pos_data.append({"symbol": p.symbol, "market_value_chf": mv_chf})
+
+    return await compute_black_swan(pos_data, total_value, lookback_days=lookback_days)

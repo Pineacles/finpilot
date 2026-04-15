@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { motion } from "motion/react";
-import { api, Overview, PortfolioSummary } from "@/lib/api";
+import { motion, AnimatePresence } from "motion/react";
+import { api, Overview, PortfolioSummary, MacroRegime, BlackSwanResult } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
 import {
   ArrowUpRight,
@@ -13,6 +13,10 @@ import {
   TrendingUp,
   Banknote,
   Pencil,
+  X,
+  TrendingDown,
+  Minus,
+  Activity,
 } from "lucide-react";
 
 function Skeleton({ className }: { className?: string }) {
@@ -98,6 +102,10 @@ export default function OverviewPage() {
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [editBalance, setEditBalance] = useState("");
   const [savingBalance, setSavingBalance] = useState(false);
+  const [macroRegime, setMacroRegime] = useState<MacroRegime | null>(null);
+  const [showRegimeTilts, setShowRegimeTilts] = useState(false);
+  const [blackSwan, setBlackSwan] = useState<BlackSwanResult | null>(null);
+  const [blackSwanDismissed, setBlackSwanDismissed] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -107,6 +115,19 @@ export default function OverviewPage() {
       setData(ov);
       if (port) setPortfolio(port);
     }).catch(() => {}).finally(() => setLoading(false));
+
+    // Macro regime — fetch once on mount (cached 1h on server)
+    api.macroRegime().then(setMacroRegime).catch(() => {});
+
+    // Black swan check
+    api.blackSwan().then(bs => {
+      setBlackSwan(bs);
+      // Check session storage for dismissal
+      if (typeof window !== "undefined") {
+        const dismissed = sessionStorage.getItem("blackSwanDismissed");
+        if (dismissed === "true") setBlackSwanDismissed(true);
+      }
+    }).catch(() => {});
   }, []);
 
   // Live ticker polling — fetch fresh prices every 5 seconds
@@ -189,12 +210,96 @@ export default function OverviewPage() {
   const bankTotal = bankAccounts.reduce((s, a) => s + a.balance, 0);
   const ccTotal = ccAccounts.reduce((s, a) => s + a.balance, 0);
 
+  // Macro regime color mapping
+  const regimeColors: Record<string, { pill: string; icon: React.ElementType }> = {
+    "Expansionary": { pill: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400", icon: TrendingUp },
+    "Late-Cycle": { pill: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400", icon: Minus },
+    "Contractionary": { pill: "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400", icon: TrendingDown },
+    "Recovery": { pill: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400", icon: Activity },
+    "Unknown": { pill: "bg-muted text-muted-foreground", icon: Minus },
+  };
+  const regime = macroRegime?.regime ?? "Unknown";
+  const rc = regimeColors[regime] ?? regimeColors["Unknown"];
+  const RegimeIcon = rc.icon;
+
   return (
     <div className="space-y-8">
+      {/* Black Swan Banner */}
+      <AnimatePresence>
+        {blackSwan?.active && !blackSwanDismissed && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.3 }}
+            className={`rounded-2xl px-5 py-4 flex items-start justify-between gap-4 ${blackSwan.severity === "critical" ? "bg-rose-100 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-700" : blackSwan.severity === "warn" ? "bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700" : "bg-blue-100 dark:bg-blue-950/60 border border-blue-300 dark:border-blue-700"}`}
+          >
+            <div className="flex items-start gap-3">
+              <Activity className={`h-5 w-5 mt-0.5 shrink-0 ${blackSwan.severity === "critical" ? "text-rose-600" : blackSwan.severity === "warn" ? "text-amber-600" : "text-blue-600"}`} />
+              <div>
+                <p className={`text-[14px] font-semibold mb-1 ${blackSwan.severity === "critical" ? "text-rose-800 dark:text-rose-300" : blackSwan.severity === "warn" ? "text-amber-800 dark:text-amber-300" : "text-blue-800 dark:text-blue-300"}`}>
+                  Black Swan Alert — {blackSwan.severity.charAt(0).toUpperCase() + blackSwan.severity.slice(1)}
+                </p>
+                <ul className="space-y-0.5">
+                  {blackSwan.reasons.map((r, i) => (
+                    <li key={i} className="text-[13px] text-foreground/70">{r.description}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <button
+              onClick={() => { setBlackSwanDismissed(true); if (typeof window !== "undefined") sessionStorage.setItem("blackSwanDismissed", "true"); }}
+              className="shrink-0 p-1 rounded-lg hover:bg-black/10 transition-colors cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
         <p className="text-sm font-medium text-primary mb-1">Overview</p>
-        <h1 className="text-3xl font-bold tracking-tight">Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {data.display_name}</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-3xl font-bold tracking-tight">Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {data.display_name}</h1>
+          {macroRegime && (
+            <div className="relative">
+              <button
+                onClick={() => setShowRegimeTilts(v => !v)}
+                title={`VIX: ${macroRegime.indicators.vix ?? "N/A"} · Yield curve: ${macroRegime.indicators.yield_curve_bps ?? "N/A"}bps · Confidence: ${(macroRegime.confidence * 100).toFixed(0)}%`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all cursor-pointer hover:opacity-80 ${rc.pill}`}
+              >
+                <RegimeIcon className="h-3.5 w-3.5" />
+                {regime}
+              </button>
+              <AnimatePresence>
+                {showRegimeTilts && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                    transition={{ duration: 0.18 }}
+                    className="absolute left-0 top-full mt-2 z-50 w-64 rounded-2xl bg-card border border-border shadow-lg p-4"
+                  >
+                    <p className="text-[13px] font-semibold mb-2">Suggested Sector Tilts</p>
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {macroRegime.sector_tilts.map(s => (
+                        <span key={s} className="text-[11px] px-2.5 py-1 rounded-full bg-accent font-medium">{s}</span>
+                      ))}
+                    </div>
+                    <div className="border-t border-border pt-2 space-y-1">
+                      <p className="text-[11px] text-muted-foreground">VIX: <span className="text-foreground font-medium">{macroRegime.indicators.vix?.toFixed(1) ?? "N/A"}</span>{macroRegime.indicators.vix_zscore_60d !== null && <span> (z={macroRegime.indicators.vix_zscore_60d?.toFixed(2)})</span>}</p>
+                      <p className="text-[11px] text-muted-foreground">Yield curve: <span className="text-foreground font-medium">{macroRegime.indicators.yield_curve_bps !== null ? `${macroRegime.indicators.yield_curve_bps}bps` : "N/A"}</span></p>
+                      <p className="text-[11px] text-muted-foreground">10Y: <span className="text-foreground font-medium">{macroRegime.indicators.tnx_pct ?? "N/A"}%</span> · 3M: <span className="text-foreground font-medium">{macroRegime.indicators.irx_pct ?? "N/A"}%</span></p>
+                      <p className="text-[11px] text-muted-foreground">Confidence: <span className="text-foreground font-medium">{(macroRegime.confidence * 100).toFixed(0)}%</span></p>
+                    </div>
+                    <button onClick={() => setShowRegimeTilts(false)} className="mt-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer">Dismiss</button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
         <p className="text-muted-foreground mt-1">Here's how your finances are looking today.</p>
       </motion.div>
 
