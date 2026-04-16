@@ -211,6 +211,7 @@ async def get_portfolio(
 # ── Trade (buy/sell/deposit/withdraw) ────────────────────────────
 
 @router.post("/trade")
+@router.post("/trades")
 async def execute_trade(
     body: TradeRequest,
     user: User = Depends(get_current_user),
