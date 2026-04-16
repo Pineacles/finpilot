@@ -411,6 +411,7 @@ class AgentTradeRequest(BaseModel):
 
 
 @router.post("/trade")
+@router.post("/trades")
 async def agent_trade(
     body: AgentTradeRequest,
     user: User = Depends(get_user_by_api_key),
