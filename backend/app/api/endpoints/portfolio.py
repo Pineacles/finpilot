@@ -13,6 +13,7 @@ from app.models.account import Account
 from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot, MarketAnalysis, PostMortem, BuyAssessment
 from app.models.user import User
 from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate
+from app.services.currency import normalize_currency
 
 router = APIRouter(prefix="/api/dashboard/portfolio", tags=["portfolio"])
 
@@ -257,9 +258,18 @@ async def execute_trade(
     price = body.price or quote["price"]
     total_cost = price * body.quantity + body.fees
 
-    # Convert trade amount to CHF for the cash position (which is always CHF-denominated)
+    # Auto-correct currency from yfinance (quote already returns normalized major currency)
+    yf_ccy = quote.get("currency", "").upper()
     CASH_CCY = "CHF"
-    trade_ccy = body.currency.upper()
+    trade_ccy = body.currency.upper() if body.currency else ""
+    # Normalize user-supplied currency in case it's a subunit code
+    trade_ccy, _ = normalize_currency(trade_ccy) if trade_ccy else ("", 1.0)
+    if yf_ccy and trade_ccy != yf_ccy:
+        logger.info(
+            f"execute_trade: auto-correcting currency for {ticker}: "
+            f"user-supplied '{body.currency}' -> yfinance '{yf_ccy}'"
+        )
+        trade_ccy = yf_ccy
     if trade_ccy != CASH_CCY:
         fx = await get_fx_rate(trade_ccy, CASH_CCY)
     else:
@@ -297,7 +307,7 @@ async def execute_trade(
                 user_id=user.id, account_id=account.id,
                 symbol=ticker, name=quote.get("name", ticker),
                 quantity=body.quantity, avg_cost_price=price,
-                currency=body.currency, last_price=quote["price"],
+                currency=trade_ccy, last_price=quote["price"],
                 last_price_at=datetime.now(timezone.utc),
             )
             db.add(position)
@@ -316,17 +326,21 @@ async def execute_trade(
         if position.quantity <= 0:
             await db.delete(position)
 
-    # Log trade
+    # Log trade (use corrected trade_ccy, not raw body.currency)
     db.add(StockTransaction(
         user_id=user.id, account_id=account.id,
         symbol=ticker, type=trade_type,
         quantity=body.quantity, price=price,
-        fees=body.fees, currency=body.currency,
+        fees=body.fees, currency=trade_ccy,
         executed_at=trade_date,
     ))
 
     await db.commit()
-    return {"status": "ok", "symbol": ticker, "type": trade_type, "quantity": body.quantity, "price": price}
+    return {
+        "status": "ok", "symbol": ticker, "type": trade_type,
+        "quantity": body.quantity, "price": price,
+        "currency": trade_ccy,
+    }
 
 
 # ── Trade history ────────────────────────────────────────────────
