@@ -1263,3 +1263,92 @@ async def agent_delete_buy_assessment(
         raise HTTPException(status_code=404, detail="Buy assessment not found")
     await db.delete(ba)
     await db.commit()
+
+
+# ── Currency Resync ──────────────────────────────────────────────
+
+@router.post("/portfolio/resync-currencies")
+async def resync_currencies(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Resync position currencies from yfinance.
+
+    For each stock position:
+    - Fetches the yfinance quote (which already returns normalized major currency).
+    - If the DB currency differs, updates it.
+    - Flags positions where the cost basis looks unrealistic for the yfinance price
+      (ratio > 5x or < 0.2x), suggesting a possible ticker mismatch (e.g. SHEL
+      instead of SHEL.L).
+
+    Returns:
+        updated:   [{symbol, old_ccy, new_ccy}]
+        unchanged: [symbols]
+        flagged:   [{symbol, reason}]
+    """
+    from app.services.prices import get_quote
+    from app.services.currency import normalize_currency
+
+    result = await db.execute(
+        select(StockPosition).where(StockPosition.user_id == user.id)
+    )
+    positions = result.scalars().all()
+    stock_positions = [p for p in positions if p.symbol != "CASH"]
+
+    updated = []
+    unchanged = []
+    flagged = []
+
+    for pos in stock_positions:
+        quote = await get_quote(pos.symbol)
+        if not quote:
+            flagged.append({
+                "symbol": pos.symbol,
+                "reason": "yfinance returned no data — symbol may be invalid or delisted",
+            })
+            continue
+
+        yf_ccy = quote["currency"]  # already normalized by get_quote
+        db_ccy, _ = normalize_currency(pos.currency)  # normalize DB value too
+
+        if db_ccy != yf_ccy:
+            updated.append({
+                "symbol": pos.symbol,
+                "old_ccy": pos.currency,
+                "new_ccy": yf_ccy,
+            })
+            pos.currency = yf_ccy
+        else:
+            unchanged.append(pos.symbol)
+
+        # Flag possible ticker mismatch: price ratio out of expected range
+        yf_price = quote["price"]
+        db_cost = pos.avg_cost_price
+        if db_cost and db_cost > 0 and yf_price and yf_price > 0:
+            ratio = yf_price / db_cost
+            if ratio > 5.0:
+                flagged.append({
+                    "symbol": pos.symbol,
+                    "reason": (
+                        f"yfinance price {yf_price:.4f} {yf_ccy} is {ratio:.1f}x higher than "
+                        f"avg cost {db_cost:.4f} {pos.currency} — possible wrong ticker "
+                        f"(e.g. should be {pos.symbol}.L for LSE?)"
+                    ),
+                })
+            elif ratio < 0.2:
+                flagged.append({
+                    "symbol": pos.symbol,
+                    "reason": (
+                        f"yfinance price {yf_price:.4f} {yf_ccy} is {1/ratio:.1f}x lower than "
+                        f"avg cost {db_cost:.4f} {pos.currency} — possible wrong ticker or stale cost basis"
+                    ),
+                })
+
+    if updated:
+        await db.commit()
+
+    return {
+        "updated": updated,
+        "unchanged": unchanged,
+        "flagged": flagged,
+    }

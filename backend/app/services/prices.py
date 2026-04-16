@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 
 import httpx
 
+from app.services.currency import normalize_price, normalize_currency
+
 logger = logging.getLogger(__name__)
 
 _BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
@@ -40,11 +42,21 @@ async def get_quote(ticker: str, cache_ttl: int | None = None) -> dict | None:
             result = resp.json()["chart"]["result"][0]
             meta = result["meta"]
 
+            raw_ccy = meta["currency"]
+            raw_price = meta["regularMarketPrice"]
+            raw_prev = meta.get("chartPreviousClose", meta.get("previousClose", 0))
+
+            # Normalize subunit currencies (e.g. GBp pence -> GBP, divide price by 100)
+            price, currency = normalize_price(raw_price, raw_ccy)
+            prev_close, _ = normalize_price(raw_prev, raw_ccy)
+            if raw_ccy != currency:
+                logger.info(f"Normalized {ticker} currency {raw_ccy} -> {currency} (price {raw_price} -> {price})")
+
             data = {
                 "ticker": ticker,
-                "price": meta["regularMarketPrice"],
-                "prev_close": meta.get("chartPreviousClose", meta.get("previousClose", 0)),
-                "currency": meta["currency"],
+                "price": price,
+                "prev_close": prev_close,
+                "currency": currency,
                 "name": meta.get("shortName", ticker),
                 "exchange": meta.get("exchangeName", ""),
                 "market_state": meta.get("marketState", ""),
@@ -76,7 +88,15 @@ FX_CACHE_TTL = 300  # 5 minutes
 
 
 async def get_fx_rate(from_ccy: str, to_ccy: str) -> float:
-    """Get exchange rate. Returns multiplier to convert from_ccy to to_ccy."""
+    """Get exchange rate. Returns multiplier to convert from_ccy to to_ccy.
+
+    Subunit codes (GBp, ZAC, etc.) are automatically promoted to their major
+    currency before the FX lookup — callers need not pre-normalize.
+    """
+    # Normalize subunit codes up front — GBp -> GBP, etc.
+    from_ccy, _ = normalize_currency(from_ccy)
+    to_ccy, _ = normalize_currency(to_ccy)
+
     if from_ccy == to_ccy:
         return 1.0
 
@@ -126,9 +146,14 @@ async def get_history(ticker: str, range: str = "1y", interval: str = "1d") -> l
                 return []
 
             result = resp.json()["chart"]["result"][0]
+            meta = result["meta"]
+            raw_ccy = meta.get("currency", "USD")
             timestamps = result.get("timestamp", [])
             quotes = result["indicators"]["quote"][0]
             closes = quotes.get("close", [])
+
+            # Normalize subunit currency for historical closes (e.g. GBp pence -> GBP)
+            _, divisor = normalize_currency(raw_ccy)
 
             # Use richer date format for intraday intervals so multiple points per day are distinct
             is_intraday = interval.endswith("m") and not interval.endswith("mo") or interval.endswith("h")
@@ -138,7 +163,7 @@ async def get_history(ticker: str, range: str = "1y", interval: str = "1d") -> l
                 if i < len(closes) and closes[i] is not None:
                     history.append({
                         "date": datetime.fromtimestamp(ts, tz=timezone.utc).strftime(fmt),
-                        "close": round(closes[i], 2),
+                        "close": round(closes[i] / divisor, 4),
                     })
             return history
 
