@@ -1,20 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "motion/react";
 import { api, Category, MerchantRule } from "@/lib/api";
+import { GlassCard } from "@/components/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Pencil, X, Check, Tag, Store, Search, ChevronRight } from "lucide-react";
-
-function GlassCard({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay, ease: [0.25, 0.46, 0.45, 0.94] }} className={`glass bg-card rounded-3xl p-6 ${className}`}>
-      {children}
-    </motion.div>
-  );
-}
 
 function buildCategoryTree(categories: Category[]) {
   const parents = categories.filter((c) => !c.parent_id);
@@ -86,10 +78,15 @@ export default function CategoriesPage() {
     : merchants;
 
   return (
-    <div className="space-y-8">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <h1 className="text-3xl font-semibold tracking-tight">Categories & Rules</h1>
-      </motion.div>
+    <div className="space-y-8 p-1">
+      {/* Header */}
+      <GlassCard delay={0} className="flex items-end justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-1">Categories</p>
+          <h1 className="text-2xl font-bold tracking-tight">{categories.length} categories</h1>
+          <p className="text-sm text-muted-foreground mt-1">Used to tag transactions · managed by your agent</p>
+        </div>
+      </GlassCard>
 
       {/* Tabs */}
       <div className="flex gap-2">
@@ -131,43 +128,68 @@ export default function CategoriesPage() {
           {/* Hierarchy */}
           <GlassCard delay={0.1}>
             <h2 className="text-lg font-semibold mb-4">Category Hierarchy</h2>
-            <div className="space-y-1">
-              {parents.sort((a, b) => a.name.localeCompare(b.name)).map(p => {
-                const kids = (childMap[p.id] || []).sort((a, b) => a.name.localeCompare(b.name));
-                return (
-                  <div key={p.id}>
-                    <div className="flex items-center gap-3 p-3 rounded-2xl hover:bg-accent transition-colors">
-                      <div className={`w-3 h-3 rounded-full ${p.type === "income" ? "bg-gain" : p.type === "transfer" ? "bg-blue-500" : "bg-loss"}`} />
-                      <span className="font-medium text-[15px]">{p.name}</span>
-                      <Badge variant="secondary" className="text-[11px] capitalize rounded-lg">{p.type}</Badge>
-                      {kids.length > 0 && <span className="text-[13px] text-muted-foreground ml-auto">{kids.length} sub</span>}
-                    </div>
-                    {kids.length > 0 && (
-                      <div className="ml-8 border-l border-border pl-4 space-y-0.5">
-                        {kids.map(k => (
-                          <div key={k.id} className="flex items-center gap-2 py-2 px-3 rounded-xl hover:bg-accent transition-colors">
-                            <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-[15px]">{k.name}</span>
-                          </div>
-                        ))}
+            {loading ? (
+              <p className="text-sm text-muted-foreground py-4">Loading…</p>
+            ) : categories.length === 0 ? (
+              <div className="py-10 text-center text-muted-foreground">
+                <Tag className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No categories yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {parents.sort((a, b) => a.name.localeCompare(b.name)).map(p => {
+                  const kids = (childMap[p.id] || []).sort((a, b) => a.name.localeCompare(b.name));
+                  return (
+                    <div key={p.id}>
+                      <div className="flex items-center gap-3 p-3 rounded-2xl hover:bg-accent transition-colors">
+                        <div
+                          className={`w-3 h-3 rounded-full ${
+                            p.type === "income" ? "bg-gain" : p.type === "transfer" ? "bg-blue-500" : "bg-loss"
+                          }`}
+                        />
+                        <span className="font-medium text-[15px]">{p.name}</span>
+                        <Badge variant="secondary" className="text-[11px] capitalize rounded-lg">{p.type}</Badge>
+                        {kids.length > 0 && <span className="text-[13px] text-muted-foreground ml-auto">{kids.length} sub</span>}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      {kids.length > 0 && (
+                        <div className="ml-8 border-l border-border pl-4 space-y-0.5">
+                          {kids.map(k => (
+                            <div key={k.id} className="flex items-center gap-2 py-2 px-3 rounded-xl hover:bg-accent transition-colors">
+                              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-[15px]">{k.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </GlassCard>
         </>
       ) : (
         <>
           {/* Add Merchant Rule */}
           <GlassCard delay={0.05}>
-            <h2 className="text-lg font-semibold mb-4">Add Merchant Rule</h2>
+            <h2 className="text-lg font-semibold mb-2">Add Merchant Rule</h2>
             <p className="text-[13px] text-muted-foreground mb-4">When a transaction description contains any pattern, it auto-categorizes.</p>
             <div className="flex items-end gap-3 flex-wrap">
-              <div className="flex-1 min-w-[120px]"><label className="text-[13px] text-muted-foreground block mb-1.5">Name</label><Input placeholder="Starbucks" value={newMerchant.name} onChange={e => setNewMerchant({ ...newMerchant, name: e.target.value })} className="rounded-xl h-11" /></div>
-              <div className="flex-1 min-w-[120px]"><label className="text-[13px] text-muted-foreground block mb-1.5">Patterns (pipe-separated)</label><Input placeholder="starbucks|star bucks" value={newMerchant.patterns} onChange={e => setNewMerchant({ ...newMerchant, patterns: e.target.value })} className="rounded-xl h-11 font-mono text-[13px]" /></div>
-              <div className="w-48"><label className="text-[13px] text-muted-foreground block mb-1.5">Category</label><select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={newMerchant.category_id} onChange={e => setNewMerchant({ ...newMerchant, category_id: e.target.value })}><option value="">Select...</option>{catOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
+              <div className="flex-1 min-w-[120px]">
+                <label className="text-[13px] text-muted-foreground block mb-1.5">Name</label>
+                <Input placeholder="Starbucks" value={newMerchant.name} onChange={e => setNewMerchant({ ...newMerchant, name: e.target.value })} className="rounded-xl h-11" />
+              </div>
+              <div className="flex-1 min-w-[120px]">
+                <label className="text-[13px] text-muted-foreground block mb-1.5">Patterns (pipe-separated)</label>
+                <Input placeholder="starbucks|star bucks" value={newMerchant.patterns} onChange={e => setNewMerchant({ ...newMerchant, patterns: e.target.value })} className="rounded-xl h-11 font-mono text-[13px]" />
+              </div>
+              <div className="w-48">
+                <label className="text-[13px] text-muted-foreground block mb-1.5">Category</label>
+                <select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={newMerchant.category_id} onChange={e => setNewMerchant({ ...newMerchant, category_id: e.target.value })}>
+                  <option value="">Select...</option>
+                  {catOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
               <Button onClick={handleCreateMerchant} className="rounded-xl h-11 px-5"><Plus className="h-4 w-4 mr-1" />Add</Button>
             </div>
           </GlassCard>
@@ -181,37 +203,52 @@ export default function CategoriesPage() {
                 <Input placeholder="Search rules..." value={merchantSearch} onChange={e => setMerchantSearch(e.target.value)} className="pl-9 rounded-xl h-10" />
               </div>
             </div>
-            <div className="space-y-1 max-h-[500px] overflow-y-auto">
-              {filteredMerchants.map(m => (
-                <div key={m.id} className="flex items-center justify-between p-3 rounded-2xl hover:bg-accent transition-colors group">
-                  {editingId === m.id ? (
-                    <div className="flex items-center gap-2 flex-1">
-                      <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="h-9 rounded-xl text-[14px]" />
-                      <Input value={editForm.patterns} onChange={e => setEditForm({ ...editForm, patterns: e.target.value })} className="h-9 rounded-xl text-[14px] font-mono" />
-                      <select className="h-9 rounded-xl bg-accent px-2 text-[14px] border-0" value={editForm.category_id} onChange={e => setEditForm({ ...editForm, category_id: e.target.value })}>
-                        <option value="">--</option>{catOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                      <button className="cursor-pointer" onClick={() => handleUpdateMerchant(m.id)}><Check className="h-4 w-4 text-gain" /></button>
-                      <button className="cursor-pointer" onClick={() => setEditingId(null)}><X className="h-4 w-4 text-muted-foreground" /></button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-4">
-                        <span className="font-medium text-[15px]">{m.name}</span>
-                        <code className="text-[12px] text-muted-foreground font-mono">{m.patterns}</code>
+            {filteredMerchants.length === 0 ? (
+              <div className="py-10 text-center text-muted-foreground">
+                <Store className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">{merchantSearch ? "No rules match your search." : "No merchant rules yet."}</p>
+              </div>
+            ) : (
+              <div className="space-y-1 max-h-[500px] overflow-y-auto">
+                {filteredMerchants.map(m => (
+                  <div key={m.id} className="flex items-center justify-between p-3 rounded-2xl hover:bg-accent transition-colors group">
+                    {editingId === m.id ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="h-9 rounded-xl text-[14px]" />
+                        <Input value={editForm.patterns} onChange={e => setEditForm({ ...editForm, patterns: e.target.value })} className="h-9 rounded-xl text-[14px] font-mono" />
+                        <select className="h-9 rounded-xl bg-accent px-2 text-[14px] border-0" value={editForm.category_id} onChange={e => setEditForm({ ...editForm, category_id: e.target.value })}>
+                          <option value="">--</option>
+                          {catOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        <button className="cursor-pointer" onClick={() => handleUpdateMerchant(m.id)}><Check className="h-4 w-4 text-gain" /></button>
+                        <button className="cursor-pointer" onClick={() => setEditingId(null)}><X className="h-4 w-4 text-muted-foreground" /></button>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {m.category_name ? <Badge variant="secondary" className="rounded-lg">{m.category_name}</Badge> : <span className="text-muted-foreground">--</span>}
-                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="cursor-pointer p-1" onClick={() => { setEditingId(m.id); setEditForm({ name: m.name, patterns: m.patterns, category_id: m.default_category_id || "" }); }}><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></button>
-                          <button className="cursor-pointer p-1" onClick={() => handleDeleteMerchant(m.id)}><Trash2 className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-4">
+                          <span className="font-medium text-[15px]">{m.name}</span>
+                          <code className="text-[12px] text-muted-foreground font-mono">{m.patterns}</code>
                         </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
+                        <div className="flex items-center gap-2">
+                          {m.category_name ? <Badge variant="secondary" className="rounded-lg">{m.category_name}</Badge> : <span className="text-muted-foreground text-sm">--</span>}
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              className="cursor-pointer p-1"
+                              onClick={() => { setEditingId(m.id); setEditForm({ name: m.name, patterns: m.patterns, category_id: m.default_category_id || "" }); }}
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                            </button>
+                            <button className="cursor-pointer p-1" onClick={() => handleDeleteMerchant(m.id)}>
+                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </GlassCard>
         </>
       )}

@@ -3,20 +3,18 @@
 import { useEffect, useState } from "react";
 import { api, SavingsGoal, Milestone } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { GlassCard } from "@/components/glass-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Target, Flag, CheckCircle2 } from "lucide-react";
+import { Plus, Target, Flag, CheckCircle2, X } from "lucide-react";
+
+const GOAL_COLORS = ["#3b82f6", "#8b5cf6", "#22c55e", "#f59e0b", "#ec4899", "#14b8a6"];
 
 export default function GoalsPage() {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"goals" | "milestones">("goals");
   const [goalOpen, setGoalOpen] = useState(false);
   const [msOpen, setMsOpen] = useState(false);
   const [goalForm, setGoalForm] = useState({ name: "", target_amount: "", target_date: "" });
@@ -54,100 +52,259 @@ export default function GoalsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Goals & Milestones</h1>
+    <div className="space-y-6 p-1">
+      {/* Header */}
+      <GlassCard delay={0} className="flex items-end justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-1">Goals & Milestones</p>
+          <h1 className="text-2xl font-bold tracking-tight">What you're working towards</h1>
+        </div>
+        <button
+          onClick={() => tab === "goals" ? setGoalOpen(true) : setMsOpen(true)}
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold cursor-pointer shadow-[0_10px_24px_-10px_var(--color-primary)] hover:opacity-90 transition-opacity"
+        >
+          <Plus className="h-4 w-4" />
+          {tab === "goals" ? "New Goal" : "New Milestone"}
+        </button>
+      </GlassCard>
 
-      <Tabs defaultValue="goals">
-        <TabsList>
-          <TabsTrigger value="goals"><Target className="h-4 w-4 mr-1" />Savings Goals</TabsTrigger>
-          <TabsTrigger value="milestones"><Flag className="h-4 w-4 mr-1" />Milestones</TabsTrigger>
-        </TabsList>
+      {/* Tabs */}
+      <div className="glass bg-card rounded-[14px] p-1.5 inline-flex gap-1 self-start">
+        {([
+          { id: "goals" as const, label: "Savings Goals", Icon: Target },
+          { id: "milestones" as const, label: "Milestones", Icon: Flag },
+        ]).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-all cursor-pointer ${
+              tab === t.id
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <t.Icon className="h-3.5 w-3.5" />
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        <TabsContent value="goals" className="space-y-4 mt-4">
-          <div className="flex justify-end">
-            <Dialog open={goalOpen} onOpenChange={setGoalOpen}>
-              <DialogTrigger><Button><Plus className="h-4 w-4 mr-2" />New Goal</Button></DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Create Savings Goal</DialogTitle></DialogHeader>
-                <div className="space-y-4">
-                  <div><Label>Name</Label><Input value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} /></div>
-                  <div><Label>Target Amount (CHF)</Label><Input type="number" value={goalForm.target_amount} onChange={(e) => setGoalForm({ ...goalForm, target_amount: e.target.value })} /></div>
-                  <div><Label>Target Date (optional)</Label><Input type="date" value={goalForm.target_date} onChange={(e) => setGoalForm({ ...goalForm, target_date: e.target.value })} /></div>
-                  <Button onClick={createGoal} className="w-full">Create</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          {goals.length === 0 ? (
-            <Card><CardContent className="py-12 text-center text-muted-foreground">No savings goals yet.</CardContent></Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {goals.map((g) => (
-                <Card key={g.id}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">{g.name}</CardTitle>
-                    {g.target_date && <p className="text-xs text-muted-foreground">Target: {formatDate(g.target_date)}</p>}
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span>{formatCurrency(g.current_amount)}</span>
-                      <span className="text-muted-foreground">{formatCurrency(g.target_amount)}</span>
-                    </div>
-                    <Progress value={g.progress_pct} />
-                    <p className="text-xs text-muted-foreground mt-2">{g.progress_pct.toFixed(1)}% complete</p>
-                  </CardContent>
-                </Card>
-              ))}
+      {/* Goals tab */}
+      {tab === "goals" && (
+        loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : goals.length === 0 ? (
+          <GlassCard delay={0.05}>
+            <div className="py-12 text-center text-muted-foreground">
+              <Target className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No savings goals yet. Create your first goal!</p>
             </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="milestones" className="space-y-4 mt-4">
-          <div className="flex justify-end">
-            <Dialog open={msOpen} onOpenChange={setMsOpen}>
-              <DialogTrigger><Button><Plus className="h-4 w-4 mr-2" />New Milestone</Button></DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Create Milestone</DialogTitle></DialogHeader>
-                <div className="space-y-4">
-                  <div><Label>Name</Label><Input value={msForm.name} onChange={(e) => setMsForm({ ...msForm, name: e.target.value })} /></div>
-                  <div><Label>Description</Label><Input value={msForm.description} onChange={(e) => setMsForm({ ...msForm, description: e.target.value })} /></div>
-                  <div><Label>Target Date</Label><Input type="date" value={msForm.target_date} onChange={(e) => setMsForm({ ...msForm, target_date: e.target.value })} /></div>
-                  <div><Label>Target Net Worth (optional)</Label><Input type="number" value={msForm.target_net_worth} onChange={(e) => setMsForm({ ...msForm, target_net_worth: e.target.value })} /></div>
-                  <Button onClick={createMilestone} className="w-full">Create</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          {milestones.length === 0 ? (
-            <Card><CardContent className="py-12 text-center text-muted-foreground">No milestones yet.</CardContent></Card>
-          ) : (
-            <div className="space-y-3">
-              {milestones.map((m) => (
-                <Card key={m.id}>
-                  <CardContent className="flex items-center gap-4 py-4">
-                    {m.achieved ? (
-                      <CheckCircle2 className="h-6 w-6 text-green-500 shrink-0" />
-                    ) : (
-                      <Flag className="h-6 w-6 text-muted-foreground shrink-0" />
+          </GlassCard>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {goals.map((g, i) => {
+              const color = GOAL_COLORS[i % GOAL_COLORS.length];
+              const complete = g.progress_pct >= 100;
+              return (
+                <GlassCard key={g.id} delay={i * 0.05 + 0.1} className="flex flex-col gap-4 relative overflow-hidden">
+                  {/* Blurred glow orb */}
+                  <div
+                    className="absolute -top-16 -right-16 w-48 h-48 rounded-full pointer-events-none"
+                    style={{ background: color, filter: "blur(50px)", opacity: 0.15 }}
+                  />
+                  <div className="flex items-start justify-between relative z-10">
+                    <div
+                      className="w-11 h-11 rounded-[14px] flex items-center justify-center text-white shrink-0"
+                      style={{ background: color }}
+                    >
+                      <Target className="h-5 w-5" />
+                    </div>
+                    {complete && (
+                      <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-gain px-2.5 py-1 rounded-[10px] bg-gain/10">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Achieved
+                      </span>
                     )}
-                    <div className="flex-1">
-                      <p className="font-medium">{m.name}</p>
-                      {m.description && <p className="text-sm text-muted-foreground">{m.description}</p>}
+                  </div>
+                  <div className="relative z-10">
+                    <p className="text-[17px] font-bold">{g.name}</p>
+                    {g.target_date && (
+                      <p className="text-xs text-muted-foreground mt-0.5">Target: {formatDate(g.target_date)}</p>
+                    )}
+                  </div>
+                  <div className="relative z-10">
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="font-mono text-2xl font-bold tabular-nums">{formatCurrency(g.current_amount)}</span>
+                      <span className="font-mono text-xs text-muted-foreground tabular-nums">of {formatCurrency(g.target_amount)}</span>
                     </div>
-                    <div className="text-right">
-                      {m.target_date && <p className="text-sm">{formatDate(m.target_date)}</p>}
-                      {m.target_net_worth && <p className="text-xs text-muted-foreground">{formatCurrency(m.target_net_worth)}</p>}
-                      {m.achieved && <Badge variant="secondary" className="mt-1">Achieved</Badge>}
+                    <div className="h-2.5 rounded-full bg-accent overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{
+                          width: `${Math.min(g.progress_pct, 100)}%`,
+                          background: `linear-gradient(90deg, ${color}, ${color}aa)`,
+                        }}
+                      />
                     </div>
-                  </CardContent>
-                </Card>
+                    <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                      <span>{g.progress_pct.toFixed(1)}% complete</span>
+                      <span>{formatCurrency(Math.max(0, g.target_amount - g.current_amount))} to go</span>
+                    </div>
+                  </div>
+                </GlassCard>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {/* Milestones tab */}
+      {tab === "milestones" && (
+        loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : milestones.length === 0 ? (
+          <GlassCard delay={0.05}>
+            <div className="py-12 text-center text-muted-foreground">
+              <Flag className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No milestones yet. Create your first milestone!</p>
+            </div>
+          </GlassCard>
+        ) : (
+          <GlassCard delay={0.1} className="relative">
+            <div className="absolute left-[22px] top-10 bottom-10 w-0.5 bg-border" />
+            <div className="space-y-0 divide-y divide-border">
+              {milestones.map((m) => (
+                <div key={m.id} className="grid grid-cols-[40px_1fr_140px_120px] gap-4 py-4 items-center">
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center border-2 z-10 ${
+                      m.achieved
+                        ? "bg-gain/10 text-gain border-gain"
+                        : "bg-accent text-muted-foreground border-border"
+                    }`}
+                  >
+                    {m.achieved ? <CheckCircle2 className="h-4 w-4" /> : <Flag className="h-4 w-4" />}
+                  </div>
+                  <div>
+                    <p className="text-[15px] font-semibold">{m.name}</p>
+                    {m.description && <p className="text-xs text-muted-foreground mt-0.5">{m.description}</p>}
+                  </div>
+                  <div>
+                    {m.target_date && (
+                      <>
+                        <p className="text-[11px] text-muted-foreground mb-0.5">Target date</p>
+                        <p className="text-sm font-medium">{formatDate(m.target_date)}</p>
+                      </>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    {m.target_net_worth && (
+                      <>
+                        <p className="text-[11px] text-muted-foreground mb-0.5">Target</p>
+                        <p className="font-mono text-sm font-semibold tabular-nums">{formatCurrency(m.target_net_worth)}</p>
+                      </>
+                    )}
+                    {m.achieved && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-lg bg-gain/10 text-gain mt-1 inline-block">
+                        Achieved
+                      </span>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
-          )}
-        </TabsContent>
-      </Tabs>
+          </GlassCard>
+        )
+      )}
+
+      {/* Create Goal Modal */}
+      {goalOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => setGoalOpen(false)}
+        >
+          <div
+            className="glass bg-card rounded-3xl p-7 w-[440px] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold">Create Savings Goal</h2>
+              <button
+                onClick={() => setGoalOpen(false)}
+                className="w-8 h-8 rounded-[10px] bg-accent flex items-center justify-center cursor-pointer hover:bg-muted transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-[12px] font-semibold text-muted-foreground mb-1.5 block">Name</Label>
+                <Input value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} placeholder="e.g. Emergency Fund" className="h-11 rounded-xl bg-accent border-0" />
+              </div>
+              <div>
+                <Label className="text-[12px] font-semibold text-muted-foreground mb-1.5 block">Target Amount (CHF)</Label>
+                <Input type="number" value={goalForm.target_amount} onChange={(e) => setGoalForm({ ...goalForm, target_amount: e.target.value })} placeholder="10000" className="h-11 rounded-xl bg-accent border-0" />
+              </div>
+              <div>
+                <Label className="text-[12px] font-semibold text-muted-foreground mb-1.5 block">Target Date (optional)</Label>
+                <Input type="date" value={goalForm.target_date} onChange={(e) => setGoalForm({ ...goalForm, target_date: e.target.value })} className="h-11 rounded-xl bg-accent border-0" />
+              </div>
+              <button
+                onClick={createGoal}
+                className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold cursor-pointer shadow-[0_10px_24px_-10px_var(--color-primary)] hover:opacity-90 transition-opacity mt-1"
+              >
+                Create Goal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Milestone Modal */}
+      {msOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => setMsOpen(false)}
+        >
+          <div
+            className="glass bg-card rounded-3xl p-7 w-[440px] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold">Create Milestone</h2>
+              <button
+                onClick={() => setMsOpen(false)}
+                className="w-8 h-8 rounded-[10px] bg-accent flex items-center justify-center cursor-pointer hover:bg-muted transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-[12px] font-semibold text-muted-foreground mb-1.5 block">Name</Label>
+                <Input value={msForm.name} onChange={(e) => setMsForm({ ...msForm, name: e.target.value })} placeholder="e.g. First 100k" className="h-11 rounded-xl bg-accent border-0" />
+              </div>
+              <div>
+                <Label className="text-[12px] font-semibold text-muted-foreground mb-1.5 block">Description</Label>
+                <Input value={msForm.description} onChange={(e) => setMsForm({ ...msForm, description: e.target.value })} placeholder="Optional description" className="h-11 rounded-xl bg-accent border-0" />
+              </div>
+              <div>
+                <Label className="text-[12px] font-semibold text-muted-foreground mb-1.5 block">Target Date</Label>
+                <Input type="date" value={msForm.target_date} onChange={(e) => setMsForm({ ...msForm, target_date: e.target.value })} className="h-11 rounded-xl bg-accent border-0" />
+              </div>
+              <div>
+                <Label className="text-[12px] font-semibold text-muted-foreground mb-1.5 block">Target Net Worth (optional)</Label>
+                <Input type="number" value={msForm.target_net_worth} onChange={(e) => setMsForm({ ...msForm, target_net_worth: e.target.value })} placeholder="100000" className="h-11 rounded-xl bg-accent border-0" />
+              </div>
+              <button
+                onClick={createMilestone}
+                className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold cursor-pointer shadow-[0_10px_24px_-10px_var(--color-primary)] hover:opacity-90 transition-opacity mt-1"
+              >
+                Create Milestone
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
