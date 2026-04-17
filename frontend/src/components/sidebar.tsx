@@ -49,36 +49,37 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="flex h-screen w-[260px] flex-col glass bg-sidebar shrink-0">
+    <aside className="flex h-screen w-[240px] flex-col glass bg-sidebar shrink-0 px-3.5 py-5">
       {/* Brand */}
-      <div className="flex items-center gap-3 px-7 h-[80px]">
+      <div className="flex items-center gap-3 px-[10px] pb-5">
         <div
-          className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0"
+          className="h-[38px] w-[38px] rounded-[12px] flex items-center justify-center shrink-0"
           style={{ background: "linear-gradient(135deg, #2f5bff, #8b5cf6)", boxShadow: "0 6px 20px -6px rgba(47,91,255,0.5)" }}
         >
-          <TrendingUp className="h-5 w-5 text-white" strokeWidth={2.5} />
+          <TrendingUp className="h-[18px] w-[18px] text-white" strokeWidth={2.4} />
         </div>
         <div>
-          <span className="text-[17px] font-semibold tracking-tight">FinPilot</span>
+          <span className="text-[16px] font-bold" style={{ letterSpacing: '-0.2px' }}>Finpilot</span>
           <p className="text-[11px] text-muted-foreground">Agent-first finance</p>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 py-3 space-y-1">
+      <nav className="flex-1 flex flex-col gap-0.5 overflow-auto">
         {nav.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-medium transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+              className={`flex items-center gap-3 rounded-[14px] px-3.5 py-[11px] text-[14px] transition-all duration-200 cursor-pointer active:scale-[0.98] ${
                 active
-                  ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  ? "bg-accent text-foreground font-semibold"
+                  : "text-muted-foreground font-medium hover:text-foreground hover:bg-accent"
               }`}
+              style={active ? { boxShadow: '0 8px 22px -8px var(--accent)' } : {}}
             >
-              <Icon className="h-[22px] w-[22px] shrink-0" strokeWidth={active ? 2.2 : 1.8} />
+              <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2.2 : 1.8} />
               {label}
             </Link>
           );
@@ -86,19 +87,19 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-4 space-y-1">
+      <div className="flex flex-col gap-0.5 pt-2 border-t border-border">
         <button
           onClick={toggleTheme}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-200 cursor-pointer active:scale-[0.98]"
+          className="flex w-full items-center gap-3 rounded-[14px] px-3.5 py-[11px] text-[14px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-200 cursor-pointer active:scale-[0.98]"
         >
-          {dark ? <Sun className="h-[22px] w-[22px]" strokeWidth={1.8} /> : <Moon className="h-[22px] w-[22px]" strokeWidth={1.8} />}
+          {dark ? <Sun className="h-[18px] w-[18px]" strokeWidth={1.8} /> : <Moon className="h-[18px] w-[18px]" strokeWidth={1.8} />}
           {dark ? "Light Mode" : "Dark Mode"}
         </button>
         <button
           onClick={logout}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-[15px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-200 cursor-pointer active:scale-[0.98]"
+          className="flex w-full items-center gap-3 rounded-[14px] px-3.5 py-[11px] text-[14px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-200 cursor-pointer active:scale-[0.98]"
         >
-          <LogOut className="h-[22px] w-[22px]" strokeWidth={1.8} />
+          <LogOut className="h-[18px] w-[18px]" strokeWidth={1.8} />
           Logout
         </button>
       </div>

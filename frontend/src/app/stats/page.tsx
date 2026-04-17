@@ -203,7 +203,7 @@ export default function StatsPage() {
 
       {/* ── Loading skeleton ── */}
       {loading ? (
-        <div className="grid gap-5 md:grid-cols-4">
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-[120px] rounded-[24px] bg-muted animate-pulse" />
           ))}
@@ -246,7 +246,7 @@ function MonthlyView({
   return (
     <>
       {/* KPI cards */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         {kpiCards.map((k, i) => (
           <GlassCard key={k.l} delay={0.05 + i * 0.04} className="relative overflow-hidden">
             {/* Glow blob */}
@@ -276,7 +276,7 @@ function MonthlyView({
       </div>
 
       {/* Category donut + breakdown */}
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-[18px]" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <GlassCard delay={0.15}>
           <SectionHeader eyebrow="Breakdown" title="Spending by Category" />
           {monthly.categories.length === 0 ? (
@@ -517,7 +517,7 @@ function YearlyView({ yearly }: { yearly: YearlyStats }) {
 
   return (
     <>
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         {kpiCards.map((k, i) => (
           <GlassCard key={k.l} delay={0.05 + i * 0.04} className="relative overflow-hidden">
             <div
