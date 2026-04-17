@@ -217,7 +217,7 @@ export default function OverviewPage() {
           delay={0.1}
           sub={
             bankAccounts.length > 0 ? (
-              <p className="text-[13px] text-muted-foreground">{bankAccounts[0].name}</p>
+              <p className="text-[13px] text-muted-foreground">{bankAccounts.length} {bankAccounts.length === 1 ? "account" : "accounts"}</p>
             ) : undefined
           }
           onEdit={
