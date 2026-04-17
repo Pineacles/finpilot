@@ -6,28 +6,20 @@ import { motion } from "motion/react";
 import { api, PublicPortfolio, StockAnalysisEntry, Trade, PortfolioSnapshot, ValueTimelinePoint, PortfolioAnalysis, PostMortem, BuyAssessment } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar } from "recharts";
-import { TrendingUp, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, History, LineChart, X, ChevronDown, ChevronRight, Archive, Activity, BookOpen, Target } from "lucide-react";
+import { BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, History, LineChart, X, ChevronDown, ChevronRight, Archive, BookOpen, Target, Sun, Moon } from "lucide-react";
+import { GlassCard } from "@/components/glass-card";
+import { AnimatedNumber } from "@/components/animated-number";
+import { Sparkline as SparklineChart } from "@/components/sparkline";
+import { ActionBadge } from "@/components/action-badge";
+import { ConvictionDots } from "@/components/conviction-dots";
+import { LivePill } from "@/components/live-pill";
 
 const COLORS = ["#3b82f6","#f97316","#ef4444","#a855f7","#14b8a6","#f59e0b","#ec4899","#22c55e","#06b6d4","#8b5cf6","#e11d48","#84cc16","#6366f1","#d946ef","#0ea5e9","#fb923c"];
 const RANGES = [{value:"1d",label:"1D"},{value:"5d",label:"1W"},{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
 
-function GlassCard({children,className="",delay=0}:{children:React.ReactNode;className?:string;delay?:number}){
-  return <motion.div initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{duration:0.45,delay,ease:[0.25,0.46,0.45,0.94]}} className={`glass bg-card rounded-3xl p-6 ${className}`}>{children}</motion.div>;
-}
-function Sparkline({data,positive}:{data:number[];positive:boolean}){
-  if(!data||data.length<2)return null;
-  const min=Math.min(...data),max=Math.max(...data),range=max-min||1,h=36,w=90;
-  const points=data.map((v,i)=>`${(i/(data.length-1))*w},${h-((v-min)/range)*h}`).join(" ");
-  return <svg width={w} height={h} className="shrink-0"><polyline fill="none" stroke={positive?"#3b82f6":"#ff3b30"} strokeWidth="2" points={points}/></svg>;
-}
 function PnlBadge({value,pct}:{value:number;pct?:number}){
   const pos=value>=0;
   return <span className={`text-[13px] px-2.5 py-1 rounded-xl font-medium inline-flex items-center gap-1 ${pos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{pos?"+":""}{formatCurrency(value)}{pct!==undefined&&<span className="opacity-70">({pos?"+":""}{pct.toFixed(1)}%)</span>}</span>;
-}
-function ActionBadge({action,size="md"}:{action:string;size?:"sm"|"md"}){
-  const cls=action==="ADD"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":action==="SELL"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400";
-  const px=size==="sm"?"px-2 py-0.5 text-[11px]":"px-3 py-1 text-[13px]";
-  return <span className={`${px} rounded-xl font-semibold ${cls}`}>{action}</span>;
 }
 function SentimentBadge({sentiment,size="md"}:{sentiment:string;size?:"sm"|"md"}){
   const cls=sentiment==="bullish"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":sentiment==="bearish"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400";
@@ -81,32 +73,6 @@ function EconomyDetail({c}:{c:PortfolioAnalysis["content"]}){
       )}
     </div>
   );
-}
-
-function AnimatedNumber({value,format}:{value:number;format:(n:number)=>string}){
-  const [display,setDisplay]=useState(value);
-  const startRef=useRef(value);
-  const startTimeRef=useRef(0);
-  const rafRef=useRef<number|undefined>(undefined);
-  useEffect(()=>{
-    if(value===display)return;
-    startRef.current=display;
-    startTimeRef.current=performance.now();
-    const target=value;
-    const start=display;
-    const duration=600;
-    const tick=(now:number)=>{
-      const elapsed=now-startTimeRef.current;
-      const t=Math.min(elapsed/duration,1);
-      const eased=1-Math.pow(1-t,3);
-      setDisplay(start+(target-start)*eased);
-      if(t<1)rafRef.current=requestAnimationFrame(tick);
-    };
-    rafRef.current=requestAnimationFrame(tick);
-    return()=>{if(rafRef.current)cancelAnimationFrame(rafRef.current);};
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[value]);
-  return <>{format(display)}</>;
 }
 
 function useScrollableDeck<T extends HTMLElement>(){
@@ -259,7 +225,7 @@ export default function PublicPortfolioPage(){
       }catch{}
     };
     poll();
-    const i=setInterval(poll,5000);
+    const i=setInterval(poll,15000);
     return()=>{cancelled=true;clearInterval(i);};
   },[token]);
 
@@ -304,10 +270,31 @@ export default function PublicPortfolioPage(){
     return{value:liveValue,pnl,pnlPct};
   },[p,livePrices]);
 
-  if(loading)return <div className="mx-auto max-w-[1600px] px-8 py-8 space-y-6">{[...Array(4)].map((_,i)=><div key={i} className="h-32 rounded-3xl bg-muted animate-pulse"/>)}</div>;
+  const [dark,setDark]=useState(false);
+  useEffect(()=>{
+    const stored=localStorage.getItem("theme");
+    const isDark=stored==="dark"||(!stored&&window.matchMedia("(prefers-color-scheme: dark)").matches);
+    setDark(isDark);
+    document.documentElement.classList.toggle("dark",isDark);
+  },[]);
+  const toggleTheme=()=>{
+    const next=!dark;
+    setDark(next);
+    document.documentElement.classList.toggle("dark",next);
+    localStorage.setItem("theme",next?"dark":"light");
+  };
+
+  if(loading)return(
+    <div className="min-h-screen">
+      <div className="mx-auto max-w-7xl px-6 py-10 space-y-6">
+        {[...Array(4)].map((_,i)=><div key={i} className="h-32 rounded-[20px] bg-muted animate-pulse"/>)}
+      </div>
+    </div>
+  );
 
   if(error||!p)return(
     <div className="min-h-screen flex items-center justify-center">
+      <button onClick={toggleTheme} className="glass fixed top-6 right-6 w-[42px] h-[42px] rounded-[14px] flex items-center justify-center text-foreground hover:brightness-110 transition-all cursor-pointer" aria-label="Toggle theme">{dark?<Sun className="h-[18px] w-[18px]"/>:<Moon className="h-[18px] w-[18px]"/>}</button>
       <div className="text-center">
         <h1 className="text-2xl font-bold mb-2">Portfolio not found</h1>
         <p className="text-muted-foreground">This link may have expired or the portfolio is no longer public.</p>
@@ -316,7 +303,11 @@ export default function PublicPortfolioPage(){
   );
 
   return (
-    <div className="mx-auto max-w-[1600px] px-8 py-8 space-y-8">
+    <div className="min-h-screen">
+      {/* Floating theme toggle */}
+      <button onClick={toggleTheme} className="glass fixed top-6 right-6 w-[42px] h-[42px] rounded-[14px] flex items-center justify-center text-foreground hover:brightness-110 transition-all cursor-pointer z-50" aria-label="Toggle theme">{dark?<Sun className="h-[18px] w-[18px]"/>:<Moon className="h-[18px] w-[18px]"/>}</button>
+
+    <div className="mx-auto max-w-7xl px-6 py-10 space-y-8">
       <style>{`
   .recharts-brush text { fill: var(--foreground); font-weight: 500; font-size: 11px; }
   .recharts-brush-traveller { fill: var(--accent); }
@@ -332,28 +323,40 @@ export default function PublicPortfolioPage(){
   .stock-deck.deck-at-end { -webkit-mask-image: linear-gradient(to right, transparent 0%, black 8%, black 100%); mask-image: linear-gradient(to right, transparent 0%, black 8%, black 100%); }
   .stock-deck.deck-at-start.deck-at-end { -webkit-mask-image: none; mask-image: none; cursor: default; }
 `}</style>
-      {/* Header */}
-      <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center"><TrendingUp className="h-3.5 w-3.5 text-primary-foreground"/></div>
-            <span className="text-sm font-semibold text-primary">FinPilot</span>
+      {/* Branded header */}
+      <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} transition={{duration:0.45,ease:[0.25,0.46,0.45,0.94]}} className="flex items-center justify-between gap-4 pb-2 border-b border-border/60">
+        <div className="flex items-center gap-4">
+          {/* Gradient logo square */}
+          <div className="w-[52px] h-[52px] rounded-[14px] flex items-center justify-center shrink-0" style={{background:"linear-gradient(135deg,#3b82f6 0%,#8b5cf6 100%)"}} >
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{p.display_name}&apos;s Portfolio</h1>
-          <div className="flex items-center gap-2 mt-2">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="text-[13px] font-bold tracking-tight" style={{background:"linear-gradient(135deg,#3b82f6,#8b5cf6)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>FinPilot</span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">Read-only view</span>
+            </div>
+            <p className="text-[15px] font-semibold text-foreground">Shared by {p.display_name}</p>
+          </div>
+        </div>
+        <div className="text-right hidden sm:block">
+          <div className="flex items-center gap-2 justify-end mb-1">
             <p className="text-[13px] text-muted-foreground uppercase tracking-wider">Total Value</p>
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tracking-wider">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-              </span>
-              LIVE
-            </span>
+            <LivePill/>
           </div>
-          <p className="text-3xl sm:text-4xl font-bold tracking-tight mt-1 tabular-nums"><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
-          <div className="flex items-center gap-3 mt-2"><PnlBadge value={liveTotals.pnl} pct={liveTotals.pnlPct}/><span className="text-[13px] text-muted-foreground">all time</span></div>
+          <p className="text-2xl font-bold tracking-tight tabular-nums"><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
+          <div className="flex items-center gap-2 justify-end mt-1"><PnlBadge value={liveTotals.pnl} pct={liveTotals.pnlPct}/><span className="text-[12px] text-muted-foreground">all time</span></div>
         </div>
       </motion.div>
+
+      {/* Mobile total value */}
+      <div className="sm:hidden">
+        <div className="flex items-center gap-2 mb-1">
+          <p className="text-[13px] text-muted-foreground uppercase tracking-wider">Total Value</p>
+          <LivePill/>
+        </div>
+        <p className="text-3xl font-bold tracking-tight tabular-nums"><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
+        <div className="flex items-center gap-3 mt-2"><PnlBadge value={liveTotals.pnl} pct={liveTotals.pnlPct}/><span className="text-[13px] text-muted-foreground">all time</span></div>
+      </div>
 
       {/* Summary */}
       <div className="grid gap-5 grid-cols-2 lg:grid-cols-4">
@@ -395,7 +398,7 @@ export default function PublicPortfolioPage(){
                   <p className="font-semibold text-[15px]">{pos.symbol}</p>
                   <p className="text-[11px] text-muted-foreground truncate max-w-[80px]">{pos.name}</p>
                 </div>
-                <div className="hidden lg:block shrink-0"><Sparkline data={pos.sparkline} positive={livePnlPct>=0}/></div>
+                <div className="hidden lg:block shrink-0"><SparklineChart data={pos.sparkline} width={90} height={36} color={livePnlPct>=0?"#3b82f6":"#ef4444"}/></div>
                 <div className="text-right shrink-0">
                   <p className="text-[14px] font-medium tabular-nums">{livePrice.toFixed(2)}<span className="text-[10px] text-muted-foreground ml-1">{pos.currency}</span></p>
                   <p className="text-[11px] text-muted-foreground tabular-nums">cost {pos.avg_cost_price.toFixed(2)}</p>
@@ -475,7 +478,7 @@ export default function PublicPortfolioPage(){
                           <button onClick={()=>setExpandedOlderId(isOpen?null:older.analysis_id)} className="w-full flex items-center justify-between gap-3 p-3 hover:bg-accent/50 cursor-pointer text-left">
                             <div className="flex items-center gap-2 min-w-0 flex-1">
                               {isOpen?<ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0"/>:<ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0"/>}
-                              <ActionBadge action={os.action} size="sm"/>
+                              <ActionBadge action={os.action} className="text-[11px] px-2 py-0.5"/>
                               <span className={`text-[12px] font-semibold tabular-nums ${os.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{os.unrealized_pnl_pct>=0?"+":""}{os.unrealized_pnl_pct.toFixed(1)}%</span>
                               <span className="text-[11px] text-muted-foreground truncate">{os.rationale.split(".")[0]}</span>
                             </div>
@@ -516,7 +519,7 @@ export default function PublicPortfolioPage(){
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         {isOpen?<ChevronDown className="h-4 w-4 text-muted-foreground shrink-0"/>:<ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/>}
                         <span className="text-[15px] font-bold">{s.symbol}</span>
-                        <ActionBadge action={s.action} size="sm"/>
+                        <ActionBadge action={s.action} className="text-[11px] px-2 py-0.5"/>
                         <span className={`text-[12px] font-semibold tabular-nums ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
                       </div>
                       <span className="text-[11px] text-muted-foreground shrink-0">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</span>
@@ -698,9 +701,9 @@ export default function PublicPortfolioPage(){
                       {ba.stop_loss&&<span>Stop: <span className="text-foreground font-medium">{ba.stop_loss.toFixed(2)}</span></span>}
                     </div>
                   )}
-                  <div className="flex items-center gap-1">
-                    {[1,2,3,4,5].map(d=><div key={d} className={`h-2 w-2 rounded-full ${d<=ba.conviction?"bg-primary":"bg-border"}`}/>)}
-                    <span className="text-[11px] text-muted-foreground ml-1">conviction</span>
+                  <div className="flex items-center gap-1.5">
+                    <ConvictionDots level={ba.conviction}/>
+                    <span className="text-[11px] text-muted-foreground">conviction</span>
                   </div>
                   <div>
                     <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-3"}`}>{ba.thesis}</p>
@@ -812,7 +815,8 @@ export default function PublicPortfolioPage(){
         </div>
       )}
 
-      <p className="text-center text-[12px] text-muted-foreground pt-4">Shared via FinPilot</p>
+      <p className="text-center text-[12px] text-muted-foreground pt-4 pb-8">Shared via FinPilot</p>
+    </div>
     </div>
   );
 }
