@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { motion } from "motion/react";
 import { api, Overview, PortfolioSummary } from "@/lib/api";
 import { formatCurrency, formatPct } from "@/lib/format";
+import { GlassCard } from "@/components/glass-card";
+import { AnimatedNumber } from "@/components/animated-number";
+import { LivePill } from "@/components/live-pill";
+import { CategoryPill } from "@/components/category-pill";
 import {
   ArrowUpRight,
   ArrowDownRight,
@@ -19,74 +23,59 @@ function Skeleton({ className }: { className?: string }) {
   return <div className={`animate-pulse rounded-2xl bg-muted ${className ?? ""}`} />;
 }
 
-function GlassCard({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className={`glass bg-card rounded-3xl p-6 ${className}`}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-function MetricCard({ icon: Icon, iconBg, iconColor, label, value, sub, delay, live, onEdit }: {
-  icon: React.ElementType; iconBg: string; iconColor: string;
-  label: string; value: React.ReactNode; sub?: React.ReactNode; delay: number; live?: boolean; onEdit?: () => void;
+function MetricCard({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  glowColor,
+  label,
+  value,
+  sub,
+  delay,
+  live,
+  onEdit,
+}: {
+  icon: React.ElementType;
+  iconBg: string;
+  iconColor: string;
+  glowColor: string;
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  delay: number;
+  live?: boolean;
+  onEdit?: () => void;
 }) {
   return (
-    <GlassCard delay={delay}>
-      <div className="flex items-start justify-between mb-5">
-        <div className={`h-14 w-14 rounded-2xl ${iconBg} flex items-center justify-center`}>
-          <Icon className={`h-7 w-7 ${iconColor}`} strokeWidth={1.8} />
+    <GlassCard delay={delay} className="relative overflow-hidden">
+      {/* Ambient glow blob */}
+      <div
+        className="pointer-events-none absolute -top-10 -right-10 h-[140px] w-[140px] rounded-full opacity-35 blur-[40px]"
+        style={{ background: glowColor }}
+      />
+      <div className="relative z-10">
+        <div className="flex items-start justify-between mb-5">
+          <div className={`h-[48px] w-[48px] rounded-2xl ${iconBg} flex items-center justify-center`}>
+            <Icon className={`h-6 w-6 ${iconColor}`} strokeWidth={1.8} />
+          </div>
+          <div className="flex items-center gap-2">
+            {live && <LivePill />}
+            {onEdit && (
+              <button
+                onClick={onEdit}
+                className="p-1.5 rounded-lg hover:bg-accent cursor-pointer transition-colors"
+              >
+                <Pencil className="h-4 w-4 text-muted-foreground" />
+              </button>
+            )}
+          </div>
         </div>
-        {onEdit && (
-          <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-accent cursor-pointer transition-colors">
-            <Pencil className="h-4 w-4 text-muted-foreground" />
-          </button>
-        )}
+        <p className="text-sm font-medium text-muted-foreground mb-1">{label}</p>
+        <p className="text-2xl font-bold tracking-tight tabular-nums">{value}</p>
+        {sub && <div className="mt-2">{sub}</div>}
       </div>
-      <div className="flex items-center gap-2 mb-1">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        {live && (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tracking-wider">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-            </span>
-            LIVE
-          </span>
-        )}
-      </div>
-      <p className="text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
-      {sub && <div className="mt-2">{sub}</div>}
     </GlassCard>
   );
-}
-
-function AnimatedNumber({ value, format }: { value: number; format: (n: number) => string }) {
-  const [display, setDisplay] = useState(value);
-  const rafRef = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (value === display) return;
-    const start = display;
-    const target = value;
-    const startTime = performance.now();
-    const duration = 600;
-    const tick = (now: number) => {
-      const elapsed = now - startTime;
-      const t = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - t, 3);
-      setDisplay(start + (target - start) * eased);
-      if (t < 1) rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-  return <>{format(display)}</>;
 }
 
 export default function OverviewPage() {
@@ -177,7 +166,6 @@ export default function OverviewPage() {
 
   if (!data) return <p className="text-muted-foreground text-lg">Failed to load data.</p>;
 
-  const pnlUp = data.portfolio_pnl >= 0;
   // Live-aware values: when portfolio data is loaded, use the live total instead of the cached overview value
   const livePortfolioValue = portfolio ? liveTotals.value : data.portfolio_value;
   const livePortfolioPnl = portfolio ? liveTotals.pnl : data.portfolio_pnl;
@@ -188,46 +176,91 @@ export default function OverviewPage() {
   const ccAccounts = data.accounts.filter((a) => a.type === "credit_card");
   const bankTotal = bankAccounts.reduce((s, a) => s + a.balance, 0);
   const ccTotal = ccAccounts.reduce((s, a) => s + a.balance, 0);
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
-        <p className="text-sm font-medium text-primary mb-1">Overview</p>
-        <h1 className="text-3xl font-bold tracking-tight">Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {data.display_name}</h1>
-        <p className="text-muted-foreground mt-1">Here's how your finances are looking today.</p>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">Overview</p>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Good {greeting}, {data.display_name}
+        </h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Here&apos;s how your finances are looking today.
+        </p>
       </motion.div>
 
       {/* Top Metric Cards */}
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         <MetricCard
-          icon={Wallet} iconBg="bg-emerald-100 dark:bg-emerald-500/15" iconColor="text-emerald-600 dark:text-emerald-400"
-          label="Total Balance" value={<AnimatedNumber value={liveNetWorth} format={formatCurrency} />} delay={0.05} live
+          icon={Wallet}
+          iconBg="bg-emerald-100 dark:bg-emerald-500/15"
+          iconColor="text-emerald-600 dark:text-emerald-400"
+          glowColor="linear-gradient(135deg, #16a34a, #22c55e)"
+          label="Total Balance"
+          value={<AnimatedNumber value={liveNetWorth} format={formatCurrency} />}
+          delay={0.05}
+          live
         />
         <MetricCard
-          icon={Landmark} iconBg="bg-blue-100 dark:bg-blue-500/15" iconColor="text-blue-600 dark:text-blue-400"
-          label="Bank Account" value={formatCurrency(bankTotal)} delay={0.1}
-          sub={bankAccounts.length > 0 ? <p className="text-sm text-muted-foreground">{bankAccounts[0].name}</p> : undefined}
-          onEdit={bankAccounts.length > 0 ? () => { setEditingAccountId(bankAccounts[0].id); setEditBalance(String(Math.round(bankTotal))); } : undefined}
-        />
-        <MetricCard
-          icon={TrendingUp} iconBg="bg-orange-100 dark:bg-orange-500/15" iconColor="text-orange-600 dark:text-orange-400"
-          label="Portfolio" value={<AnimatedNumber value={livePortfolioValue} format={formatCurrency} />} delay={0.15} live
+          icon={Landmark}
+          iconBg="bg-blue-100 dark:bg-blue-500/15"
+          iconColor="text-blue-600 dark:text-blue-400"
+          glowColor="linear-gradient(135deg, #2f5bff, #8b5cf6)"
+          label="Bank Account"
+          value={formatCurrency(bankTotal)}
+          delay={0.1}
           sub={
-            <p className={`text-sm font-medium flex items-center gap-1 ${liveUp ? "text-gain" : "text-loss"}`}>
-              {liveUp ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+            bankAccounts.length > 0 ? (
+              <p className="text-sm text-muted-foreground">{bankAccounts[0].name}</p>
+            ) : undefined
+          }
+          onEdit={
+            bankAccounts.length > 0
+              ? () => {
+                  setEditingAccountId(bankAccounts[0].id);
+                  setEditBalance(String(Math.round(bankTotal)));
+                }
+              : undefined
+          }
+        />
+        <MetricCard
+          icon={TrendingUp}
+          iconBg="bg-orange-100 dark:bg-orange-500/15"
+          iconColor="text-orange-600 dark:text-orange-400"
+          glowColor="linear-gradient(135deg, #f59e0b, #ef4444)"
+          label="Portfolio"
+          value={<AnimatedNumber value={livePortfolioValue} format={formatCurrency} />}
+          delay={0.15}
+          live
+          sub={
+            <p className={`text-sm font-semibold flex items-center gap-1 ${liveUp ? "text-gain" : "text-loss"}`}>
+              {liveUp ? (
+                <ArrowUpRight className="h-4 w-4" />
+              ) : (
+                <ArrowDownRight className="h-4 w-4" />
+              )}
               {formatCurrency(Math.abs(livePortfolioPnl))} ({formatPct(livePortfolioPnlPct)})
             </p>
           }
         />
       </div>
 
-      {/* Balance Edit Modal */}
+      {/* Inline Balance Edit */}
       {editingAccountId && (
         <GlassCard delay={0}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-[15px] font-semibold">Set Account Balance</h3>
-            <button onClick={() => setEditingAccountId(null)} className="p-1.5 rounded-lg hover:bg-accent cursor-pointer">
+            <button
+              onClick={() => setEditingAccountId(null)}
+              className="p-1.5 rounded-lg hover:bg-accent cursor-pointer"
+            >
               <span className="text-muted-foreground text-sm">Cancel</span>
             </button>
           </div>
@@ -258,20 +291,25 @@ export default function OverviewPage() {
       {ccAccounts.length > 0 && (
         <GlassCard delay={0.2} className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center">
+            <div className="h-12 w-12 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center flex-shrink-0">
               <CreditCard className="h-6 w-6 text-rose-600 dark:text-rose-400" strokeWidth={1.8} />
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Credit Card</p>
-              <p className={`text-2xl font-semibold ${ccTotal < 0 ? "text-loss" : "text-gain"}`}>
+              <p className={`text-2xl font-bold tabular-nums ${ccTotal < 0 ? "text-loss" : "text-gain"}`}>
                 {formatCurrency(Math.abs(ccTotal))}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <p className="text-sm text-muted-foreground">{ccTotal < 0 ? "Outstanding balance" : "No balance"}</p>
+            <p className="text-sm text-muted-foreground">
+              {ccTotal < 0 ? "Outstanding balance" : "No balance"}
+            </p>
             <button
-              onClick={() => { setEditingAccountId(ccAccounts[0].id); setEditBalance(String(Math.round(Math.abs(ccTotal)))); }}
+              onClick={() => {
+                setEditingAccountId(ccAccounts[0].id);
+                setEditBalance(String(Math.round(Math.abs(ccTotal))));
+              }}
               className="p-1 rounded-lg hover:bg-accent cursor-pointer transition-colors"
             >
               <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
@@ -284,39 +322,54 @@ export default function OverviewPage() {
       <div className="grid gap-5 lg:grid-cols-2">
         {/* Recent Transactions */}
         <GlassCard delay={0.25}>
-          <h2 className="text-lg font-semibold mb-5">Recent Transactions</h2>
+          <h2 className="text-base font-semibold mb-5">Recent Transactions</h2>
           {data.recent_transactions.length === 0 ? (
             <div className="text-center py-12">
-              <Banknote className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" strokeWidth={1.2} />
+              <Banknote
+                className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3"
+                strokeWidth={1.2}
+              />
               <p className="text-muted-foreground">No transactions yet</p>
-              <p className="text-sm text-muted-foreground/60 mt-1">Import a bank statement to get started</p>
+              <p className="text-sm text-muted-foreground/60 mt-1">
+                Import a bank statement to get started
+              </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {data.recent_transactions.map((t, i) => (
                 <motion.div
                   key={t.id}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.3 + i * 0.05, duration: 0.3 }}
-                  className="flex items-center justify-between"
+                  className="flex items-center justify-between py-1"
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`h-11 w-11 rounded-2xl flex items-center justify-center text-[15px] font-semibold ${
-                      t.amount < 0
-                        ? "bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400"
-                        : "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400"
-                    }`}>
+                    {/* Merchant avatar circle */}
+                    <div
+                      className={`h-10 w-10 rounded-[13px] flex items-center justify-center text-[14px] font-bold flex-shrink-0 ${
+                        t.amount < 0
+                          ? "bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400"
+                          : "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400"
+                      }`}
+                    >
                       {t.merchant.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-[15px] font-medium">{t.merchant}</p>
-                      <p className="text-[13px] text-muted-foreground">
-                        {t.date}{t.category_name && ` \u00B7 ${t.category_name}`}
-                      </p>
+                      <p className="text-[14px] font-medium leading-snug">{t.merchant}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[12px] text-muted-foreground">{t.date}</span>
+                        {t.category_name && (
+                          <CategoryPill name={t.category_name} />
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <p className={`text-[15px] font-semibold tabular-nums ${t.amount < 0 ? "text-loss" : "text-gain"}`}>
+                  <p
+                    className={`text-[14px] font-semibold tabular-nums ${
+                      t.amount < 0 ? "text-loss" : "text-gain"
+                    }`}
+                  >
                     {formatCurrency(t.amount, t.currency)}
                   </p>
                 </motion.div>
@@ -327,16 +380,19 @@ export default function OverviewPage() {
 
         {/* Budget Health */}
         <GlassCard delay={0.3}>
-          <h2 className="text-lg font-semibold mb-5">Budget Health</h2>
+          <h2 className="text-base font-semibold mb-5">Budget Health</h2>
           {data.budget_health.length === 0 ? (
             <div className="text-center py-12">
-              <TrendingUp className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" strokeWidth={1.2} />
+              <TrendingUp
+                className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3"
+                strokeWidth={1.2}
+              />
               <p className="text-muted-foreground">No budgets set</p>
               <p className="text-sm text-muted-foreground/60 mt-1">Create a budget in Settings</p>
             </div>
           ) : (
             <div className="space-y-5">
-              {data.budget_health.map((b, i) => {
+              {data.budget_health.slice(0, 5).map((b, i) => {
                 const pct = b.amount ? (b.spent / b.amount) * 100 : 0;
                 const over = pct > 100;
                 return (
@@ -347,19 +403,33 @@ export default function OverviewPage() {
                     transition={{ delay: 0.35 + i * 0.05 }}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[15px] font-medium">{b.name}</span>
-                      <span className="text-[13px] text-muted-foreground tabular-nums">
+                      <span className="text-[14px] font-medium">{b.name}</span>
+                      <span className="text-[12px] text-muted-foreground tabular-nums">
                         {formatCurrency(b.spent)} / {formatCurrency(b.amount)}
                       </span>
                     </div>
-                    <div className="h-3 rounded-full bg-secondary overflow-hidden">
+                    <div className="h-2 rounded-full bg-secondary overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${Math.min(pct, 100)}%` }}
-                        transition={{ duration: 0.8, delay: 0.4 + i * 0.05, ease: [0.25, 0.46, 0.45, 0.94] }}
-                        className={`h-full rounded-full ${over ? "bg-loss" : "bg-primary"}`}
+                        transition={{
+                          duration: 0.8,
+                          delay: 0.4 + i * 0.05,
+                          ease: [0.25, 0.46, 0.45, 0.94],
+                        }}
+                        className="h-full rounded-full"
+                        style={{
+                          background: over
+                            ? "linear-gradient(90deg, #ef4444, #f97316)"
+                            : "linear-gradient(90deg, #2f5bff, #8b5cf6)",
+                        }}
                       />
                     </div>
+                    {over && (
+                      <p className="text-[11px] text-red-500 mt-1 font-medium">
+                        Over budget by {formatCurrency(b.spent - b.amount)}
+                      </p>
+                    )}
                   </motion.div>
                 );
               })}
