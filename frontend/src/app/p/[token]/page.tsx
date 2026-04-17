@@ -310,7 +310,7 @@ export default function PublicPortfolioPage(){
     <div className="mx-auto max-w-7xl px-6 py-10 space-y-8">
       <style>{`
   .recharts-brush text { fill: var(--foreground); font-weight: 500; font-size: 11px; }
-  .recharts-brush-traveller { fill: var(--primary); }
+  .recharts-brush-traveller { fill: var(--accent); }
   .stock-deck::-webkit-scrollbar { height: 8px; }
   .stock-deck::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   .stock-deck::-webkit-scrollbar-track { background: transparent; }

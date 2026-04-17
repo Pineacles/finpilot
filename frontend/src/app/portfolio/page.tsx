@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar } from "recharts";
-import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, Activity, BookOpen, Target } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, BookOpen, Target } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
 import { AnimatedNumber } from "@/components/animated-number";
 import { LivePill } from "@/components/live-pill";
@@ -219,7 +219,6 @@ export default function PortfolioPage(){
   const [expandedBAId,setExpandedBAId]=useState<string|null>(null);
   const [deletingPMId,setDeletingPMId]=useState<string|null>(null);
   const [deletingBAId,setDeletingBAId]=useState<string|null>(null);
-  const [journalTab,setJournalTab]=useState<"pm"|"ba">("ba");
 
   const load=useCallback(()=>{
     setLoading(true);
@@ -323,7 +322,7 @@ export default function PortfolioPage(){
     <div className="space-y-8">
       <style>{`
   .recharts-brush text { fill: var(--foreground); font-weight: 500; font-size: 11px; }
-  .recharts-brush-traveller { fill: var(--primary); }
+  .recharts-brush-traveller { fill: var(--accent); }
   .stock-deck::-webkit-scrollbar { height: 8px; }
   .stock-deck::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   .stock-deck::-webkit-scrollbar-track { background: transparent; }
@@ -339,7 +338,9 @@ export default function PortfolioPage(){
       {/* Header */}
       <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <p className="text-sm font-medium text-primary mb-1">Portfolio</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Investments & Holdings</h1>
+          <div className="flex items-center gap-2 mt-2">
             <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Total Value</p>
             <LivePill/>
           </div>
@@ -377,11 +378,11 @@ export default function PortfolioPage(){
           {l:"Invested",v:p?.total_cost??0,fmt:formatCurrency,pct:undefined as number|undefined},
           {l:"Cash",v:p?.cash_balance??0,fmt:formatCurrency,pct:undefined},
           {l:"Positions",v:p?.positions_count??0,fmt:(n:number)=>String(Math.round(n)),pct:undefined},
-          {l:"Total P&L",v:liveTotals.pnl,fmt:formatCurrency,pct:liveTotals.pnlPct},
+          {l:"Day P&L",v:liveTotals.pnl,fmt:formatCurrency,pct:liveTotals.pnlPct},
         ].map((item,i)=>(
           <GlassCard key={item.l} delay={0.05+i*0.05} className="!rounded-[20px] !p-[18px]">
             <p className="text-[12px] text-muted-foreground mb-1.5 uppercase tracking-wider font-medium">{item.l}</p>
-            <p className={`font-mono tabular-nums text-[20px] font-bold ${item.l==="Total P&L"?(item.v>=0?"text-gain":"text-loss"):""}`}>
+            <p className={`font-mono tabular-nums text-[20px] font-bold ${item.l==="Day P&L"?(item.v>=0?"text-gain":"text-loss"):""}`}>
               <AnimatedNumber value={item.v} format={item.fmt}/>
             </p>
             {item.pct!==undefined&&<p className={`text-[12px] tabular-nums mt-0.5 ${item.pct>=0?"text-gain":"text-loss"}`}>{item.pct>=0?"+":""}{item.pct.toFixed(2)}%</p>}
@@ -717,119 +718,109 @@ export default function PortfolioPage(){
         </div>);
       })()}
 
-      {/* Trade Journal — tabbed Buy Assessments + Post-Mortems */}
-      <GlassCard delay={0.43}>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-5">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center"><BookOpen className="h-5 w-5 text-violet-600 dark:text-violet-400" strokeWidth={1.8}/></div>
-            <h2 className="text-[16px] font-semibold">Trade Journal</h2>
-          </div>
-          {/* Tab switcher */}
-          <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl">
-            <button onClick={()=>setJournalTab("ba")} className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${journalTab==="ba"?"bg-background shadow-sm text-foreground":"text-muted-foreground hover:text-foreground"}`}><Target className="h-3.5 w-3.5"/>Buy Assessments <span className="text-[11px] opacity-70">{buyAssessments.length}</span></button>
-            <button onClick={()=>setJournalTab("pm")} className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${journalTab==="pm"?"bg-background shadow-sm text-foreground":"text-muted-foreground hover:text-foreground"}`}><Activity className="h-3.5 w-3.5"/>Post-Mortems <span className="text-[11px] opacity-70">{postMortems.length}</span></button>
-          </div>
-          <button
-            onClick={()=>{
-              if(journalTab==="ba"){setEditingBA(null);setBAForm({symbol:"",recommendation:"buy",target_price:"",stop_loss:"",thesis:"",risk_factors:"",conviction:"3",time_horizon:""});setBAError("");setShowBAModal(true);}
-              else{setEditingPM(null);setPMForm({symbol:"",entry_price:"",exit_price:"",notes:""});setPMError("");setShowPMModal(true);}
-            }}
-            className="sm:ml-auto p-2 rounded-xl bg-muted hover:bg-muted/80 transition-colors cursor-pointer"
-          ><Plus className="h-4 w-4"/></button>
+      {/* Buy Assessments */}
+      <div>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-10 w-10 rounded-2xl bg-emerald-100 dark:bg-emerald-500/15 flex items-center justify-center"><Target className="h-5 w-5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.8}/></div>
+          <h2 className="text-[16px] font-semibold">Buy Assessments</h2>
+          <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{buyAssessments.length}</span>
+          <button onClick={()=>{setEditingBA(null);setBAForm({symbol:"",recommendation:"buy",target_price:"",stop_loss:"",thesis:"",risk_factors:"",conviction:"3",time_horizon:""});setBAError("");setShowBAModal(true);}} className="ml-auto p-2 rounded-xl bg-accent hover:bg-accent/80 transition-colors cursor-pointer"><Plus className="h-4 w-4"/></button>
         </div>
+        {buyAssessments.length===0?(
+          <GlassCard delay={0.43}><p className="text-muted-foreground py-6 text-center text-[14px]">No buy assessments yet — the agent will write these for you.</p></GlassCard>
+        ):(
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {buyAssessments.map(ba=>{
+              const recColor=ba.recommendation==="buy"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":ba.recommendation==="hold"?"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400":ba.recommendation==="watch"?"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400";
+              const isExpanded=expandedBAId===ba.id;
+              return(
+                <GlassCard key={ba.id} delay={0} className="relative group !p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[16px] font-bold">{ba.symbol}</span>
+                      <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold capitalize ${recColor}`}>{ba.recommendation}</span>
+                      {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground capitalize">{ba.time_horizon}</span>}
+                    </div>
+                    <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+                      <button onClick={()=>{setEditingBA(ba);setBAForm({symbol:ba.symbol,recommendation:ba.recommendation,target_price:ba.target_price?.toString()||"",stop_loss:ba.stop_loss?.toString()||"",thesis:ba.thesis,risk_factors:ba.risk_factors||"",conviction:String(ba.conviction),time_horizon:ba.time_horizon||""});setBAError("");setShowBAModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                      {deletingBAId===ba.id?(
+                        <button onClick={async()=>{await api.deleteBuyAssessment(ba.id);setBuyAssessments(p=>p.filter(x=>x.id!==ba.id));setDeletingBAId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
+                      ):(
+                        <button onClick={()=>setDeletingBAId(ba.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                      )}
+                    </div>
+                  </div>
+                  {(ba.target_price||ba.stop_loss)&&(
+                    <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
+                      {ba.target_price&&<span>Target: <span className="text-foreground font-medium">{ba.target_price.toFixed(2)}</span></span>}
+                      {ba.stop_loss&&<span>Stop: <span className="text-foreground font-medium">{ba.stop_loss.toFixed(2)}</span></span>}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5">
+                    <ConvictionDots level={ba.conviction}/>
+                    <span className="text-[11px] text-muted-foreground">conviction</span>
+                  </div>
+                  <div>
+                    <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-3"}`}>{ba.thesis}</p>
+                    {ba.thesis.length>120&&<button onClick={()=>setExpandedBAId(isExpanded?null:ba.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-auto">{new Date(ba.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
+                </GlassCard>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
-        {/* Buy Assessments tab */}
-        {journalTab==="ba"&&(
-          buyAssessments.length===0?(
-            <p className="text-muted-foreground py-6 text-center text-[14px]">No buy assessments yet — the agent will write these for you.</p>
-          ):(
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {buyAssessments.map(ba=>{
-                const recColor=ba.recommendation==="buy"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":ba.recommendation==="hold"?"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400":ba.recommendation==="watch"?"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400";
-                const isExpanded=expandedBAId===ba.id;
-                return(
-                  <div key={ba.id} className="glass bg-card rounded-2xl p-4 flex flex-col gap-3 group relative">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[16px] font-bold">{ba.symbol}</span>
-                        <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold capitalize ${recColor}`}>{ba.recommendation}</span>
-                        {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground capitalize">{ba.time_horizon}</span>}
-                      </div>
-                      <div className="hidden group-hover:flex items-center gap-1 shrink-0">
-                        <button onClick={()=>{setEditingBA(ba);setBAForm({symbol:ba.symbol,recommendation:ba.recommendation,target_price:ba.target_price?.toString()||"",stop_loss:ba.stop_loss?.toString()||"",thesis:ba.thesis,risk_factors:ba.risk_factors||"",conviction:String(ba.conviction),time_horizon:ba.time_horizon||""});setBAError("");setShowBAModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                        {deletingBAId===ba.id?(
-                          <button onClick={async()=>{await api.deleteBuyAssessment(ba.id);setBuyAssessments(p=>p.filter(x=>x.id!==ba.id));setDeletingBAId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
-                        ):(
-                          <button onClick={()=>setDeletingBAId(ba.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                        )}
-                      </div>
+      {/* Post-Mortems */}
+      <div>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center"><BookOpen className="h-5 w-5 text-rose-600 dark:text-rose-400" strokeWidth={1.8}/></div>
+          <h2 className="text-[16px] font-semibold">Post-Mortems</h2>
+          <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{postMortems.length}</span>
+          <button onClick={()=>{setEditingPM(null);setPMForm({symbol:"",entry_price:"",exit_price:"",notes:""});setPMError("");setShowPMModal(true);}} className="ml-auto p-2 rounded-xl bg-accent hover:bg-accent/80 transition-colors cursor-pointer"><Plus className="h-4 w-4"/></button>
+        </div>
+        {postMortems.length===0?(
+          <GlassCard delay={0.44}><p className="text-muted-foreground py-6 text-center text-[14px]">No post-mortems yet — the agent writes these when a position is closed.</p></GlassCard>
+        ):(
+          <div className="space-y-3">
+            {postMortems.map(pm=>{
+              const isPos=pm.pnl_pct>=0;
+              const isExpanded=expandedPMId===pm.id;
+              return(
+                <GlassCard key={pm.id} delay={0} className="relative group !p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[15px] font-bold">{pm.symbol}</span>
+                      <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold ${isPos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{isPos?"+":""}{pm.pnl_pct.toFixed(2)}%</span>
                     </div>
-                    {(ba.target_price||ba.stop_loss)&&(
-                      <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
-                        {ba.target_price&&<span>Target: <span className="text-foreground font-medium">{ba.target_price.toFixed(2)}</span></span>}
-                        {ba.stop_loss&&<span>Stop: <span className="text-foreground font-medium">{ba.stop_loss.toFixed(2)}</span></span>}
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1.5">
-                      <ConvictionDots level={ba.conviction}/>
-                      <span className="text-[11px] text-muted-foreground">conviction</span>
+                    <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+                      <button onClick={()=>{setEditingPM(pm);setPMForm({symbol:pm.symbol,entry_price:String(pm.entry_price),exit_price:String(pm.exit_price),notes:pm.notes||""});setPMError("");setShowPMModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                      {deletingPMId===pm.id?(
+                        <button onClick={async()=>{await api.deletePostMortem(pm.id);setPostMortems(p=>p.filter(x=>x.id!==pm.id));setDeletingPMId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
+                      ):(
+                        <button onClick={()=>setDeletingPMId(pm.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                      )}
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                    <span>Entry: <span className="text-foreground font-medium">{pm.entry_price.toFixed(2)}</span></span>
+                    <ArrowUpRight className="h-3.5 w-3.5"/>
+                    <span>Exit: <span className="text-foreground font-medium">{pm.exit_price.toFixed(2)}</span></span>
+                  </div>
+                  {pm.notes&&(
                     <div>
-                      <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-3"}`}>{ba.thesis}</p>
-                      {ba.thesis.length>120&&<button onClick={()=>setExpandedBAId(isExpanded?null:ba.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
+                      <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-4"}`}>{pm.notes}</p>
+                      {pm.notes.length>160&&<button onClick={()=>setExpandedPMId(isExpanded?null:pm.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-auto">{new Date(ba.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )
+                  )}
+                  <p className="text-[11px] text-muted-foreground">{new Date(pm.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
+                </GlassCard>
+              );
+            })}
+          </div>
         )}
-
-        {/* Post-Mortems tab */}
-        {journalTab==="pm"&&(
-          postMortems.length===0?(
-            <p className="text-muted-foreground py-6 text-center text-[14px]">No post-mortems yet — the agent writes these when a position is closed.</p>
-          ):(
-            <div className="space-y-3">
-              {postMortems.map(pm=>{
-                const isPos=pm.pnl_pct>=0;
-                const isExpanded=expandedPMId===pm.id;
-                return(
-                  <div key={pm.id} className="glass bg-card rounded-2xl p-4 flex flex-col gap-3 group relative">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[15px] font-bold">{pm.symbol}</span>
-                        <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold ${isPos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{isPos?"+":""}{pm.pnl_pct.toFixed(2)}%</span>
-                      </div>
-                      <div className="hidden group-hover:flex items-center gap-1 shrink-0">
-                        <button onClick={()=>{setEditingPM(pm);setPMForm({symbol:pm.symbol,entry_price:String(pm.entry_price),exit_price:String(pm.exit_price),notes:pm.notes||""});setPMError("");setShowPMModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                        {deletingPMId===pm.id?(
-                          <button onClick={async()=>{await api.deletePostMortem(pm.id);setPostMortems(p=>p.filter(x=>x.id!==pm.id));setDeletingPMId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
-                        ):(
-                          <button onClick={()=>setDeletingPMId(pm.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-                      <span>Entry: <span className="text-foreground font-medium">{pm.entry_price.toFixed(2)}</span></span>
-                      <ArrowUpRight className="h-3.5 w-3.5"/>
-                      <span>Exit: <span className="text-foreground font-medium">{pm.exit_price.toFixed(2)}</span></span>
-                    </div>
-                    {pm.notes&&(
-                      <div>
-                        <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-4"}`}>{pm.notes}</p>
-                        {pm.notes.length>160&&<button onClick={()=>setExpandedPMId(isExpanded?null:pm.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
-                      </div>
-                    )}
-                    <p className="text-[11px] text-muted-foreground">{new Date(pm.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        )}
-      </GlassCard>
+      </div>
 
       {/* Transaction History */}
       <div>
