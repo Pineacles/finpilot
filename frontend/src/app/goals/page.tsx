@@ -53,12 +53,8 @@ export default function GoalsPage() {
 
   return (
     <div className="space-y-6 p-1">
-      {/* Header */}
-      <GlassCard delay={0} className="flex items-end justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-1">Goals & Milestones</p>
-          <h1 className="text-2xl font-bold tracking-tight">What you're working towards</h1>
-        </div>
+      {/* Action bar */}
+      <div className="flex items-center justify-end">
         <button
           onClick={() => tab === "goals" ? setGoalOpen(true) : setMsOpen(true)}
           className="flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold cursor-pointer shadow-[0_10px_24px_-10px_var(--color-primary)] hover:opacity-90 transition-opacity"
@@ -66,7 +62,7 @@ export default function GoalsPage() {
           <Plus className="h-4 w-4" />
           {tab === "goals" ? "New Goal" : "New Milestone"}
         </button>
-      </GlassCard>
+      </div>
 
       {/* Tabs */}
       <div className="glass bg-card rounded-[14px] p-1.5 inline-flex gap-1 self-start">

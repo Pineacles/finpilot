@@ -155,18 +155,13 @@ export default function StatsPage() {
 
   return (
     <div className="space-y-7">
-      {/* ── Page header ── */}
+      {/* ── Controls bar ── */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex items-center justify-between flex-wrap gap-4"
+        className="flex items-center justify-end flex-wrap gap-4"
       >
-        <div>
-          <p className="text-[11px] font-semibold text-primary uppercase tracking-wider mb-1">Statistics</p>
-          <h1 className="text-[28px] font-bold tracking-tight">Financial Insights</h1>
-        </div>
-
         <div className="flex items-center gap-3">
           {/* Tab switcher — glass pill style (matches RangeSwitcher) */}
           <div className="flex items-center gap-1 p-1 glass bg-card rounded-[14px]">

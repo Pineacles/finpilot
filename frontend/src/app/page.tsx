@@ -181,16 +181,15 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
+      {/* Greeting */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">Overview</p>
-        <h1 className="text-3xl font-bold tracking-tight">
+        <h2 className="text-xl font-semibold tracking-tight">
           Good {greeting}, {data.display_name}
-        </h1>
+        </h2>
         <p className="text-muted-foreground mt-1 text-sm">
           Here&apos;s how your finances are looking today.
         </p>

@@ -125,14 +125,6 @@ export const api = {
   createMilestone: (data: CreateMilestone) =>
     request<Milestone>("/api/dashboard/milestones", { method: "POST", body: JSON.stringify(data) }),
 
-  // Recurring
-  recurring: () => request<RecurringExpense[]>("/api/dashboard/recurring"),
-  createRecurring: (data: CreateRecurring) =>
-    request<RecurringExpense>("/api/dashboard/recurring", { method: "POST", body: JSON.stringify(data) }),
-
-  // Cash Flow
-  cashflow: (months = 6) => request<CashFlowMonth[]>(`/api/dashboard/cashflow?months=${months}`),
-
   // Merchants (categorization rules)
   merchants: () => request<MerchantRule[]>("/api/dashboard/merchants"),
   createMerchant: (data: { name: string; patterns: string; default_category_id?: string }) =>
@@ -298,10 +290,6 @@ export interface CreateGoal { name: string; target_amount: number; current_amoun
 export interface Milestone { id: string; name: string; description: string | null; target_date: string | null; target_net_worth: number | null; target_savings: number | null; achieved: boolean; achieved_at: string | null }
 export interface CreateMilestone { name: string; description?: string; target_date?: string; target_net_worth?: number; target_savings?: number }
 
-export interface RecurringExpense { id: string; name: string; amount: number; currency: string; frequency: string; next_due_date: string; category_id: string | null; category_name: string | null; active: boolean }
-export interface CreateRecurring { name: string; amount: number; currency?: string; frequency?: string; next_due_date: string; category_id?: string }
-
-export interface CashFlowMonth { month: string; income: number; expenses: number; net: number }
 export interface MerchantRule { id: string; name: string; patterns: string; default_category_id: string | null; category_name: string | null; is_system: boolean }
 
 export interface ImportLogEntry { msg: string; detail: string }
