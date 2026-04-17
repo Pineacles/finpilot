@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ClientLayout } from "@/components/client-layout";
 
-const jakarta = Plus_Jakarta_Sans({
+const inter = Inter({
   variable: "--font-geist-sans",
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800"],
@@ -26,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${jakarta.variable} ${jetbrains.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${jetbrains.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <ClientLayout>{children}</ClientLayout>
       </body>

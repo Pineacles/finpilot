@@ -212,7 +212,7 @@ export default function OverviewPage() {
           iconBg="bg-blue-100 dark:bg-blue-500/15"
           iconColor="text-blue-600 dark:text-blue-400"
           glowColor="linear-gradient(135deg, #2f5bff, #8b5cf6)"
-          label="Bank Account"
+          label="Bank Accounts"
           value={formatCurrency(bankTotal)}
           delay={0.1}
           sub={

@@ -53,77 +53,77 @@
 /* FinPilot — Apple Glass + Blue Accent */
 
 :root {
-  --background: #f0f1f5;
+  --background: #eef0f5;
   --foreground: #18181b;
-  --card: rgba(255, 255, 255, 0.7);
+  --card: rgba(255, 255, 255, 0.62);
   --card-foreground: #18181b;
   --popover: rgba(255, 255, 255, 0.92);
   --popover-foreground: #18181b;
-  --primary: #3b82f6;
+  --primary: #2f5bff;
   --primary-foreground: #ffffff;
   --secondary: #e4e4e7;
   --secondary-foreground: #18181b;
   --muted: #e4e4e7;
-  --muted-foreground: #71717a;
+  --muted-foreground: #6b7280;
   --accent: rgba(0, 0, 0, 0.04);
   --accent-foreground: #18181b;
   --destructive: #ef4444;
-  --border: rgba(0, 0, 0, 0.07);
-  --input: rgba(0, 0, 0, 0.05);
-  --ring: #3b82f6;
+  --border: rgba(12, 16, 28, 0.08);
+  --input: rgba(12, 16, 28, 0.06);
+  --ring: #2f5bff;
   --gain: #22c55e;
   --loss: #ef4444;
-  --chart-1: #3b82f6;
+  --chart-1: #2f5bff;
   --chart-2: #22c55e;
   --chart-3: #f59e0b;
   --chart-4: #ef4444;
   --chart-5: #8b5cf6;
-  --radius: 1rem;
+  --radius: 0.75rem;
   --sidebar: rgba(255, 255, 255, 0.55);
   --sidebar-foreground: #18181b;
-  --sidebar-primary: #3b82f6;
+  --sidebar-primary: #2f5bff;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: rgba(0, 0, 0, 0.04);
   --sidebar-accent-foreground: #18181b;
   --sidebar-border: rgba(0, 0, 0, 0.05);
-  --sidebar-ring: #3b82f6;
+  --sidebar-ring: #2f5bff;
 }
 
 .dark {
-  --background: #09090b;
+  --background: #070810;
   --foreground: #fafafa;
-  --card: rgba(24, 24, 27, 0.65);
+  --card: rgba(22, 25, 40, 0.55);
   --card-foreground: #fafafa;
   --popover: rgba(24, 24, 27, 0.92);
   --popover-foreground: #fafafa;
-  --primary: #60a5fa;
-  --primary-foreground: #09090b;
+  --primary: #7a95ff;
+  --primary-foreground: #070810;
   --secondary: rgba(255, 255, 255, 0.07);
   --secondary-foreground: #fafafa;
   --muted: rgba(255, 255, 255, 0.05);
-  --muted-foreground: #a1a1aa;
+  --muted-foreground: #8e94a6;
   --accent: rgba(255, 255, 255, 0.05);
   --accent-foreground: #fafafa;
   --destructive: #f87171;
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.07);
-  --ring: #60a5fa;
+  --ring: #7a95ff;
   --gain: #4ade80;
   --loss: #f87171;
-  --chart-1: #60a5fa;
+  --chart-1: #7a95ff;
   --chart-2: #4ade80;
   --chart-3: #fbbf24;
   --chart-4: #f87171;
   --chart-5: #c084fc;
-  --radius: 1rem;
-  --sidebar: rgba(24, 24, 27, 0.55);
+  --radius: 0.75rem;
+  --sidebar: rgba(22, 25, 40, 0.55);
   --sidebar-foreground: #fafafa;
-  --sidebar-primary: #60a5fa;
-  --sidebar-primary-foreground: #09090b;
+  --sidebar-primary: #7a95ff;
+  --sidebar-primary-foreground: #070810;
   --sidebar-accent: rgba(255, 255, 255, 0.05);
   --sidebar-accent-foreground: #fafafa;
   --sidebar-border: rgba(255, 255, 255, 0.06);
-  --sidebar-ring: #60a5fa;
+  --sidebar-ring: #7a95ff;
 }
 
 @layer base {
@@ -143,13 +143,13 @@
 
 /* Glass card */
 .glass {
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
   border: 1px solid var(--border);
-  box-shadow: 0 0 0 0.5px rgba(255,255,255,0.1) inset, 0 8px 40px -12px rgba(0,0,0,0.06);
+  box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.1), 0 8px 28px -10px rgba(12,16,28,0.12);
 }
 .dark .glass {
-  box-shadow: 0 0 0 0.5px rgba(255,255,255,0.05) inset, 0 8px 40px -12px rgba(0,0,0,0.5);
+  box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.05), 0 14px 32px -14px rgba(0,0,0,0.6);
 }
 
 /* Background gradient mesh — light */
@@ -160,17 +160,19 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 70% 50% at 15% 15%, rgba(59,130,246,0.07) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 40% at 85% 75%, rgba(139,92,246,0.05) 0%, transparent 50%),
-    radial-gradient(ellipse 40% 30% at 50% 40%, rgba(34,197,94,0.03) 0%, transparent 45%);
+    radial-gradient(ellipse 60% 40% at 12% 10%, rgba(47,91,255,0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 35% at 88% 22%, rgba(139,92,246,0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 78% 88%, rgba(34,211,238,0.10) 0%, transparent 55%),
+    linear-gradient(180deg, #eef0f5 0%, #f5f6fa 100%);
 }
 
 /* Background gradient mesh — dark */
 .dark body::before {
   background:
-    radial-gradient(ellipse 70% 50% at 15% 15%, rgba(96,165,250,0.06) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 40% at 85% 75%, rgba(192,132,252,0.04) 0%, transparent 50%),
-    radial-gradient(ellipse 40% 30% at 50% 40%, rgba(74,222,128,0.02) 0%, transparent 45%);
+    radial-gradient(ellipse 65% 45% at 10% 8%, rgba(80,120,255,0.22) 0%, transparent 58%),
+    radial-gradient(ellipse 50% 38% at 92% 24%, rgba(170,100,255,0.16) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 75% 92%, rgba(40,200,255,0.10) 0%, transparent 55%),
+    linear-gradient(180deg, #070810 0%, #0c0e18 100%);
 }
 
 /* Recharts tooltip — dark mode fix */
