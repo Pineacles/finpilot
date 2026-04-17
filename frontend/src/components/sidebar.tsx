@@ -13,6 +13,9 @@ import {
   LogOut,
   Sun,
   Moon,
+  PiggyBank,
+  Waves,
+  Target,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -21,6 +24,9 @@ const nav = [
   { href: "/portfolio", label: "Portfolio", icon: TrendingUp },
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/stats", label: "Statistics", icon: BarChart3 },
+  { href: "/budgets", label: "Budgets", icon: PiggyBank },
+  { href: "/cashflow", label: "Cash Flow", icon: Waves },
+  { href: "/goals", label: "Goals", icon: Target },
   { href: "/categories", label: "Categories", icon: Tag },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -48,12 +54,15 @@ export function Sidebar() {
     <aside className="flex h-screen w-[260px] flex-col glass bg-sidebar shrink-0">
       {/* Brand */}
       <div className="flex items-center gap-3 px-7 h-[80px]">
-        <div className="h-11 w-11 rounded-2xl bg-primary flex items-center justify-center">
-          <TrendingUp className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
+        <div
+          className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0"
+          style={{ background: "linear-gradient(135deg, #2f5bff, #8b5cf6)", boxShadow: "0 6px 20px -6px rgba(47,91,255,0.5)" }}
+        >
+          <TrendingUp className="h-5 w-5 text-white" strokeWidth={2.5} />
         </div>
         <div>
           <span className="text-[17px] font-semibold tracking-tight">FinPilot</span>
-          <p className="text-[11px] text-muted-foreground">Finance Dashboard</p>
+          <p className="text-[11px] text-muted-foreground">Agent-first finance</p>
         </div>
       </div>
 
