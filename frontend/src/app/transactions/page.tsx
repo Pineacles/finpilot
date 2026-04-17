@@ -472,7 +472,7 @@ function TransactionsInner() {
                 {/* Header */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Import Files</h2>
+                    <h2 className="text-[24px] font-bold tracking-[-0.6px]">Import Files</h2>
                     <p className="text-[13px] text-muted-foreground mt-1">
                       Drag & drop bank statements or click to browse. Supports CSV, TSV, XML, and PDF.
                     </p>
@@ -707,7 +707,7 @@ function TransactionsInner() {
 
       {/* ---- Uncategorized Panel ----------------------------------- */}
       {uncategorized.length > 0 && (
-        <GlassCard className="border-l-4 border-l-[var(--accent)] !rounded-[14px] bg-accent/40">
+        <GlassCard className="border-l-4 border-l-primary !rounded-[14px] bg-primary/5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-amber-500/10">

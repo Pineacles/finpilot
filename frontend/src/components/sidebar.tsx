@@ -74,10 +74,10 @@ export function Sidebar() {
               href={href}
               className={`flex items-center gap-3 rounded-[14px] px-3.5 py-[11px] text-[14px] transition-all duration-200 cursor-pointer active:scale-[0.98] ${
                 active
-                  ? "bg-accent text-foreground font-semibold"
+                  ? "bg-primary/10 text-primary font-semibold"
                   : "text-muted-foreground font-medium hover:text-foreground hover:bg-accent"
               }`}
-              style={active ? { boxShadow: '0 8px 22px -8px var(--accent)' } : {}}
+              style={active ? { boxShadow: '0 8px 22px -8px rgba(59,130,246,0.3)' } : {}}
             >
               <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2.2 : 1.8} />
               {label}

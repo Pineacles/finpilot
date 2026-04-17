@@ -43,13 +43,13 @@ function EconomyDetail({c}:{c:PortfolioAnalysis["content"]}){
       <div className="flex items-center gap-3">
         <SentimentBadge sentiment={c.market_sentiment}/>
       </div>
-      <div className="p-5 rounded-2xl bg-accent/60">
+      <div className="p-5 rounded-2xl bg-muted/60">
         <p className="text-[15px] leading-[1.85] text-foreground/90">{c.market_summary}</p>
       </div>
       {c.key_indicators&&c.key_indicators.length>0&&(
         <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
           {c.key_indicators.map((ind,i)=>(
-            <div key={i} className="p-4 rounded-2xl bg-accent/60 text-center">
+            <div key={i} className="p-4 rounded-2xl bg-muted/60 text-center">
               <p className="text-[13px] text-muted-foreground mb-1">{ind.name}</p>
               <p className="font-mono tabular-nums text-[20px] font-bold">{ind.value}</p>
               <p className={`text-[12px] font-medium mt-1 ${ind.trend==="up"?"text-gain":ind.trend==="down"?"text-loss":"text-muted-foreground"}`}>
@@ -296,7 +296,7 @@ export default function PublicPortfolioPage(){
     <div className="min-h-screen flex items-center justify-center">
       <button onClick={toggleTheme} className="glass fixed top-6 right-6 w-[42px] h-[42px] rounded-[14px] flex items-center justify-center text-foreground hover:brightness-110 transition-all cursor-pointer" aria-label="Toggle theme">{dark?<Sun className="h-[18px] w-[18px]"/>:<Moon className="h-[18px] w-[18px]"/>}</button>
       <div className="text-center">
-        <h1 className="text-2xl font-bold mb-2">Portfolio not found</h1>
+        <h1 className="text-[24px] font-bold mb-2">Portfolio not found</h1>
         <p className="text-muted-foreground">This link may have expired or the portfolio is no longer public.</p>
       </div>
     </div>
@@ -310,7 +310,7 @@ export default function PublicPortfolioPage(){
     <div className="mx-auto max-w-7xl px-6 py-10 space-y-8">
       <style>{`
   .recharts-brush text { fill: var(--foreground); font-weight: 500; font-size: 11px; }
-  .recharts-brush-traveller { fill: var(--accent); }
+  .recharts-brush-traveller { fill: var(--primary); }
   .stock-deck::-webkit-scrollbar { height: 8px; }
   .stock-deck::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   .stock-deck::-webkit-scrollbar-track { background: transparent; }
@@ -378,7 +378,7 @@ export default function PublicPortfolioPage(){
         {/* Allocation */}
         <GlassCard delay={0.2} className="md:col-span-1 lg:col-span-1 !p-4">
           <p className="text-[13px] font-medium text-muted-foreground mb-3">Allocation</p>
-          {p.positions.length===0?<p className="text-sm text-muted-foreground text-center py-8">No positions</p>:(
+          {p.positions.length===0?<p className="text-[13px] text-muted-foreground text-center py-8">No positions</p>:(
             <div className="h-48"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={p.positions} dataKey="market_value" nameKey="symbol" cx="50%" cy="50%" outerRadius={70} innerRadius={42}>{p.positions.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}</Pie><Tooltip formatter={(v:any)=>formatCurrency(Number(v))}/></PieChart></ResponsiveContainer></div>
           )}
         </GlassCard>
@@ -429,10 +429,10 @@ export default function PublicPortfolioPage(){
                 const lp=live?.price??pos.last_price??0;
                 const lc=live?.change??pos.change;
                 const lcp=live?.change_pct??pos.change_pct;
-                return <div className="flex items-center justify-center gap-3 mb-3"><span className="text-2xl font-bold tabular-nums">{lp.toFixed(2)}</span><span className={`text-sm font-medium ${lc>=0?"text-gain":"text-loss"}`}>{lc>=0?"+":""}{lc.toFixed(2)} ({lcp>=0?"+":""}{lcp.toFixed(1)}%)</span></div>;
+                return <div className="flex items-center justify-center gap-3 mb-3"><span className="text-[20px] font-bold tabular-nums font-mono">{lp.toFixed(2)}</span><span className={`text-[13px] font-medium ${lc>=0?"text-gain":"text-loss"}`}>{lc>=0?"+":""}{lc.toFixed(2)} ({lcp>=0?"+":""}{lcp.toFixed(1)}%)</span></div>;
               })()}
               <div className="flex justify-center gap-1 mb-2">{RANGES.map(r=><button key={r.value} onClick={()=>setChartRange(r.value)} className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${chartRange===r.value?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}>{r.label}</button>)}</div>
-              <div className="h-52">{chartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:chartData.length===0?<p className="text-sm text-muted-foreground">No data</p>:(
+              <div className="h-52">{chartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:chartData.length===0?<p className="text-[13px] text-muted-foreground">No data</p>:(
                 <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData} margin={{top:5,right:10,left:10,bottom:5}}><defs><linearGradient id="sg-pub" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={(d:string)=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis hide domain={["auto","auto"]}/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg-pub)"/></AreaChart></ResponsiveContainer>
               )}</div>
             </>
@@ -444,7 +444,7 @@ export default function PublicPortfolioPage(){
       <div>
         <div className="flex items-center gap-3 mb-5">
           <div className="h-10 w-10 rounded-2xl bg-orange-100 dark:bg-orange-500/15 flex items-center justify-center"><Brain className="h-5 w-5 text-orange-600 dark:text-orange-400" strokeWidth={1.8}/></div>
-          <h2 className="text-lg font-semibold">Stock Analyses</h2>
+          <h2 className="text-[16px] font-semibold">Stock Analyses</h2>
           <span className="text-[13px] text-muted-foreground">{Object.keys(p.stock_analyses).length} held</span>
         </div>
         {Object.keys(p.stock_analyses).length===0?<GlassCard delay={0.35}><p className="text-muted-foreground py-6 text-center">No stock analyses yet.</p></GlassCard>:(
@@ -454,7 +454,7 @@ export default function PublicPortfolioPage(){
               <GlassCard key={entry.analysis_id} delay={0.35} className="space-y-3 min-w-[400px] max-w-[440px] shrink-0">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold">{s.symbol}</span>
+                    <span className="text-[16px] font-bold">{s.symbol}</span>
                     <ActionBadge action={s.action}/>
                   </div>
                   <div className="text-left sm:text-right">
@@ -503,7 +503,7 @@ export default function PublicPortfolioPage(){
         <div>
           <button onClick={()=>setShowPastStocks(!showPastStocks)} className="flex items-center gap-3 mb-5 cursor-pointer group">
             <div className="h-10 w-10 rounded-2xl bg-slate-100 dark:bg-slate-500/15 flex items-center justify-center"><Archive className="h-5 w-5 text-slate-600 dark:text-slate-400" strokeWidth={1.8}/></div>
-            <h2 className="text-lg font-semibold group-hover:text-primary transition-colors">Past Stocks</h2>
+            <h2 className="text-[16px] font-semibold group-hover:text-primary transition-colors">Past Stocks</h2>
             <span className="text-[13px] text-muted-foreground">{Object.keys(p.past_stock_analyses).length} sold</span>
             {showPastStocks?<ChevronDown className="h-5 w-5 text-muted-foreground"/>:<ChevronRight className="h-5 w-5 text-muted-foreground"/>}
           </button>
@@ -548,7 +548,7 @@ export default function PublicPortfolioPage(){
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-2xl bg-blue-100 dark:bg-blue-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" strokeWidth={1.8}/></div>
-              <h2 className="text-lg font-semibold">Economy & Market</h2>
+              <h2 className="text-[16px] font-semibold">Economy & Market</h2>
             </div>
             <span className="text-[13px] text-muted-foreground">{new Date(p.economy_analysis.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</span>
           </div>
@@ -610,11 +610,11 @@ export default function PublicPortfolioPage(){
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-2xl bg-indigo-100 dark:bg-indigo-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" strokeWidth={1.8}/></div>
-              <h2 className="text-lg font-semibold">Portfolio Timeline</h2>
+              <h2 className="text-[16px] font-semibold">Portfolio Timeline</h2>
             </div>
             <div className="sm:ml-auto flex items-center gap-3">
               <span className="text-[13px] text-muted-foreground">Current</span>
-              <span className="text-lg font-bold tabular-nums">{formatCurrency(lastPt.value)}</span>
+              <span className="text-[20px] font-bold tabular-nums font-mono">{formatCurrency(lastPt.value)}</span>
               <span className={`text-[13px] font-semibold ${totalReturn>=0?"text-gain":"text-loss"}`}>{totalReturn>=0?"+":""}{formatCurrency(totalReturn)} ({totalReturnPct>=0?"+":""}{totalReturnPct.toFixed(1)}%)</span>
             </div>
           </div>
@@ -681,8 +681,8 @@ export default function PublicPortfolioPage(){
         <div>
           <div className="flex items-center gap-3 mb-5">
             <div className="h-10 w-10 rounded-2xl bg-emerald-100 dark:bg-emerald-500/15 flex items-center justify-center"><Target className="h-5 w-5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.8}/></div>
-            <h2 className="text-lg font-semibold">Buy Assessments</h2>
-            <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{buyAssessments.length}</span>
+            <h2 className="text-[16px] font-semibold">Buy Assessments</h2>
+            <span className="text-[12px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">{buyAssessments.length}</span>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {buyAssessments.map(ba=>{
@@ -691,9 +691,9 @@ export default function PublicPortfolioPage(){
               return(
                 <GlassCard key={ba.id} delay={0} className="!p-4 flex flex-col gap-3">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-lg font-bold">{ba.symbol}</span>
+                    <span className="text-[16px] font-bold">{ba.symbol}</span>
                     <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold capitalize ${recColor}`}>{ba.recommendation}</span>
-                    {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground capitalize">{ba.time_horizon}</span>}
+                    {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground capitalize">{ba.time_horizon}</span>}
                   </div>
                   {(ba.target_price||ba.stop_loss)&&(
                     <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
@@ -722,8 +722,8 @@ export default function PublicPortfolioPage(){
         <div>
           <div className="flex items-center gap-3 mb-5">
             <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center"><BookOpen className="h-5 w-5 text-rose-600 dark:text-rose-400" strokeWidth={1.8}/></div>
-            <h2 className="text-lg font-semibold">Post-Mortems</h2>
-            <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{postMortems.length}</span>
+            <h2 className="text-[16px] font-semibold">Post-Mortems</h2>
+            <span className="text-[12px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">{postMortems.length}</span>
           </div>
           <div className="space-y-3">
             {postMortems.map(pm=>{
@@ -759,7 +759,7 @@ export default function PublicPortfolioPage(){
         <div>
           <div className="flex items-center gap-3 mb-5">
             <div className="h-10 w-10 rounded-2xl bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center"><History className="h-5 w-5 text-violet-600 dark:text-violet-400" strokeWidth={1.8}/></div>
-            <h2 className="text-lg font-semibold">Transaction History</h2>
+            <h2 className="text-[16px] font-semibold">Transaction History</h2>
             <span className="text-[13px] text-muted-foreground ml-auto">{trades.length} transactions</span>
           </div>
           <GlassCard delay={0.5} className="!p-0 overflow-hidden">
@@ -802,12 +802,12 @@ export default function PublicPortfolioPage(){
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={()=>setTradeChartSymbol(null)}>
           <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="glass bg-card rounded-3xl p-6 w-full max-w-2xl mx-4 shadow-2xl" onClick={e=>e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold flex items-center gap-2"><LineChart className="h-5 w-5 text-primary"/>{tradeChartSymbol} — Price Chart</h3>
+              <h3 className="text-[16px] font-bold flex items-center gap-2"><LineChart className="h-5 w-5 text-primary"/>{tradeChartSymbol} — Price Chart</h3>
               <button onClick={()=>setTradeChartSymbol(null)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><X className="h-5 w-5 text-muted-foreground"/></button>
             </div>
             <div className="flex gap-1 mb-3">{RANGES.map(r=><button key={r.value} onClick={()=>setTradeChartRange(r.value)} className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${tradeChartRange===r.value?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}>{r.label}</button>)}</div>
             <div className="h-64">
-              {tradeChartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:tradeChartData.length===0?<p className="text-sm text-muted-foreground text-center py-8">No data available</p>:(
+              {tradeChartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:tradeChartData.length===0?<p className="text-[13px] text-muted-foreground text-center py-8">No data available</p>:(
                 <ResponsiveContainer width="100%" height="100%"><AreaChart data={tradeChartData}><defs><linearGradient id="sg-tc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={(d:string)=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg-tc)"/></AreaChart></ResponsiveContainer>
               )}
             </div>

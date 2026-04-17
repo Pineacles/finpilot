@@ -101,13 +101,13 @@ export default function CategoriesPage() {
               </div>
               <div className="w-32">
                 <label className="text-[13px] text-muted-foreground block mb-1.5">Type</label>
-                <select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={newCatType} onChange={e => setNewCatType(e.target.value)}>
+                <select className="w-full h-11 rounded-xl bg-muted px-3 text-[14px] border-0" value={newCatType} onChange={e => setNewCatType(e.target.value)}>
                   <option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Transfer</option>
                 </select>
               </div>
               <div className="w-40">
                 <label className="text-[13px] text-muted-foreground block mb-1.5">Parent</label>
-                <select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={newCatParent} onChange={e => setNewCatParent(e.target.value)}>
+                <select className="w-full h-11 rounded-xl bg-muted px-3 text-[14px] border-0" value={newCatParent} onChange={e => setNewCatParent(e.target.value)}>
                   <option value="">None (top-level)</option>
                   {parents.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
@@ -120,11 +120,11 @@ export default function CategoriesPage() {
           <GlassCard delay={0.1}>
             <h2 className="text-[16px] font-semibold mb-4">Category Hierarchy</h2>
             {loading ? (
-              <p className="text-sm text-muted-foreground py-4">Loading…</p>
+              <p className="text-[13px] text-muted-foreground py-4">Loading…</p>
             ) : categories.length === 0 ? (
               <div className="py-10 text-center text-muted-foreground">
                 <Tag className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No categories yet.</p>
+                <p className="text-[13px]">No categories yet.</p>
               </div>
             ) : (
               <div className="space-y-1">
@@ -132,7 +132,7 @@ export default function CategoriesPage() {
                   const kids = (childMap[p.id] || []).sort((a, b) => a.name.localeCompare(b.name));
                   return (
                     <div key={p.id}>
-                      <div className="flex items-center gap-3 p-3 rounded-2xl hover:bg-accent transition-colors">
+                      <div className="flex items-center gap-3 p-3 rounded-2xl hover:bg-muted/60 transition-colors">
                         <div
                           className={`w-3 h-3 rounded-full ${
                             p.type === "income" ? "bg-gain" : p.type === "transfer" ? "bg-blue-500" : "bg-loss"
@@ -145,7 +145,7 @@ export default function CategoriesPage() {
                       {kids.length > 0 && (
                         <div className="ml-8 border-l border-border pl-4 space-y-0.5">
                           {kids.map(k => (
-                            <div key={k.id} className="flex items-center gap-2 py-2 px-3 rounded-xl hover:bg-accent transition-colors">
+                            <div key={k.id} className="flex items-center gap-2 py-2 px-3 rounded-xl hover:bg-muted/60 transition-colors">
                               <ChevronRight className="h-3 w-3 text-muted-foreground" />
                               <span className="text-[15px]">{k.name}</span>
                             </div>
@@ -176,7 +176,7 @@ export default function CategoriesPage() {
               </div>
               <div className="w-48">
                 <label className="text-[13px] text-muted-foreground block mb-1.5">Category</label>
-                <select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={newMerchant.category_id} onChange={e => setNewMerchant({ ...newMerchant, category_id: e.target.value })}>
+                <select className="w-full h-11 rounded-xl bg-muted px-3 text-[14px] border-0" value={newMerchant.category_id} onChange={e => setNewMerchant({ ...newMerchant, category_id: e.target.value })}>
                   <option value="">Select...</option>
                   {catOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
@@ -197,17 +197,17 @@ export default function CategoriesPage() {
             {filteredMerchants.length === 0 ? (
               <div className="py-10 text-center text-muted-foreground">
                 <Store className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">{merchantSearch ? "No rules match your search." : "No merchant rules yet."}</p>
+                <p className="text-[13px]">{merchantSearch ? "No rules match your search." : "No merchant rules yet."}</p>
               </div>
             ) : (
               <div className="space-y-1 max-h-[500px] overflow-y-auto">
                 {filteredMerchants.map(m => (
-                  <div key={m.id} className="flex items-center justify-between p-3 rounded-2xl hover:bg-accent transition-colors group">
+                  <div key={m.id} className="flex items-center justify-between p-3 rounded-2xl hover:bg-muted/60 transition-colors group">
                     {editingId === m.id ? (
                       <div className="flex items-center gap-2 flex-1">
                         <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="h-9 rounded-xl text-[14px]" />
                         <Input value={editForm.patterns} onChange={e => setEditForm({ ...editForm, patterns: e.target.value })} className="h-9 rounded-xl text-[14px] font-mono" />
-                        <select className="h-9 rounded-xl bg-accent px-2 text-[14px] border-0" value={editForm.category_id} onChange={e => setEditForm({ ...editForm, category_id: e.target.value })}>
+                        <select className="h-9 rounded-xl bg-muted px-2 text-[14px] border-0" value={editForm.category_id} onChange={e => setEditForm({ ...editForm, category_id: e.target.value })}>
                           <option value="">--</option>
                           {catOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
@@ -221,7 +221,7 @@ export default function CategoriesPage() {
                           <code className="text-[12px] text-muted-foreground font-mono">{m.patterns}</code>
                         </div>
                         <div className="flex items-center gap-2">
-                          {m.category_name ? <Badge variant="secondary" className="rounded-lg">{m.category_name}</Badge> : <span className="text-muted-foreground text-sm">--</span>}
+                          {m.category_name ? <Badge variant="secondary" className="rounded-lg">{m.category_name}</Badge> : <span className="text-muted-foreground text-[12px]">--</span>}
                           <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               className="cursor-pointer p-1"

@@ -46,13 +46,13 @@ function EconomyDetail({c}:{c:PortfolioAnalysis["content"]}){
       <div className="flex items-center gap-3">
         <SentimentBadge sentiment={c.market_sentiment}/>
       </div>
-      <div className="p-5 rounded-2xl bg-accent/60">
+      <div className="p-5 rounded-2xl bg-muted/60">
         <p className="text-[15px] leading-[1.85] text-foreground/90">{c.market_summary}</p>
       </div>
       {c.key_indicators&&c.key_indicators.length>0&&(
         <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
           {c.key_indicators.map((ind,i)=>(
-            <div key={i} className="p-4 rounded-2xl bg-accent/60 text-center">
+            <div key={i} className="p-4 rounded-2xl bg-muted/60 text-center">
               <p className="text-[13px] text-muted-foreground mb-1">{ind.name}</p>
               <p className="font-mono tabular-nums text-[20px] font-bold">{ind.value}</p>
               <p className={`text-[12px] font-medium mt-1 ${ind.trend==="up"?"text-gain":ind.trend==="down"?"text-loss":"text-muted-foreground"}`}>
@@ -323,7 +323,7 @@ export default function PortfolioPage(){
     <div className="space-y-8">
       <style>{`
   .recharts-brush text { fill: var(--foreground); font-weight: 500; font-size: 11px; }
-  .recharts-brush-traveller { fill: var(--accent); }
+  .recharts-brush-traveller { fill: var(--primary); }
   .stock-deck::-webkit-scrollbar { height: 8px; }
   .stock-deck::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   .stock-deck::-webkit-scrollbar-track { background: transparent; }
@@ -360,14 +360,14 @@ export default function PortfolioPage(){
             {publicEnabled&&publicToken&&(
               <button
                 onClick={()=>{navigator.clipboard.writeText(`${window.location.origin}/p/${publicToken}`);setCopied(true);setTimeout(()=>setCopied(false),2000);}}
-                className="h-8 px-3 rounded-xl bg-accent text-[13px] font-medium flex items-center gap-1.5 hover:bg-muted transition-colors cursor-pointer"
+                className="h-8 px-3 rounded-xl bg-accent text-[13px] font-medium flex items-center gap-1.5 hover:bg-muted transition-colors cursor-pointer font-sans"
               >
                 {copied?<><ClipboardCheck className="h-3.5 w-3.5 text-gain"/>Copied</>:<><Link2 className="h-3.5 w-3.5"/>Copy link</>}
               </button>
             )}
           </div>
-          <button onClick={load} disabled={loading} className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center hover:bg-muted transition-colors cursor-pointer"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/></button>
-          <Button onClick={()=>setShowTrade(true)} className="rounded-[14px] h-auto px-5 py-3 text-[14px] font-semibold" style={{boxShadow:'0 10px 24px -10px var(--accent)'}}><Plus className="h-4 w-4 mr-1.5"/>New Trade</Button>
+          <button onClick={load} disabled={loading} className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors cursor-pointer"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/></button>
+          <Button onClick={()=>setShowTrade(true)} className="rounded-[14px] h-auto px-5 py-3 text-[14px] font-semibold" style={{boxShadow:'0 10px 24px -10px rgba(59,130,246,0.4)'}}><Plus className="h-4 w-4 mr-1.5"/>New Trade</Button>
         </div>
       </motion.div>
 
@@ -394,7 +394,7 @@ export default function PortfolioPage(){
         {/* Allocation */}
         <GlassCard delay={0.2} className="md:col-span-1 lg:col-span-1 !p-4">
           <p className="text-[13px] font-medium text-muted-foreground mb-3">Allocation</p>
-          {(p?.positions.length??0)===0?<p className="text-sm text-muted-foreground text-center py-8">No positions</p>:(
+          {(p?.positions.length??0)===0?<p className="text-[13px] text-muted-foreground text-center py-8">No positions</p>:(
             <div className="h-48"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={p!.positions} dataKey="market_value" nameKey="symbol" cx="50%" cy="50%" outerRadius={70} innerRadius={42}>{p!.positions.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}</Pie><Tooltip formatter={(v:any)=>formatCurrency(Number(v))}/></PieChart></ResponsiveContainer></div>
           )}
         </GlassCard>
@@ -412,7 +412,7 @@ export default function PortfolioPage(){
               const flash=flashes[pos.symbol];
               return(
               editingId===pos.id?(
-                <div key={pos.id} className="flex items-center gap-2 p-3 rounded-[14px] bg-accent flex-wrap"><span className="font-bold text-sm w-14">{pos.symbol}</span><Input value={editForm.quantity} onChange={e=>setEditForm({...editForm,quantity:e.target.value})} className="h-8 w-16 text-sm rounded-[14px]" placeholder="Qty"/><Input value={editForm.avg_cost_price} onChange={e=>setEditForm({...editForm,avg_cost_price:e.target.value})} className="h-8 w-20 text-sm rounded-[14px]" placeholder="Price"/><button onClick={()=>handleUpdate(pos.id)} className="cursor-pointer"><Check className="h-4 w-4 text-gain"/></button><button onClick={()=>setEditingId(null)} className="cursor-pointer"><X className="h-4 w-4 text-muted-foreground"/></button></div>
+                <div key={pos.id} className="flex items-center gap-2 p-3 rounded-[14px] bg-muted flex-wrap"><span className="font-bold text-[14px] w-14">{pos.symbol}</span><Input value={editForm.quantity} onChange={e=>setEditForm({...editForm,quantity:e.target.value})} className="h-8 w-16 text-[13px] rounded-[14px]" placeholder="Qty"/><Input value={editForm.avg_cost_price} onChange={e=>setEditForm({...editForm,avg_cost_price:e.target.value})} className="h-8 w-20 text-[13px] rounded-[14px]" placeholder="Price"/><button onClick={()=>handleUpdate(pos.id)} className="cursor-pointer"><Check className="h-4 w-4 text-gain"/></button><button onClick={()=>setEditingId(null)} className="cursor-pointer"><X className="h-4 w-4 text-muted-foreground"/></button></div>
               ):(
                 <div key={pos.id} className={`flex items-center justify-between px-3.5 py-3 pr-4 rounded-[14px] cursor-pointer transition-all duration-200 group hover:bg-accent ${chartTicker===pos.symbol?"bg-accent":""} ${flash==="up"?"flash-up":flash==="down"?"flash-down":""}`} onClick={()=>openChart(pos.symbol)}>
                   <div className="min-w-[70px] shrink-0">
@@ -460,7 +460,7 @@ export default function PortfolioPage(){
                 return <div className="flex items-center justify-center gap-3 mb-3"><span className="font-mono tabular-nums text-[20px] font-bold">{lp.toFixed(2)}</span><span className={`text-[13px] font-semibold ${lc>=0?"text-gain":"text-loss"}`}>{lc>=0?"+":""}{lc.toFixed(2)} ({lcp>=0?"+":""}{lcp.toFixed(1)}%)</span></div>;
               })()}
               <div className="flex justify-center mb-2"><RangeSwitcher ranges={RANGES.map(r=>r.label)} active={RANGES.find(r=>r.value===chartRange)?.label||"1Y"} onChange={lbl=>{const r=RANGES.find(x=>x.label===lbl);if(r)setChartRange(r.value);}}/></div>
-              <div className="h-52">{chartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:chartData.length===0?<p className="text-sm text-muted-foreground">No data</p>:(
+              <div className="h-52">{chartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:chartData.length===0?<p className="text-[13px] text-muted-foreground">No data</p>:(
                 <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData} margin={{top:5,right:10,left:10,bottom:5}}><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis hide domain={["auto","auto"]}/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg)"/></AreaChart></ResponsiveContainer>
               )}</div>
             </>
@@ -472,7 +472,7 @@ export default function PortfolioPage(){
       <div>
         <div className="flex items-center gap-3 mb-5">
           <div className="h-10 w-10 rounded-2xl bg-orange-100 dark:bg-orange-500/15 flex items-center justify-center"><Brain className="h-5 w-5 text-orange-600 dark:text-orange-400" strokeWidth={1.8}/></div>
-          <h2 className="text-lg font-semibold">Stock Analyses</h2>
+          <h2 className="text-[16px] font-semibold">Stock Analyses</h2>
           <span className="text-[13px] text-muted-foreground">{Object.keys(stockAnalyses).length} held</span>
         </div>
         {Object.keys(stockAnalyses).length===0?<GlassCard delay={0.35}><p className="text-muted-foreground py-6 text-center">No stock analyses yet. Your agent will store reports here.</p></GlassCard>:(
@@ -482,7 +482,7 @@ export default function PortfolioPage(){
               <GlassCard key={entry.analysis_id} delay={0.35} className="space-y-3 min-w-[400px] max-w-[440px] shrink-0">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold">{s.symbol}</span>
+                    <span className="text-[16px] font-bold">{s.symbol}</span>
                     <ActionBadge action={s.action}/>
                   </div>
                   <div className="text-left sm:text-right">
@@ -508,7 +508,7 @@ export default function PortfolioPage(){
         <div>
           <button onClick={()=>setShowPastStocks(!showPastStocks)} className="flex items-center gap-3 mb-5 cursor-pointer group">
             <div className="h-10 w-10 rounded-2xl bg-slate-100 dark:bg-slate-500/15 flex items-center justify-center"><Archive className="h-5 w-5 text-slate-600 dark:text-slate-400" strokeWidth={1.8}/></div>
-            <h2 className="text-lg font-semibold group-hover:text-primary transition-colors">Past Stocks</h2>
+            <h2 className="text-[16px] font-semibold group-hover:text-primary transition-colors">Past Stocks</h2>
             <span className="text-[13px] text-muted-foreground">{Object.keys(pastStockAnalyses).length} sold</span>
             {showPastStocks?<ChevronDown className="h-5 w-5 text-muted-foreground"/>:<ChevronRight className="h-5 w-5 text-muted-foreground"/>}
           </button>
@@ -588,7 +588,7 @@ export default function PortfolioPage(){
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-2xl bg-blue-100 dark:bg-blue-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" strokeWidth={1.8}/></div>
-            <h2 className="text-lg font-semibold">Economy & Market</h2>
+            <h2 className="text-[16px] font-semibold">Economy & Market</h2>
           </div>
           {latestEconomy && <span className="text-[13px] text-muted-foreground">{new Date(latestEconomy.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</span>}
         </div>
@@ -650,11 +650,11 @@ export default function PortfolioPage(){
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-2xl bg-indigo-100 dark:bg-indigo-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" strokeWidth={1.8}/></div>
-              <h2 className="text-lg font-semibold">Portfolio Timeline</h2>
+              <h2 className="text-[16px] font-semibold">Portfolio Timeline</h2>
             </div>
             <div className="sm:ml-auto flex items-center gap-3">
               <span className="text-[13px] text-muted-foreground">Current</span>
-              <span className="text-lg font-bold tabular-nums">{formatCurrency(lastPt.value)}</span>
+              <span className="text-[20px] font-bold tabular-nums font-mono">{formatCurrency(lastPt.value)}</span>
               <span className={`text-[13px] font-semibold ${totalReturn>=0?"text-gain":"text-loss"}`}>{totalReturn>=0?"+":""}{formatCurrency(totalReturn)} ({totalReturnPct>=0?"+":""}{totalReturnPct.toFixed(1)}%)</span>
             </div>
           </div>
@@ -722,10 +722,10 @@ export default function PortfolioPage(){
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-5">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-2xl bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center"><BookOpen className="h-5 w-5 text-violet-600 dark:text-violet-400" strokeWidth={1.8}/></div>
-            <h2 className="text-lg font-semibold">Trade Journal</h2>
+            <h2 className="text-[16px] font-semibold">Trade Journal</h2>
           </div>
           {/* Tab switcher */}
-          <div className="flex items-center gap-1 p-1 bg-accent rounded-xl">
+          <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl">
             <button onClick={()=>setJournalTab("ba")} className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${journalTab==="ba"?"bg-background shadow-sm text-foreground":"text-muted-foreground hover:text-foreground"}`}><Target className="h-3.5 w-3.5"/>Buy Assessments <span className="text-[11px] opacity-70">{buyAssessments.length}</span></button>
             <button onClick={()=>setJournalTab("pm")} className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${journalTab==="pm"?"bg-background shadow-sm text-foreground":"text-muted-foreground hover:text-foreground"}`}><Activity className="h-3.5 w-3.5"/>Post-Mortems <span className="text-[11px] opacity-70">{postMortems.length}</span></button>
           </div>
@@ -734,7 +734,7 @@ export default function PortfolioPage(){
               if(journalTab==="ba"){setEditingBA(null);setBAForm({symbol:"",recommendation:"buy",target_price:"",stop_loss:"",thesis:"",risk_factors:"",conviction:"3",time_horizon:""});setBAError("");setShowBAModal(true);}
               else{setEditingPM(null);setPMForm({symbol:"",entry_price:"",exit_price:"",notes:""});setPMError("");setShowPMModal(true);}
             }}
-            className="sm:ml-auto p-2 rounded-xl bg-accent hover:bg-accent/80 transition-colors cursor-pointer"
+            className="sm:ml-auto p-2 rounded-xl bg-muted hover:bg-muted/80 transition-colors cursor-pointer"
           ><Plus className="h-4 w-4"/></button>
         </div>
 
@@ -748,12 +748,12 @@ export default function PortfolioPage(){
                 const recColor=ba.recommendation==="buy"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":ba.recommendation==="hold"?"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400":ba.recommendation==="watch"?"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400";
                 const isExpanded=expandedBAId===ba.id;
                 return(
-                  <div key={ba.id} className="glass bg-accent/40 rounded-2xl p-4 flex flex-col gap-3 group relative">
+                  <div key={ba.id} className="glass bg-card rounded-2xl p-4 flex flex-col gap-3 group relative">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-lg font-bold">{ba.symbol}</span>
+                        <span className="text-[16px] font-bold">{ba.symbol}</span>
                         <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold capitalize ${recColor}`}>{ba.recommendation}</span>
-                        {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground capitalize">{ba.time_horizon}</span>}
+                        {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground capitalize">{ba.time_horizon}</span>}
                       </div>
                       <div className="hidden group-hover:flex items-center gap-1 shrink-0">
                         <button onClick={()=>{setEditingBA(ba);setBAForm({symbol:ba.symbol,recommendation:ba.recommendation,target_price:ba.target_price?.toString()||"",stop_loss:ba.stop_loss?.toString()||"",thesis:ba.thesis,risk_factors:ba.risk_factors||"",conviction:String(ba.conviction),time_horizon:ba.time_horizon||""});setBAError("");setShowBAModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
@@ -796,7 +796,7 @@ export default function PortfolioPage(){
                 const isPos=pm.pnl_pct>=0;
                 const isExpanded=expandedPMId===pm.id;
                 return(
-                  <div key={pm.id} className="glass bg-accent/40 rounded-2xl p-4 flex flex-col gap-3 group relative">
+                  <div key={pm.id} className="glass bg-card rounded-2xl p-4 flex flex-col gap-3 group relative">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[15px] font-bold">{pm.symbol}</span>
@@ -835,7 +835,7 @@ export default function PortfolioPage(){
       <div>
         <div className="flex items-center gap-3 mb-5">
           <div className="h-10 w-10 rounded-2xl bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center"><History className="h-5 w-5 text-violet-600 dark:text-violet-400" strokeWidth={1.8}/></div>
-          <h2 className="text-lg font-semibold">Transaction History</h2>
+          <h2 className="text-[16px] font-semibold">Transaction History</h2>
           <span className="text-[13px] text-muted-foreground ml-auto">{trades.length} transactions</span>
         </div>
         {trades.length===0?<GlassCard delay={0.45}><p className="text-muted-foreground py-6 text-center">No transactions yet. Record trades above or let your AI agent log them.</p></GlassCard>:(
@@ -880,7 +880,7 @@ export default function PortfolioPage(){
           <DialogHeader><DialogTitle className="flex items-center gap-2"><LineChart className="h-5 w-5 text-primary"/>{tradeChartSymbol} — Price Chart</DialogTitle></DialogHeader>
           <div className="flex gap-1 mb-3">{RANGES.map(r=><button key={r.value} onClick={()=>setTradeChartRange(r.value)} className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${tradeChartRange===r.value?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}>{r.label}</button>)}</div>
           <div className="h-64">
-            {tradeChartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:tradeChartData.length===0?<p className="text-sm text-muted-foreground text-center py-8">No data available</p>:(
+            {tradeChartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:tradeChartData.length===0?<p className="text-[13px] text-muted-foreground text-center py-8">No data available</p>:(
               <ResponsiveContainer width="100%" height="100%"><AreaChart data={tradeChartData}><defs><linearGradient id="sg-trade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg-trade)"/></AreaChart></ResponsiveContainer>
             )}
           </div>
@@ -894,8 +894,8 @@ export default function PortfolioPage(){
           <div className="space-y-4">
             <div><label className="text-[13px] text-muted-foreground block mb-1.5">Symbol *</label><Input placeholder="NVDA" value={baForm.symbol} onChange={e=>setBAForm({...baForm,symbol:e.target.value.toUpperCase()})} className="rounded-xl h-11"/></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Recommendation *</label><select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={baForm.recommendation} onChange={e=>setBAForm({...baForm,recommendation:e.target.value as BuyAssessmentInput["recommendation"]})}>{["buy","hold","watch","avoid"].map(r=><option key={r} value={r} className="capitalize">{r}</option>)}</select></div>
-              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Time Horizon</label><select className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0" value={baForm.time_horizon} onChange={e=>setBAForm({...baForm,time_horizon:e.target.value as BuyAssessmentInput["time_horizon"]|""})}><option value="">—</option>{["short","medium","long"].map(h=><option key={h} value={h} className="capitalize">{h}</option>)}</select></div>
+              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Recommendation *</label><select className="w-full h-11 rounded-xl bg-muted px-3 text-[14px] border-0" value={baForm.recommendation} onChange={e=>setBAForm({...baForm,recommendation:e.target.value as BuyAssessmentInput["recommendation"]})}>{["buy","hold","watch","avoid"].map(r=><option key={r} value={r} className="capitalize">{r}</option>)}</select></div>
+              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Time Horizon</label><select className="w-full h-11 rounded-xl bg-muted px-3 text-[14px] border-0" value={baForm.time_horizon} onChange={e=>setBAForm({...baForm,time_horizon:e.target.value as BuyAssessmentInput["time_horizon"]|""})}><option value="">—</option>{["short","medium","long"].map(h=><option key={h} value={h} className="capitalize">{h}</option>)}</select></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="text-[13px] text-muted-foreground block mb-1.5">Target Price</label><Input type="number" placeholder="0.00" value={baForm.target_price} onChange={e=>setBAForm({...baForm,target_price:e.target.value})} className="rounded-xl h-11"/></div>

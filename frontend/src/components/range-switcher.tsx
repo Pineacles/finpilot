@@ -14,7 +14,7 @@ export function RangeSwitcher({ ranges, active, onChange, className = "" }: Rang
         <button
           key={r}
           onClick={() => onChange(r)}
-          className={`px-3 py-1.5 rounded-[10px] text-[12px] font-semibold transition-all duration-150 cursor-pointer ${
+          className={`px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-all duration-150 cursor-pointer ${
             r === active
               ? "bg-primary text-primary-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground hover:bg-accent"
