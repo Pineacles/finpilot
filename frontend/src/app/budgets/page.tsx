@@ -49,18 +49,14 @@ export default function BudgetsPage() {
 
   return (
     <div className="space-y-6 p-1">
-      {/* Header */}
-      <GlassCard delay={0} className="flex items-end justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-1">Budgets</p>
-          <h1 className="text-2xl font-bold tracking-tight">April 2026</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            <span className="font-mono tabular-nums">{formatCurrency(totalSpent)}</span>
-            {" of "}
-            <span className="font-mono tabular-nums">{formatCurrency(totalBudget)}</span>
-            {" · "}{overall.toFixed(0)}% of monthly budget used
-          </p>
-        </div>
+      {/* Budget summary + action */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          <span className="font-mono tabular-nums">{formatCurrency(totalSpent)}</span>
+          {" of "}
+          <span className="font-mono tabular-nums">{formatCurrency(totalBudget)}</span>
+          {" · "}{overall.toFixed(0)}% of monthly budget used
+        </p>
         <button
           onClick={() => setOpen(true)}
           className="flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold cursor-pointer shadow-[0_10px_24px_-10px_var(--color-primary)] hover:opacity-90 transition-opacity"
@@ -68,7 +64,7 @@ export default function BudgetsPage() {
           <Plus className="h-4 w-4" />
           New Budget
         </button>
-      </GlassCard>
+      </div>
 
       {/* Ring gauge overview */}
       {!loading && budgets.length > 0 && (

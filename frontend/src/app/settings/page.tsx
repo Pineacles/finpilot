@@ -82,17 +82,13 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="flex items-center justify-between"
-      >
-        <div>
-          <p className="text-sm font-medium text-primary mb-1">Settings</p>
-          <h1 className="text-3xl font-bold tracking-tight">Configuration</h1>
-        </div>
-        <div className="flex items-center gap-3">
+      {/* Action bar */}
+      {(saved || hasEdits) && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex items-center justify-end gap-3"
+        >
           {saved && (
             <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 rounded-xl">
               <CheckCircle2 className="h-3 w-3 mr-1" />Saved
@@ -103,8 +99,8 @@ export default function SettingsPage() {
               <Save className="h-4 w-4 mr-1.5" />{saving ? "Saving..." : "Save Changes"}
             </Button>
           )}
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
 
       {/* Profile card */}
       <GlassCard delay={0.02}>

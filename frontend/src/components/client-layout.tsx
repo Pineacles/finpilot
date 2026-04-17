@@ -4,6 +4,32 @@ import { usePathname } from "next/navigation";
 import { AuthProvider } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 
+const PAGE_META: Record<string, { eyebrow: string; subtitle: string }> = {
+  "/": { eyebrow: "Dashboard", subtitle: "Overview" },
+  "/portfolio": { eyebrow: "Investments", subtitle: "Investments & Holdings" },
+  "/transactions": { eyebrow: "Money in & out", subtitle: "Transactions" },
+  "/budgets": { eyebrow: "Budgets", subtitle: "Budgets" },
+  "/goals": { eyebrow: "Goals & Milestones", subtitle: "Goals & Milestones" },
+  "/stats": { eyebrow: "Financial Insights", subtitle: "Statistics" },
+  "/categories": { eyebrow: "Categories", subtitle: "Categories" },
+  "/settings": { eyebrow: "Settings", subtitle: "Settings" },
+};
+
+function Topbar({ pathname }: { pathname: string }) {
+  const meta = PAGE_META[pathname] ?? { eyebrow: "", subtitle: "" };
+  if (!meta.eyebrow) return null;
+  return (
+    <div className="flex items-center justify-between px-7 pt-6 pb-2">
+      <div>
+        <div className="text-xs font-semibold text-primary uppercase tracking-[0.04em] mb-1">
+          {meta.eyebrow}
+        </div>
+        <h1 className="text-[28px] font-bold tracking-[-0.6px]">{meta.subtitle}</h1>
+      </div>
+    </div>
+  );
+}
+
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLogin = pathname === "/login";
@@ -28,7 +54,8 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[1600px] px-8 py-8">{children}</div>
+          <Topbar pathname={pathname} />
+          <div className="px-7 py-6">{children}</div>
         </main>
       </div>
     </AuthProvider>

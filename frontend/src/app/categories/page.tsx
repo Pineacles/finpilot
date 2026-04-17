@@ -79,15 +79,6 @@ export default function CategoriesPage() {
 
   return (
     <div className="space-y-8 p-1">
-      {/* Header */}
-      <GlassCard delay={0} className="flex items-end justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-1">Categories</p>
-          <h1 className="text-2xl font-bold tracking-tight">{categories.length} categories</h1>
-          <p className="text-sm text-muted-foreground mt-1">Used to tag transactions · managed by your agent</p>
-        </div>
-      </GlassCard>
-
       {/* Tabs */}
       <div className="flex gap-2">
         {(["categories", "rules"] as const).map(t => (
