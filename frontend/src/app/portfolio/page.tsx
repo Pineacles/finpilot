@@ -419,9 +419,13 @@ export default function PortfolioPage(){
                     <p className="text-[11px] text-muted-foreground truncate max-w-[80px]">{pos.name}</p>
                   </div>
                   <div className="hidden lg:block shrink-0"><SparklineChart data={pos.sparkline||[]} color={livePnlPct>=0?"#3b82f6":"#ff3b30"} width={90} height={36}/></div>
+                  <div className="text-center shrink-0 min-w-[50px]">
+                    <p className="font-mono tabular-nums text-[13px] font-semibold">{pos.quantity}</p>
+                    <p className="text-[10px] text-muted-foreground">shares</p>
+                  </div>
                   <div className="text-right shrink-0">
                     <p className="font-mono tabular-nums text-[13px] font-semibold">{livePrice.toFixed(2)}<span className="text-[11px] text-muted-foreground ml-1">{pos.currency}</span></p>
-                    <p className="font-mono tabular-nums text-[11px] text-muted-foreground">{pos.quantity} shares · cost {pos.avg_cost_price.toFixed(2)}</p>
+                    <p className="font-mono tabular-nums text-[11px] text-muted-foreground">cost {pos.avg_cost_price.toFixed(2)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="text-right hidden sm:block">
