@@ -707,7 +707,7 @@ function TransactionsInner() {
 
       {/* ---- Uncategorized Panel ----------------------------------- */}
       {uncategorized.length > 0 && (
-        <GlassCard>
+        <GlassCard className="border-l-4 border-l-[var(--accent)] !rounded-[14px] bg-accent/40">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-amber-500/10">

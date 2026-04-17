@@ -340,7 +340,7 @@ export default function PublicPortfolioPage(){
         </div>
         <div className="text-right hidden sm:block">
           <div className="flex items-center gap-2 justify-end mb-1">
-            <p className="text-[13px] text-muted-foreground uppercase tracking-wider">Total Value</p>
+            <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Total Value</p>
             <LivePill/>
           </div>
           <p className="font-mono tabular-nums text-[42px] font-extrabold" style={{letterSpacing: '-1.2px'}}><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
@@ -351,7 +351,7 @@ export default function PublicPortfolioPage(){
       {/* Mobile total value */}
       <div className="sm:hidden">
         <div className="flex items-center gap-2 mb-1">
-          <p className="text-[13px] text-muted-foreground uppercase tracking-wider">Total Value</p>
+          <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Total Value</p>
           <LivePill/>
         </div>
         <p className="font-mono tabular-nums text-[42px] font-extrabold" style={{letterSpacing: '-1.2px'}}><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>

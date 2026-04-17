@@ -55,7 +55,7 @@ function MetricCard({
       />
       <div className="relative z-10">
         <div className="flex items-start justify-between mb-5">
-          <div className={`h-[48px] w-[48px] rounded-2xl ${iconBg} flex items-center justify-center`}>
+          <div className={`h-[44px] w-[44px] rounded-[14px] ${iconBg} flex items-center justify-center`}>
             <Icon className={`h-6 w-6 ${iconColor}`} strokeWidth={1.8} />
           </div>
           <div className="flex items-center gap-2">
@@ -153,10 +153,10 @@ export default function OverviewPage() {
     return (
       <div className="space-y-8">
         <Skeleton className="h-10 w-56" />
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-[18px] grid-cols-3">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-44" />)}
         </div>
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-[18px] grid-cols-[1.3fr_1fr]">
           <Skeleton className="h-80" />
           <Skeleton className="h-80" />
         </div>
@@ -196,7 +196,7 @@ export default function OverviewPage() {
       </motion.div>
 
       {/* Top Metric Cards */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-[18px] grid-cols-3">
         <MetricCard
           icon={Wallet}
           iconBg="bg-emerald-100 dark:bg-emerald-500/15"
@@ -318,7 +318,7 @@ export default function OverviewPage() {
       )}
 
       {/* Bottom: Recent Transactions + Budget Health */}
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-[18px] grid-cols-[1.3fr_1fr]">
         {/* Recent Transactions */}
         <GlassCard delay={0.25}>
           <h2 className="text-[16px] font-semibold mb-5">Recent Transactions</h2>

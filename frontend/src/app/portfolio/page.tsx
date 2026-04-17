@@ -340,7 +340,7 @@ export default function PortfolioPage(){
       <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <p className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">Total Value</p>
+            <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Total Value</p>
             <LivePill/>
           </div>
           <p className="font-mono tabular-nums text-[42px] font-extrabold" style={{letterSpacing: '-1.2px'}}><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
@@ -367,7 +367,7 @@ export default function PortfolioPage(){
             )}
           </div>
           <button onClick={load} disabled={loading} className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center hover:bg-muted transition-colors cursor-pointer"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/></button>
-          <Button onClick={()=>setShowTrade(true)} className="rounded-xl h-10 px-5"><Plus className="h-4 w-4 mr-1.5"/>Trade</Button>
+          <Button onClick={()=>setShowTrade(true)} className="rounded-[14px] h-auto px-5 py-3 text-[14px] font-semibold" style={{boxShadow:'0 10px 24px -10px var(--accent)'}}><Plus className="h-4 w-4 mr-1.5"/>New Trade</Button>
         </div>
       </motion.div>
 
