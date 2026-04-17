@@ -228,7 +228,7 @@ export default function SettingsPage() {
       <GlassCard delay={0.3} className="border-l-4 border-l-red-500/70">
         <div className="flex items-center gap-2 mb-1">
           <AlertTriangle className="h-4 w-4 text-red-500" />
-          <h2 className="text-base font-bold text-red-500">Danger zone</h2>
+          <h2 className="text-[14px] font-bold text-red-500">Danger zone</h2>
         </div>
         <p className="text-[12px] text-muted-foreground mb-4">These actions cannot be undone.</p>
         <div className="flex gap-3">

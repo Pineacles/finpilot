@@ -76,7 +76,7 @@ function CategoryDrillDown({
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col rounded-3xl glass border-border/60">
         <DialogHeader>
-          <DialogTitle className="text-lg font-bold">{categoryName}</DialogTitle>
+          <DialogTitle className="text-[16px] font-bold">{categoryName}</DialogTitle>
           <p className="text-[13px] text-muted-foreground">
             {fromDate} → {toDate} &mdash; {txns.length} transactions &mdash; Total: <span className="font-semibold text-foreground">{formatCurrency(total)}</span>
           </p>
@@ -422,7 +422,7 @@ function MonthlyView({
           <SectionHeader eyebrow="Accounts" title="Spending by Account" icon={CreditCard} />
           <div className="grid gap-4 md:grid-cols-2">
             {monthly.account_breakdown.map(a => (
-              <div key={a.name} className="flex items-center justify-between p-4 rounded-2xl bg-accent/60">
+              <div key={a.name} className="flex items-center justify-between p-4 rounded-2xl bg-muted/60">
                 <div className="flex items-center gap-3">
                   <div className={`w-2.5 h-2.5 rounded-full ${a.type === "credit_card" ? "bg-[var(--chart-3)]" : "bg-[var(--chart-1)]"}`} />
                   <div>

@@ -164,7 +164,7 @@ export default function OverviewPage() {
     );
   }
 
-  if (!data) return <p className="text-muted-foreground text-lg">Failed to load data.</p>;
+  if (!data) return <p className="text-muted-foreground text-[14px]">Failed to load data.</p>;
 
   // Live-aware values: when portfolio data is loaded, use the live total instead of the cached overview value
   const livePortfolioValue = portfolio ? liveTotals.value : data.portfolio_value;
@@ -217,7 +217,7 @@ export default function OverviewPage() {
           delay={0.1}
           sub={
             bankAccounts.length > 0 ? (
-              <p className="text-sm text-muted-foreground">{bankAccounts[0].name}</p>
+              <p className="text-[13px] text-muted-foreground">{bankAccounts[0].name}</p>
             ) : undefined
           }
           onEdit={
@@ -260,7 +260,7 @@ export default function OverviewPage() {
               onClick={() => setEditingAccountId(null)}
               className="p-1.5 rounded-lg hover:bg-accent cursor-pointer"
             >
-              <span className="text-muted-foreground text-sm">Cancel</span>
+              <span className="text-muted-foreground text-[13px]">Cancel</span>
             </button>
           </div>
           <p className="text-[13px] text-muted-foreground mb-3">
@@ -294,7 +294,7 @@ export default function OverviewPage() {
               <CreditCard className="h-6 w-6 text-rose-600 dark:text-rose-400" strokeWidth={1.8} />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Credit Card</p>
+              <p className="text-[12px] text-muted-foreground">Credit Card</p>
               <p className={`font-mono tabular-nums text-[28px] font-bold ${ccTotal < 0 ? "text-loss" : "text-gain"}`} style={{letterSpacing: '-0.8px'}}>
                 {formatCurrency(Math.abs(ccTotal))}
               </p>
@@ -329,7 +329,7 @@ export default function OverviewPage() {
                 strokeWidth={1.2}
               />
               <p className="text-muted-foreground">No transactions yet</p>
-              <p className="text-sm text-muted-foreground/60 mt-1">
+              <p className="text-[12px] text-muted-foreground/60 mt-1">
                 Import a bank statement to get started
               </p>
             </div>
@@ -387,7 +387,7 @@ export default function OverviewPage() {
                 strokeWidth={1.2}
               />
               <p className="text-muted-foreground">No budgets set</p>
-              <p className="text-sm text-muted-foreground/60 mt-1">Create a budget in Settings</p>
+              <p className="text-[12px] text-muted-foreground/60 mt-1">Create a budget in Settings</p>
             </div>
           ) : (
             <div className="space-y-5">

@@ -51,7 +51,7 @@ export default function BudgetsPage() {
     <div className="space-y-6 p-1">
       {/* Budget summary + action */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-[13px] text-muted-foreground">
           <span className="font-mono tabular-nums">{formatCurrency(totalSpent)}</span>
           {" of "}
           <span className="font-mono tabular-nums">{formatCurrency(totalBudget)}</span>
@@ -59,7 +59,7 @@ export default function BudgetsPage() {
         </p>
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold cursor-pointer shadow-[0_10px_24px_-10px_var(--color-primary)] hover:opacity-90 transition-opacity"
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-[14px] font-semibold cursor-pointer shadow-[0_10px_24px_-10px_rgba(59,130,246,0.4)] hover:opacity-90 transition-opacity"
         >
           <Plus className="h-4 w-4" />
           New Budget
@@ -104,11 +104,11 @@ export default function BudgetsPage() {
 
       {/* Budget cards */}
       {loading ? (
-        <p className="text-muted-foreground text-sm">Loading…</p>
+        <p className="text-muted-foreground text-[13px]">Loading…</p>
       ) : budgets.length === 0 ? (
         <GlassCard delay={0.05}>
           <div className="py-12 text-center text-muted-foreground">
-            <p className="text-sm">No budgets yet. Create your first budget to start tracking spending.</p>
+            <p className="text-[13px]">No budgets yet. Create your first budget to start tracking spending.</p>
           </div>
         </GlassCard>
       ) : (
@@ -131,7 +131,7 @@ export default function BudgetsPage() {
                   </div>
                   <button
                     onClick={() => handleDelete(b.id)}
-                    className="w-8 h-8 rounded-[10px] flex items-center justify-center text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+                    className="w-8 h-8 rounded-[10px] flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -145,7 +145,7 @@ export default function BudgetsPage() {
                       of {formatCurrency(b.amount)}
                     </span>
                   </div>
-                  <div className="h-2.5 rounded-full bg-accent overflow-hidden">
+                  <div className="h-2.5 rounded-full bg-muted overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-700"
                       style={{
@@ -170,12 +170,12 @@ export default function BudgetsPage() {
           {/* Add new card */}
           <button
             onClick={() => setOpen(true)}
-            className="glass bg-card rounded-[24px] p-6 min-h-[180px] flex flex-col items-center justify-center gap-2.5 border-2 border-dashed border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-150 cursor-pointer"
+            className="glass bg-card rounded-[24px] p-6 min-h-[180px] flex flex-col items-center justify-center gap-2.5 border-2 border-dashed border-border text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all duration-150 cursor-pointer"
           >
-            <div className="w-12 h-12 rounded-[14px] bg-accent flex items-center justify-center">
+            <div className="w-12 h-12 rounded-[14px] bg-muted flex items-center justify-center">
               <Plus className="h-5 w-5" />
             </div>
-            <span className="text-sm font-medium">Add new budget</span>
+            <span className="text-[13px] font-medium">Add new budget</span>
           </button>
         </div>
       )}
@@ -191,10 +191,10 @@ export default function BudgetsPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold">Create Budget</h2>
+              <h2 className="text-[16px] font-bold">Create Budget</h2>
               <button
                 onClick={() => setOpen(false)}
-                className="w-8 h-8 rounded-[10px] bg-accent flex items-center justify-center text-foreground hover:bg-muted transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-[10px] bg-muted flex items-center justify-center text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -206,7 +206,7 @@ export default function BudgetsPage() {
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="e.g. Groceries"
-                  className="h-11 rounded-xl bg-accent border-0"
+                  className="h-11 rounded-xl bg-muted border-0"
                 />
               </div>
               <div>
@@ -216,13 +216,13 @@ export default function BudgetsPage() {
                   value={form.amount}
                   onChange={(e) => setForm({ ...form, amount: e.target.value })}
                   placeholder="500"
-                  className="h-11 rounded-xl bg-accent border-0"
+                  className="h-11 rounded-xl bg-muted border-0"
                 />
               </div>
               <div>
                 <Label className="text-[12px] font-semibold text-muted-foreground mb-1.5 block">Category (optional)</Label>
                 <select
-                  className="w-full h-11 rounded-xl bg-accent px-3 text-[14px] border-0"
+                  className="w-full h-11 rounded-xl bg-muted px-3 text-[14px] border-0"
                   value={form.category_id}
                   onChange={(e) => setForm({ ...form, category_id: e.target.value })}
                 >
@@ -242,7 +242,7 @@ export default function BudgetsPage() {
                       className={`flex-1 h-10 rounded-[10px] text-[12px] font-semibold capitalize cursor-pointer transition-all ${
                         form.period === p
                           ? "bg-primary text-primary-foreground"
-                          : "bg-accent text-muted-foreground hover:text-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       {p}
@@ -252,7 +252,7 @@ export default function BudgetsPage() {
               </div>
               <button
                 onClick={handleCreate}
-                className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold cursor-pointer shadow-[0_10px_24px_-10px_var(--color-primary)] hover:opacity-90 transition-opacity mt-1"
+                className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-[14px] font-semibold cursor-pointer shadow-[0_10px_24px_-10px_rgba(59,130,246,0.4)] hover:opacity-90 transition-opacity mt-1"
               >
                 Create Budget
               </button>
