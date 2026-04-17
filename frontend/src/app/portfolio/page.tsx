@@ -338,9 +338,7 @@ export default function PortfolioPage(){
       {/* Header */}
       <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-primary mb-1">Portfolio</p>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Investments & Holdings</h1>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2">
             <p className="text-[12px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Total Value</p>
             <LivePill/>
           </div>
