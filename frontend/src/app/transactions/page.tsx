@@ -843,7 +843,7 @@ function TransactionsInner() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search merchant, description, category..."
             className={cn(
-              "w-full h-11 rounded-xl bg-accent pl-10 pr-4 text-[15px] outline-none",
+              "w-full h-[44px] rounded-[14px] bg-accent pl-10 pr-4 text-[15px] outline-none",
               "placeholder:text-muted-foreground/60 transition-all",
               "focus:ring-2 focus:ring-primary/30",
             )}
@@ -895,14 +895,14 @@ function TransactionsInner() {
         {!loading && filtered.length > 0 && (
           <>
             <div className="overflow-x-auto -mx-6 px-6">
-              <table className="w-full text-[15px]">
+              <table className="w-full text-[13px]">
                 <thead>
-                  <tr className="border-b border-border text-[13px] text-muted-foreground">
-                    <th className="text-left font-medium pb-3 pr-4">Date</th>
-                    <th className="text-left font-medium pb-3 pr-4">Merchant</th>
-                    <th className="text-left font-medium pb-3 pr-4">Description</th>
-                    <th className="text-left font-medium pb-3 pr-4">Category</th>
-                    <th className="text-right font-medium pb-3 pr-4">Amount</th>
+                  <tr className="border-b border-border text-[11px] text-muted-foreground uppercase tracking-[0.3px]">
+                    <th className="text-left font-semibold pb-3 pr-4">Date</th>
+                    <th className="text-left font-semibold pb-3 pr-4">Merchant</th>
+                    <th className="text-left font-semibold pb-3 pr-4">Description</th>
+                    <th className="text-left font-semibold pb-3 pr-4">Category</th>
+                    <th className="text-right font-semibold pb-3 pr-4">Amount</th>
                     <th className="pb-3 w-10" />
                   </tr>
                 </thead>
@@ -1047,7 +1047,7 @@ function TransactionsInner() {
                         {/* Amount */}
                         <td
                           className={cn(
-                            "py-3 pr-4 text-right whitespace-nowrap font-semibold tabular-nums",
+                            "py-3 pr-4 text-right whitespace-nowrap font-mono tabular-nums text-[14px] font-semibold",
                             isIncome ? "text-gain" : "text-loss",
                           )}
                         >

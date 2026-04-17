@@ -54,7 +54,7 @@ function EconomyDetail({c}:{c:PortfolioAnalysis["content"]}){
           {c.key_indicators.map((ind,i)=>(
             <div key={i} className="p-4 rounded-2xl bg-accent/60 text-center">
               <p className="text-[13px] text-muted-foreground mb-1">{ind.name}</p>
-              <p className="text-2xl font-bold">{ind.value}</p>
+              <p className="font-mono tabular-nums text-[20px] font-bold">{ind.value}</p>
               <p className={`text-[12px] font-medium mt-1 ${ind.trend==="up"?"text-gain":ind.trend==="down"?"text-loss":"text-muted-foreground"}`}>
                 {ind.trend==="up"?"Trending up":ind.trend==="down"?"Trending down":"Stable"}
               </p>
@@ -340,10 +340,10 @@ export default function PortfolioPage(){
       <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Total Value</p>
+            <p className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">Total Value</p>
             <LivePill/>
           </div>
-          <p className="text-4xl font-bold tracking-tight tabular-nums"><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
+          <p className="font-mono tabular-nums text-[42px] font-extrabold" style={{letterSpacing: '-1.2px'}}><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
           <div className="flex items-center gap-3 mt-2"><PnlBadge value={liveTotals.pnl} pct={liveTotals.pnlPct}/><span className="text-[13px] text-muted-foreground">all-time P&L</span></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -379,9 +379,9 @@ export default function PortfolioPage(){
           {l:"Positions",v:p?.positions_count??0,fmt:(n:number)=>String(Math.round(n)),pct:undefined},
           {l:"Total P&L",v:liveTotals.pnl,fmt:formatCurrency,pct:liveTotals.pnlPct},
         ].map((item,i)=>(
-          <GlassCard key={item.l} delay={0.05+i*0.05} className="!p-5">
+          <GlassCard key={item.l} delay={0.05+i*0.05} className="!rounded-[20px] !p-[18px]">
             <p className="text-[12px] text-muted-foreground mb-1.5 uppercase tracking-wider font-medium">{item.l}</p>
-            <p className={`text-2xl font-bold tabular-nums ${item.l==="Total P&L"?(item.v>=0?"text-gain":"text-loss"):""}`}>
+            <p className={`font-mono tabular-nums text-[20px] font-bold ${item.l==="Total P&L"?(item.v>=0?"text-gain":"text-loss"):""}`}>
               <AnimatedNumber value={item.v} format={item.fmt}/>
             </p>
             {item.pct!==undefined&&<p className={`text-[12px] tabular-nums mt-0.5 ${item.pct>=0?"text-gain":"text-loss"}`}>{item.pct>=0?"+":""}{item.pct.toFixed(2)}%</p>}
@@ -401,7 +401,7 @@ export default function PortfolioPage(){
 
         {/* Holdings */}
         <GlassCard delay={0.25} className="md:col-span-1 lg:col-span-2 !p-4">
-          <p className="text-[13px] font-medium text-muted-foreground mb-3">Holdings</p>
+          <p className="text-[14px] font-semibold text-muted-foreground mb-3">Holdings</p>
           <div className="space-y-1 max-h-[420px] overflow-y-auto pr-1" style={{scrollbarGutter:"stable"}}>
             {(p?.positions??[]).map(pos=>{
               const live=livePrices[pos.symbol];
@@ -412,22 +412,22 @@ export default function PortfolioPage(){
               const flash=flashes[pos.symbol];
               return(
               editingId===pos.id?(
-                <div key={pos.id} className="flex items-center gap-2 p-3 rounded-2xl bg-accent flex-wrap"><span className="font-bold text-sm w-14">{pos.symbol}</span><Input value={editForm.quantity} onChange={e=>setEditForm({...editForm,quantity:e.target.value})} className="h-8 w-16 text-sm rounded-xl" placeholder="Qty"/><Input value={editForm.avg_cost_price} onChange={e=>setEditForm({...editForm,avg_cost_price:e.target.value})} className="h-8 w-20 text-sm rounded-xl" placeholder="Price"/><button onClick={()=>handleUpdate(pos.id)} className="cursor-pointer"><Check className="h-4 w-4 text-gain"/></button><button onClick={()=>setEditingId(null)} className="cursor-pointer"><X className="h-4 w-4 text-muted-foreground"/></button></div>
+                <div key={pos.id} className="flex items-center gap-2 p-3 rounded-[14px] bg-accent flex-wrap"><span className="font-bold text-sm w-14">{pos.symbol}</span><Input value={editForm.quantity} onChange={e=>setEditForm({...editForm,quantity:e.target.value})} className="h-8 w-16 text-sm rounded-[14px]" placeholder="Qty"/><Input value={editForm.avg_cost_price} onChange={e=>setEditForm({...editForm,avg_cost_price:e.target.value})} className="h-8 w-20 text-sm rounded-[14px]" placeholder="Price"/><button onClick={()=>handleUpdate(pos.id)} className="cursor-pointer"><Check className="h-4 w-4 text-gain"/></button><button onClick={()=>setEditingId(null)} className="cursor-pointer"><X className="h-4 w-4 text-muted-foreground"/></button></div>
               ):(
-                <div key={pos.id} className={`flex items-center justify-between px-3 py-3 pr-4 rounded-2xl cursor-pointer transition-all duration-200 group hover:bg-accent ${chartTicker===pos.symbol?"bg-accent":""} ${flash==="up"?"flash-up":flash==="down"?"flash-down":""}`} onClick={()=>openChart(pos.symbol)}>
+                <div key={pos.id} className={`flex items-center justify-between px-3.5 py-3 pr-4 rounded-[14px] cursor-pointer transition-all duration-200 group hover:bg-accent ${chartTicker===pos.symbol?"bg-accent":""} ${flash==="up"?"flash-up":flash==="down"?"flash-down":""}`} onClick={()=>openChart(pos.symbol)}>
                   <div className="min-w-[70px] shrink-0">
-                    <p className="font-semibold text-[15px]">{pos.symbol}</p>
+                    <p className="font-bold text-[14px]">{pos.symbol}</p>
                     <p className="text-[11px] text-muted-foreground truncate max-w-[80px]">{pos.name}</p>
                   </div>
                   <div className="hidden lg:block shrink-0"><SparklineChart data={pos.sparkline||[]} color={livePnlPct>=0?"#3b82f6":"#ff3b30"} width={90} height={36}/></div>
                   <div className="text-right shrink-0">
-                    <p className="text-[14px] font-medium tabular-nums">{livePrice.toFixed(2)}<span className="text-[10px] text-muted-foreground ml-1">{pos.currency}</span></p>
-                    <p className="text-[11px] text-muted-foreground tabular-nums">cost {pos.avg_cost_price.toFixed(2)}</p>
+                    <p className="font-mono tabular-nums text-[13px] font-semibold">{livePrice.toFixed(2)}<span className="text-[11px] text-muted-foreground ml-1">{pos.currency}</span></p>
+                    <p className="font-mono tabular-nums text-[11px] text-muted-foreground">cost {pos.avg_cost_price.toFixed(2)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="text-right hidden sm:block">
-                      <p className="text-[15px] font-semibold tabular-nums">{formatCurrency(pos.market_value)}</p>
-                      <p className={`text-[13px] font-semibold tabular-nums ${livePnlPct>=0?"text-gain":"text-loss"}`}>{livePnlPct>=0?"+":""}{livePnlPct.toFixed(1)}%</p>
+                      <p className="font-mono tabular-nums text-[13px] font-semibold">{formatCurrency(pos.market_value)}</p>
+                      <p className={`font-mono tabular-nums text-[11px] font-semibold ${livePnlPct>=0?"text-gain":"text-loss"}`}>{livePnlPct>=0?"+":""}{livePnlPct.toFixed(1)}%</p>
                       <p className={`text-[11px] tabular-nums ${pos.unrealized_pnl>=0?"text-gain":"text-loss"}`}>{pos.unrealized_pnl>=0?"+":""}{formatCurrency(pos.unrealized_pnl)}</p>
                       {pos.first_bought&&<p className="text-[10px] text-muted-foreground mt-0.5">since {new Date(pos.first_bought).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</p>}
                     </div>
@@ -457,7 +457,7 @@ export default function PortfolioPage(){
                 const lp=live?.price??pos.last_price??0;
                 const lc=live?.change??pos.change;
                 const lcp=live?.change_pct??pos.change_pct;
-                return <div className="flex items-center justify-center gap-3 mb-3"><span className="text-2xl font-bold tabular-nums">{lp.toFixed(2)}</span><span className={`text-sm font-medium ${lc>=0?"text-gain":"text-loss"}`}>{lc>=0?"+":""}{lc.toFixed(2)} ({lcp>=0?"+":""}{lcp.toFixed(1)}%)</span></div>;
+                return <div className="flex items-center justify-center gap-3 mb-3"><span className="font-mono tabular-nums text-[20px] font-bold">{lp.toFixed(2)}</span><span className={`text-[13px] font-semibold ${lc>=0?"text-gain":"text-loss"}`}>{lc>=0?"+":""}{lc.toFixed(2)} ({lcp>=0?"+":""}{lcp.toFixed(1)}%)</span></div>;
               })()}
               <div className="flex justify-center mb-2"><RangeSwitcher ranges={RANGES.map(r=>r.label)} active={RANGES.find(r=>r.value===chartRange)?.label||"1Y"} onChange={lbl=>{const r=RANGES.find(x=>x.label===lbl);if(r)setChartRange(r.value);}}/></div>
               <div className="h-52">{chartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:chartData.length===0?<p className="text-sm text-muted-foreground">No data</p>:(

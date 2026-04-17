@@ -109,7 +109,7 @@ export default function SettingsPage() {
             <User className="h-7 w-7 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-base font-bold">Demo User</p>
+            <p className="text-[16px] font-bold">Demo User</p>
             <p className="text-[13px] text-muted-foreground truncate">
               {settings["gmail_address"] || "user@example.com"} · FinPilot
             </p>
@@ -135,7 +135,7 @@ export default function SettingsPage() {
               <Key className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <h2 className="text-base font-semibold">API Key</h2>
+              <h2 className="text-[16px] font-semibold">API Key</h2>
               <p className="text-[12px] text-muted-foreground">For your AI agent — use as header: X-API-Key</p>
             </div>
           </div>
@@ -169,7 +169,7 @@ export default function SettingsPage() {
               <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
                 <Icon className="h-5 w-5 text-muted-foreground" />
               </div>
-              <h2 className="text-base font-semibold">{group.label}</h2>
+              <h2 className="text-[16px] font-semibold">{group.label}</h2>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

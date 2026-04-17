@@ -70,8 +70,8 @@ function MetricCard({
             )}
           </div>
         </div>
-        <p className="text-sm font-medium text-muted-foreground mb-1">{label}</p>
-        <p className="text-2xl font-bold tracking-tight tabular-nums">{value}</p>
+        <p className="text-[12px] font-medium text-muted-foreground mb-1">{label}</p>
+        <p className="font-mono tabular-nums text-[28px] font-bold" style={{letterSpacing: '-0.8px'}}>{value}</p>
         {sub && <div className="mt-2">{sub}</div>}
       </div>
     </GlassCard>
@@ -187,10 +187,10 @@ export default function OverviewPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <h2 className="text-xl font-semibold tracking-tight">
+        <h2 className="text-[28px] font-bold" style={{letterSpacing: '-0.6px'}}>
           Good {greeting}, {data.display_name}
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
+        <p className="text-muted-foreground mt-1 text-[14px]">
           Here&apos;s how your finances are looking today.
         </p>
       </motion.div>
@@ -239,7 +239,7 @@ export default function OverviewPage() {
           delay={0.15}
           live
           sub={
-            <p className={`text-sm font-semibold flex items-center gap-1 ${liveUp ? "text-gain" : "text-loss"}`}>
+            <p className={`text-[13px] font-semibold flex items-center gap-1 ${liveUp ? "text-gain" : "text-loss"}`}>
               {liveUp ? (
                 <ArrowUpRight className="h-4 w-4" />
               ) : (
@@ -295,13 +295,13 @@ export default function OverviewPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Credit Card</p>
-              <p className={`text-2xl font-bold tabular-nums ${ccTotal < 0 ? "text-loss" : "text-gain"}`}>
+              <p className={`font-mono tabular-nums text-[28px] font-bold ${ccTotal < 0 ? "text-loss" : "text-gain"}`} style={{letterSpacing: '-0.8px'}}>
                 {formatCurrency(Math.abs(ccTotal))}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               {ccTotal < 0 ? "Outstanding balance" : "No balance"}
             </p>
             <button
@@ -321,7 +321,7 @@ export default function OverviewPage() {
       <div className="grid gap-5 lg:grid-cols-2">
         {/* Recent Transactions */}
         <GlassCard delay={0.25}>
-          <h2 className="text-base font-semibold mb-5">Recent Transactions</h2>
+          <h2 className="text-[16px] font-semibold mb-5">Recent Transactions</h2>
           {data.recent_transactions.length === 0 ? (
             <div className="text-center py-12">
               <Banknote
@@ -355,7 +355,7 @@ export default function OverviewPage() {
                       {t.merchant.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-[14px] font-medium leading-snug">{t.merchant}</p>
+                      <p className="text-[14px] font-medium leading-snug font-sans">{t.merchant}</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-[12px] text-muted-foreground">{t.date}</span>
                         {t.category_name && (
@@ -365,7 +365,7 @@ export default function OverviewPage() {
                     </div>
                   </div>
                   <p
-                    className={`text-[14px] font-semibold tabular-nums ${
+                    className={`font-mono tabular-nums text-[14px] font-semibold ${
                       t.amount < 0 ? "text-loss" : "text-gain"
                     }`}
                   >
@@ -379,7 +379,7 @@ export default function OverviewPage() {
 
         {/* Budget Health */}
         <GlassCard delay={0.3}>
-          <h2 className="text-base font-semibold mb-5">Budget Health</h2>
+          <h2 className="text-[16px] font-semibold mb-5">Budget Health</h2>
           {data.budget_health.length === 0 ? (
             <div className="text-center py-12">
               <TrendingUp
@@ -402,8 +402,8 @@ export default function OverviewPage() {
                     transition={{ delay: 0.35 + i * 0.05 }}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[14px] font-medium">{b.name}</span>
-                      <span className="text-[12px] text-muted-foreground tabular-nums">
+                      <span className="text-[12px] font-medium">{b.name}</span>
+                      <span className="font-mono tabular-nums text-[12px] text-muted-foreground">
                         {formatCurrency(b.spent)} / {formatCurrency(b.amount)}
                       </span>
                     </div>

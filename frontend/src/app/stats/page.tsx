@@ -44,7 +44,7 @@ function Change({ value, pct, expense = false }: { value: number; pct: number; e
   const up = value > 0;
   const good = expense ? !up : up;
   return (
-    <span className={`text-[12px] flex items-center gap-1 font-semibold ${good ? "text-gain" : "text-loss"}`}>
+    <span className={`text-[13px] flex items-center gap-1 font-semibold ${good ? "text-gain" : "text-loss"}`}>
       {up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
       {formatCurrency(Math.abs(value))} ({formatPct(pct)})
     </span>
@@ -205,7 +205,7 @@ export default function StatsPage() {
       {loading ? (
         <div className="grid gap-5 md:grid-cols-4">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-[120px] rounded-[20px] bg-muted animate-pulse" />
+            <div key={i} className="h-[120px] rounded-[24px] bg-muted animate-pulse" />
           ))}
         </div>
       ) : tab === "monthly" && monthly ? (
@@ -217,7 +217,7 @@ export default function StatsPage() {
       ) : tab === "yearly" && yearly ? (
         <YearlyView yearly={yearly} />
       ) : (
-        <div className="h-64 rounded-[20px] bg-muted animate-pulse" />
+        <div className="h-64 rounded-[24px] bg-muted animate-pulse" />
       )}
     </div>
   );
@@ -264,7 +264,7 @@ function MonthlyView({
               </div>
             </div>
             <p className="text-[12px] text-muted-foreground font-medium mb-1 relative z-10">{k.l}</p>
-            <p className={`text-[26px] font-bold tracking-tight leading-none mb-2 relative z-10 ${k.color}`}>{k.v}</p>
+            <p className={`font-mono tabular-nums text-[28px] font-bold leading-none mb-2 relative z-10 ${k.color}`} style={{letterSpacing: '-0.8px'}}>{k.v}</p>
             <div className="relative z-10">
               {("cmp" in k) && k.cmp && (
                 <Change value={(k.cmp as { change: number; change_pct: number }).change} pct={(k.cmp as { change: number; change_pct: number }).change_pct} expense={k.expense} />
@@ -533,7 +533,7 @@ function YearlyView({ yearly }: { yearly: YearlyStats }) {
               </div>
             </div>
             <p className="text-[12px] text-muted-foreground font-medium mb-1 relative z-10">{k.l}</p>
-            <p className={`text-[26px] font-bold tracking-tight leading-none relative z-10 ${k.color}`}>{k.v}</p>
+            <p className={`font-mono tabular-nums text-[28px] font-bold leading-none relative z-10 ${k.color}`} style={{letterSpacing: '-0.8px'}}>{k.v}</p>
           </GlassCard>
         ))}
       </div>

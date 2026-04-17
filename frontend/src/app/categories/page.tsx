@@ -82,7 +82,7 @@ export default function CategoriesPage() {
       {/* Tabs */}
       <div className="flex gap-2">
         {(["categories", "rules"] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`px-5 py-2.5 rounded-xl text-[15px] font-medium transition-all cursor-pointer capitalize flex items-center gap-2 ${tab === t ? "bg-primary text-primary-foreground" : "glass bg-card text-muted-foreground hover:text-foreground"}`}>
+          <button key={t} onClick={() => setTab(t)} className={`px-5 py-2.5 rounded-[14px] text-[14px] font-medium transition-all cursor-pointer capitalize flex items-center gap-2 ${tab === t ? "bg-primary text-primary-foreground" : "glass bg-card text-muted-foreground hover:text-foreground"}`}>
             {t === "categories" ? <Tag className="h-4 w-4" /> : <Store className="h-4 w-4" />}
             {t} ({t === "categories" ? categories.length : merchants.length})
           </button>
@@ -93,7 +93,7 @@ export default function CategoriesPage() {
         <>
           {/* Add Category */}
           <GlassCard delay={0.05}>
-            <h2 className="text-lg font-semibold mb-4">Add Category</h2>
+            <h2 className="text-[16px] font-semibold mb-4">Add Category</h2>
             <div className="flex items-end gap-3 flex-wrap">
               <div className="flex-1 min-w-[150px]">
                 <label className="text-[13px] text-muted-foreground block mb-1.5">Name</label>
@@ -118,7 +118,7 @@ export default function CategoriesPage() {
 
           {/* Hierarchy */}
           <GlassCard delay={0.1}>
-            <h2 className="text-lg font-semibold mb-4">Category Hierarchy</h2>
+            <h2 className="text-[16px] font-semibold mb-4">Category Hierarchy</h2>
             {loading ? (
               <p className="text-sm text-muted-foreground py-4">Loading…</p>
             ) : categories.length === 0 ? (
@@ -163,7 +163,7 @@ export default function CategoriesPage() {
         <>
           {/* Add Merchant Rule */}
           <GlassCard delay={0.05}>
-            <h2 className="text-lg font-semibold mb-2">Add Merchant Rule</h2>
+            <h2 className="text-[16px] font-semibold mb-2">Add Merchant Rule</h2>
             <p className="text-[13px] text-muted-foreground mb-4">When a transaction description contains any pattern, it auto-categorizes.</p>
             <div className="flex items-end gap-3 flex-wrap">
               <div className="flex-1 min-w-[120px]">
@@ -188,7 +188,7 @@ export default function CategoriesPage() {
           {/* Rules list */}
           <GlassCard delay={0.1}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">All Rules</h2>
+              <h2 className="text-[16px] font-semibold">All Rules</h2>
               <div className="relative w-64">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input placeholder="Search rules..." value={merchantSearch} onChange={e => setMerchantSearch(e.target.value)} className="pl-9 rounded-xl h-10" />
