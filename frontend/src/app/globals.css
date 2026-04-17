@@ -252,3 +252,11 @@ body::before {
 /* Utility keyframes */
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.1); } }
+
+/* Highlight pulse — yellow glow 2s for ?highlight=txnId */
+@keyframes highlight-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
+  25% { box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.35); }
+  75% { box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.15); }
+}
+.animate-highlight-pulse { animation: highlight-pulse 2s ease-out 1; }
