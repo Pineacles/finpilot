@@ -8,27 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar } from "recharts";
 import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, Activity, BookOpen, Target } from "lucide-react";
+import { GlassCard } from "@/components/glass-card";
+import { AnimatedNumber } from "@/components/animated-number";
+import { LivePill } from "@/components/live-pill";
+import { Sparkline as SparklineChart } from "@/components/sparkline";
+import { RangeSwitcher } from "@/components/range-switcher";
+import { ActionBadge } from "@/components/action-badge";
+import { ConvictionDots } from "@/components/conviction-dots";
 
 const COLORS = ["#3b82f6","#f97316","#ef4444","#a855f7","#14b8a6","#f59e0b","#ec4899","#22c55e","#06b6d4","#8b5cf6","#e11d48","#84cc16","#6366f1","#d946ef","#0ea5e9","#fb923c"];
 const RANGES = [{value:"1d",label:"1D"},{value:"5d",label:"1W"},{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
+const TIMELINE_RANGES = ["1W","1M","3M","6M","1Y","ALL"] as const;
 
-function GlassCard({children,className="",delay=0}:{children:React.ReactNode;className?:string;delay?:number}){
-  return <motion.div initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{duration:0.45,delay,ease:[0.25,0.46,0.45,0.94]}} className={`glass bg-card rounded-3xl p-6 ${className}`}>{children}</motion.div>;
-}
-function Sparkline({data,positive}:{data:number[];positive:boolean}){
-  if(!data||data.length<2)return null;
-  const min=Math.min(...data),max=Math.max(...data),range=max-min||1,h=36,w=90;
-  const points=data.map((v,i)=>`${(i/(data.length-1))*w},${h-((v-min)/range)*h}`).join(" ");
-  return <svg width={w} height={h} className="shrink-0"><polyline fill="none" stroke={positive?"#3b82f6":"#ff3b30"} strokeWidth="2" points={points}/></svg>;
-}
 function PnlBadge({value,pct}:{value:number;pct?:number}){
   const pos=value>=0;
   return <span className={`text-[13px] px-2.5 py-1 rounded-xl font-medium inline-flex items-center gap-1 ${pos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{pos?"+":""}{formatCurrency(value)}{pct!==undefined&&<span className="opacity-70">({pos?"+":""}{pct.toFixed(1)}%)</span>}</span>;
-}
-function ActionBadge({action,size="md"}:{action:string;size?:"sm"|"md"}){
-  const cls=action==="ADD"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":action==="SELL"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400";
-  const px=size==="sm"?"px-2 py-0.5 text-[11px]":"px-3 py-1 text-[13px]";
-  return <span className={`${px} rounded-xl font-semibold ${cls}`}>{action}</span>;
 }
 function SentimentBadge({sentiment,size="md"}:{sentiment:string;size?:"sm"|"md"}){
   const cls=sentiment==="bullish"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":sentiment==="bearish"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400";
@@ -82,32 +76,6 @@ function EconomyDetail({c}:{c:PortfolioAnalysis["content"]}){
       )}
     </div>
   );
-}
-
-function AnimatedNumber({value,format}:{value:number;format:(n:number)=>string}){
-  const [display,setDisplay]=useState(value);
-  const startRef=useRef(value);
-  const startTimeRef=useRef(0);
-  const rafRef=useRef<number|undefined>(undefined);
-  useEffect(()=>{
-    if(value===display)return;
-    startRef.current=display;
-    startTimeRef.current=performance.now();
-    const target=value;
-    const start=display;
-    const duration=600;
-    const tick=(now:number)=>{
-      const elapsed=now-startTimeRef.current;
-      const t=Math.min(elapsed/duration,1);
-      const eased=1-Math.pow(1-t,3);
-      setDisplay(start+(target-start)*eased);
-      if(t<1)rafRef.current=requestAnimationFrame(tick);
-    };
-    rafRef.current=requestAnimationFrame(tick);
-    return()=>{if(rafRef.current)cancelAnimationFrame(rafRef.current);};
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[value]);
-  return <>{format(display)}</>;
 }
 
 function useScrollableDeck<T extends HTMLElement>(){
@@ -251,6 +219,7 @@ export default function PortfolioPage(){
   const [expandedBAId,setExpandedBAId]=useState<string|null>(null);
   const [deletingPMId,setDeletingPMId]=useState<string|null>(null);
   const [deletingBAId,setDeletingBAId]=useState<string|null>(null);
+  const [journalTab,setJournalTab]=useState<"pm"|"ba">("ba");
 
   const load=useCallback(()=>{
     setLoading(true);
@@ -370,20 +339,12 @@ export default function PortfolioPage(){
       {/* Header */}
       <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-primary mb-1">Portfolio</p>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Investments & Holdings</h1>
-          <div className="flex items-center gap-2 mt-2">
-            <p className="text-[13px] text-muted-foreground uppercase tracking-wider">Total Value</p>
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold tracking-wider">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-              </span>
-              LIVE
-            </span>
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Total Value</p>
+            <LivePill/>
           </div>
-          <p className="text-3xl sm:text-4xl font-bold tracking-tight mt-1 tabular-nums"><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
-          <div className="flex items-center gap-3 mt-2"><PnlBadge value={liveTotals.pnl} pct={liveTotals.pnlPct}/><span className="text-[13px] text-muted-foreground">all time</span></div>
+          <p className="text-4xl font-bold tracking-tight tabular-nums"><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
+          <div className="flex items-center gap-3 mt-2"><PnlBadge value={liveTotals.pnl} pct={liveTotals.pnlPct}/><span className="text-[13px] text-muted-foreground">all-time P&L</span></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Public toggle */}
@@ -410,17 +371,20 @@ export default function PortfolioPage(){
         </div>
       </motion.div>
 
-      {/* Summary */}
-      <div className="grid gap-5 grid-cols-2 lg:grid-cols-4">
+      {/* KPI Row */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {[
-          {l:"Invested",v:formatCurrency(p?.total_cost??0),live:false},
-          {l:"Cash",v:formatCurrency(p?.cash_balance??0),live:false},
-          {l:"Positions",v:String(p?.positions_count??0),live:false},
-          {l:"Total",v:liveTotals.value+(p?.cash_balance??0),live:true},
+          {l:"Invested",v:p?.total_cost??0,fmt:formatCurrency,pct:undefined as number|undefined},
+          {l:"Cash",v:p?.cash_balance??0,fmt:formatCurrency,pct:undefined},
+          {l:"Positions",v:p?.positions_count??0,fmt:(n:number)=>String(Math.round(n)),pct:undefined},
+          {l:"Total P&L",v:liveTotals.pnl,fmt:formatCurrency,pct:liveTotals.pnlPct},
         ].map((item,i)=>(
-          <GlassCard key={item.l} delay={0.05+i*0.05}>
-            <p className="text-[13px] text-muted-foreground mb-1">{item.l}</p>
-            <p className="text-2xl font-semibold tabular-nums">{item.live?<AnimatedNumber value={item.v as number} format={formatCurrency}/>:(item.v as string)}</p>
+          <GlassCard key={item.l} delay={0.05+i*0.05} className="!p-5">
+            <p className="text-[12px] text-muted-foreground mb-1.5 uppercase tracking-wider font-medium">{item.l}</p>
+            <p className={`text-2xl font-bold tabular-nums ${item.l==="Total P&L"?(item.v>=0?"text-gain":"text-loss"):""}`}>
+              <AnimatedNumber value={item.v} format={item.fmt}/>
+            </p>
+            {item.pct!==undefined&&<p className={`text-[12px] tabular-nums mt-0.5 ${item.pct>=0?"text-gain":"text-loss"}`}>{item.pct>=0?"+":""}{item.pct.toFixed(2)}%</p>}
           </GlassCard>
         ))}
       </div>
@@ -455,7 +419,7 @@ export default function PortfolioPage(){
                     <p className="font-semibold text-[15px]">{pos.symbol}</p>
                     <p className="text-[11px] text-muted-foreground truncate max-w-[80px]">{pos.name}</p>
                   </div>
-                  <div className="hidden lg:block shrink-0"><Sparkline data={pos.sparkline} positive={livePnlPct>=0}/></div>
+                  <div className="hidden lg:block shrink-0"><SparklineChart data={pos.sparkline||[]} color={livePnlPct>=0?"#3b82f6":"#ff3b30"} width={90} height={36}/></div>
                   <div className="text-right shrink-0">
                     <p className="text-[14px] font-medium tabular-nums">{livePrice.toFixed(2)}<span className="text-[10px] text-muted-foreground ml-1">{pos.currency}</span></p>
                     <p className="text-[11px] text-muted-foreground tabular-nums">cost {pos.avg_cost_price.toFixed(2)}</p>
@@ -495,7 +459,7 @@ export default function PortfolioPage(){
                 const lcp=live?.change_pct??pos.change_pct;
                 return <div className="flex items-center justify-center gap-3 mb-3"><span className="text-2xl font-bold tabular-nums">{lp.toFixed(2)}</span><span className={`text-sm font-medium ${lc>=0?"text-gain":"text-loss"}`}>{lc>=0?"+":""}{lc.toFixed(2)} ({lcp>=0?"+":""}{lcp.toFixed(1)}%)</span></div>;
               })()}
-              <div className="flex justify-center gap-1 mb-2">{RANGES.map(r=><button key={r.value} onClick={()=>setChartRange(r.value)} className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${chartRange===r.value?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}>{r.label}</button>)}</div>
+              <div className="flex justify-center mb-2"><RangeSwitcher ranges={RANGES.map(r=>r.label)} active={RANGES.find(r=>r.value===chartRange)?.label||"1Y"} onChange={lbl=>{const r=RANGES.find(x=>x.label===lbl);if(r)setChartRange(r.value);}}/></div>
               <div className="h-52">{chartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:chartData.length===0?<p className="text-sm text-muted-foreground">No data</p>:(
                 <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData} margin={{top:5,right:10,left:10,bottom:5}}><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis hide domain={["auto","auto"]}/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg)"/></AreaChart></ResponsiveContainer>
               )}</div>
@@ -560,7 +524,7 @@ export default function PortfolioPage(){
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         {isOpen?<ChevronDown className="h-4 w-4 text-muted-foreground shrink-0"/>:<ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/>}
                         <span className="text-[15px] font-bold">{s.symbol}</span>
-                        <ActionBadge action={s.action} size="sm"/>
+                        <ActionBadge action={s.action} className="text-[10px] px-2 py-0.5"/>
                         <span className={`text-[12px] font-semibold tabular-nums ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
                       </div>
                       <span className="text-[11px] text-muted-foreground shrink-0">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</span>
@@ -598,7 +562,7 @@ export default function PortfolioPage(){
                       <button onClick={()=>setExpandedOlderId(isOpen?null:entry.analysis_id)} className="w-full flex items-center justify-between gap-3 p-3 hover:bg-accent/50 cursor-pointer text-left">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           {isOpen?<ChevronDown className="h-4 w-4 text-muted-foreground shrink-0"/>:<ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/>}
-                          <ActionBadge action={s.action} size="sm"/>
+                          <ActionBadge action={s.action} className="text-[10px] px-2 py-0.5"/>
                           <span className={`text-[13px] font-semibold tabular-nums ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
                           <span className="text-[12px] text-muted-foreground truncate">{s.rationale.split(".")[0]}</span>
                         </div>
@@ -695,14 +659,8 @@ export default function PortfolioPage(){
             </div>
           </div>
           <GlassCard delay={0.42} className="!p-4">
-            <div className="flex items-center justify-center gap-1 mb-3">
-              {(["1W","1M","3M","6M","1Y","ALL"] as const).map(r=>(
-                <button
-                  key={r}
-                  onClick={()=>setTimelineRange(r)}
-                  className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${timelineRange===r?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-accent"}`}
-                >{r}</button>
-              ))}
+            <div className="flex justify-center mb-3">
+              <RangeSwitcher ranges={[...TIMELINE_RANGES]} active={timelineRange} onChange={r=>setTimelineRange(r as typeof timelineRange)}/>
             </div>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -759,109 +717,119 @@ export default function PortfolioPage(){
         </div>);
       })()}
 
-      {/* Buy Assessments */}
-      <div>
-        <div className="flex items-center gap-3 mb-5">
-          <div className="h-10 w-10 rounded-2xl bg-emerald-100 dark:bg-emerald-500/15 flex items-center justify-center"><Target className="h-5 w-5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.8}/></div>
-          <h2 className="text-lg font-semibold">Buy Assessments</h2>
-          <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{buyAssessments.length}</span>
-          <button onClick={()=>{setEditingBA(null);setBAForm({symbol:"",recommendation:"buy",target_price:"",stop_loss:"",thesis:"",risk_factors:"",conviction:"3",time_horizon:""});setBAError("");setShowBAModal(true);}} className="ml-auto p-2 rounded-xl bg-accent hover:bg-accent/80 transition-colors cursor-pointer"><Plus className="h-4 w-4"/></button>
-        </div>
-        {buyAssessments.length===0?(
-          <GlassCard delay={0.43}><p className="text-muted-foreground py-6 text-center text-[14px]">No buy assessments yet — the agent will write these for you.</p></GlassCard>
-        ):(
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {buyAssessments.map(ba=>{
-              const recColor=ba.recommendation==="buy"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":ba.recommendation==="hold"?"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400":ba.recommendation==="watch"?"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400";
-              const isExpanded=expandedBAId===ba.id;
-              return(
-                <GlassCard key={ba.id} delay={0} className="relative group !p-4 flex flex-col gap-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-lg font-bold">{ba.symbol}</span>
-                      <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold capitalize ${recColor}`}>{ba.recommendation}</span>
-                      {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground capitalize">{ba.time_horizon}</span>}
-                    </div>
-                    <div className="hidden group-hover:flex items-center gap-1 shrink-0">
-                      <button onClick={()=>{setEditingBA(ba);setBAForm({symbol:ba.symbol,recommendation:ba.recommendation,target_price:ba.target_price?.toString()||"",stop_loss:ba.stop_loss?.toString()||"",thesis:ba.thesis,risk_factors:ba.risk_factors||"",conviction:String(ba.conviction),time_horizon:ba.time_horizon||""});setBAError("");setShowBAModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                      {deletingBAId===ba.id?(
-                        <button onClick={async()=>{await api.deleteBuyAssessment(ba.id);setBuyAssessments(p=>p.filter(x=>x.id!==ba.id));setDeletingBAId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
-                      ):(
-                        <button onClick={()=>setDeletingBAId(ba.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                      )}
-                    </div>
-                  </div>
-                  {(ba.target_price||ba.stop_loss)&&(
-                    <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
-                      {ba.target_price&&<span>Target: <span className="text-foreground font-medium">{ba.target_price.toFixed(2)}</span></span>}
-                      {ba.stop_loss&&<span>Stop: <span className="text-foreground font-medium">{ba.stop_loss.toFixed(2)}</span></span>}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1">
-                    {[1,2,3,4,5].map(d=><div key={d} className={`h-2 w-2 rounded-full ${d<=ba.conviction?"bg-primary":"bg-border"}`}/>)}
-                    <span className="text-[11px] text-muted-foreground ml-1">conviction</span>
-                  </div>
-                  <div>
-                    <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-3"}`}>{ba.thesis}</p>
-                    {ba.thesis.length>120&&<button onClick={()=>setExpandedBAId(isExpanded?null:ba.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-auto">{new Date(ba.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
-                </GlassCard>
-              );
-            })}
+      {/* Trade Journal — tabbed Buy Assessments + Post-Mortems */}
+      <GlassCard delay={0.43}>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-5">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center"><BookOpen className="h-5 w-5 text-violet-600 dark:text-violet-400" strokeWidth={1.8}/></div>
+            <h2 className="text-lg font-semibold">Trade Journal</h2>
           </div>
-        )}
-      </div>
+          {/* Tab switcher */}
+          <div className="flex items-center gap-1 p-1 bg-accent rounded-xl">
+            <button onClick={()=>setJournalTab("ba")} className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${journalTab==="ba"?"bg-background shadow-sm text-foreground":"text-muted-foreground hover:text-foreground"}`}><Target className="h-3.5 w-3.5"/>Buy Assessments <span className="text-[11px] opacity-70">{buyAssessments.length}</span></button>
+            <button onClick={()=>setJournalTab("pm")} className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${journalTab==="pm"?"bg-background shadow-sm text-foreground":"text-muted-foreground hover:text-foreground"}`}><Activity className="h-3.5 w-3.5"/>Post-Mortems <span className="text-[11px] opacity-70">{postMortems.length}</span></button>
+          </div>
+          <button
+            onClick={()=>{
+              if(journalTab==="ba"){setEditingBA(null);setBAForm({symbol:"",recommendation:"buy",target_price:"",stop_loss:"",thesis:"",risk_factors:"",conviction:"3",time_horizon:""});setBAError("");setShowBAModal(true);}
+              else{setEditingPM(null);setPMForm({symbol:"",entry_price:"",exit_price:"",notes:""});setPMError("");setShowPMModal(true);}
+            }}
+            className="sm:ml-auto p-2 rounded-xl bg-accent hover:bg-accent/80 transition-colors cursor-pointer"
+          ><Plus className="h-4 w-4"/></button>
+        </div>
 
-      {/* Post-Mortems */}
-      <div>
-        <div className="flex items-center gap-3 mb-5">
-          <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center"><BookOpen className="h-5 w-5 text-rose-600 dark:text-rose-400" strokeWidth={1.8}/></div>
-          <h2 className="text-lg font-semibold">Post-Mortems</h2>
-          <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{postMortems.length}</span>
-          <button onClick={()=>{setEditingPM(null);setPMForm({symbol:"",entry_price:"",exit_price:"",notes:""});setPMError("");setShowPMModal(true);}} className="ml-auto p-2 rounded-xl bg-accent hover:bg-accent/80 transition-colors cursor-pointer"><Plus className="h-4 w-4"/></button>
-        </div>
-        {postMortems.length===0?(
-          <GlassCard delay={0.44}><p className="text-muted-foreground py-6 text-center text-[14px]">No post-mortems yet — the agent writes these when a position is closed.</p></GlassCard>
-        ):(
-          <div className="space-y-3">
-            {postMortems.map(pm=>{
-              const isPos=pm.pnl_pct>=0;
-              const isExpanded=expandedPMId===pm.id;
-              return(
-                <GlassCard key={pm.id} delay={0} className="relative group !p-4 flex flex-col gap-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[15px] font-bold">{pm.symbol}</span>
-                      <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold ${isPos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{isPos?"+":""}{pm.pnl_pct.toFixed(2)}%</span>
+        {/* Buy Assessments tab */}
+        {journalTab==="ba"&&(
+          buyAssessments.length===0?(
+            <p className="text-muted-foreground py-6 text-center text-[14px]">No buy assessments yet — the agent will write these for you.</p>
+          ):(
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {buyAssessments.map(ba=>{
+                const recColor=ba.recommendation==="buy"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":ba.recommendation==="hold"?"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400":ba.recommendation==="watch"?"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400";
+                const isExpanded=expandedBAId===ba.id;
+                return(
+                  <div key={ba.id} className="glass bg-accent/40 rounded-2xl p-4 flex flex-col gap-3 group relative">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-lg font-bold">{ba.symbol}</span>
+                        <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold capitalize ${recColor}`}>{ba.recommendation}</span>
+                        {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground capitalize">{ba.time_horizon}</span>}
+                      </div>
+                      <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+                        <button onClick={()=>{setEditingBA(ba);setBAForm({symbol:ba.symbol,recommendation:ba.recommendation,target_price:ba.target_price?.toString()||"",stop_loss:ba.stop_loss?.toString()||"",thesis:ba.thesis,risk_factors:ba.risk_factors||"",conviction:String(ba.conviction),time_horizon:ba.time_horizon||""});setBAError("");setShowBAModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                        {deletingBAId===ba.id?(
+                          <button onClick={async()=>{await api.deleteBuyAssessment(ba.id);setBuyAssessments(p=>p.filter(x=>x.id!==ba.id));setDeletingBAId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
+                        ):(
+                          <button onClick={()=>setDeletingBAId(ba.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                        )}
+                      </div>
                     </div>
-                    <div className="hidden group-hover:flex items-center gap-1 shrink-0">
-                      <button onClick={()=>{setEditingPM(pm);setPMForm({symbol:pm.symbol,entry_price:String(pm.entry_price),exit_price:String(pm.exit_price),notes:pm.notes||""});setPMError("");setShowPMModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                      {deletingPMId===pm.id?(
-                        <button onClick={async()=>{await api.deletePostMortem(pm.id);setPostMortems(p=>p.filter(x=>x.id!==pm.id));setDeletingPMId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
-                      ):(
-                        <button onClick={()=>setDeletingPMId(pm.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                      )}
+                    {(ba.target_price||ba.stop_loss)&&(
+                      <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
+                        {ba.target_price&&<span>Target: <span className="text-foreground font-medium">{ba.target_price.toFixed(2)}</span></span>}
+                        {ba.stop_loss&&<span>Stop: <span className="text-foreground font-medium">{ba.stop_loss.toFixed(2)}</span></span>}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5">
+                      <ConvictionDots level={ba.conviction}/>
+                      <span className="text-[11px] text-muted-foreground">conviction</span>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-                    <span>Entry: <span className="text-foreground font-medium">{pm.entry_price.toFixed(2)}</span></span>
-                    <ArrowUpRight className="h-3.5 w-3.5"/>
-                    <span>Exit: <span className="text-foreground font-medium">{pm.exit_price.toFixed(2)}</span></span>
-                  </div>
-                  {pm.notes&&(
                     <div>
-                      <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-4"}`}>{pm.notes}</p>
-                      {pm.notes.length>160&&<button onClick={()=>setExpandedPMId(isExpanded?null:pm.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
+                      <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-3"}`}>{ba.thesis}</p>
+                      {ba.thesis.length>120&&<button onClick={()=>setExpandedBAId(isExpanded?null:ba.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
                     </div>
-                  )}
-                  <p className="text-[11px] text-muted-foreground">{new Date(pm.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
-                </GlassCard>
-              );
-            })}
-          </div>
+                    <p className="text-[11px] text-muted-foreground mt-auto">{new Date(ba.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )
         )}
-      </div>
+
+        {/* Post-Mortems tab */}
+        {journalTab==="pm"&&(
+          postMortems.length===0?(
+            <p className="text-muted-foreground py-6 text-center text-[14px]">No post-mortems yet — the agent writes these when a position is closed.</p>
+          ):(
+            <div className="space-y-3">
+              {postMortems.map(pm=>{
+                const isPos=pm.pnl_pct>=0;
+                const isExpanded=expandedPMId===pm.id;
+                return(
+                  <div key={pm.id} className="glass bg-accent/40 rounded-2xl p-4 flex flex-col gap-3 group relative">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[15px] font-bold">{pm.symbol}</span>
+                        <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold ${isPos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{isPos?"+":""}{pm.pnl_pct.toFixed(2)}%</span>
+                      </div>
+                      <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+                        <button onClick={()=>{setEditingPM(pm);setPMForm({symbol:pm.symbol,entry_price:String(pm.entry_price),exit_price:String(pm.exit_price),notes:pm.notes||""});setPMError("");setShowPMModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                        {deletingPMId===pm.id?(
+                          <button onClick={async()=>{await api.deletePostMortem(pm.id);setPostMortems(p=>p.filter(x=>x.id!==pm.id));setDeletingPMId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
+                        ):(
+                          <button onClick={()=>setDeletingPMId(pm.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                      <span>Entry: <span className="text-foreground font-medium">{pm.entry_price.toFixed(2)}</span></span>
+                      <ArrowUpRight className="h-3.5 w-3.5"/>
+                      <span>Exit: <span className="text-foreground font-medium">{pm.exit_price.toFixed(2)}</span></span>
+                    </div>
+                    {pm.notes&&(
+                      <div>
+                        <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-4"}`}>{pm.notes}</p>
+                        {pm.notes.length>160&&<button onClick={()=>setExpandedPMId(isExpanded?null:pm.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground">{new Date(pm.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+      </GlassCard>
 
       {/* Transaction History */}
       <div>
