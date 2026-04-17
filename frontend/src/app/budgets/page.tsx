@@ -81,22 +81,22 @@ export default function BudgetsPage() {
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="font-mono text-3xl font-extrabold tabular-nums tracking-tight">{overall.toFixed(0)}%</span>
+              <span className="font-mono tabular-nums text-[32px] font-extrabold" style={{letterSpacing: '-1px'}}>{overall.toFixed(0)}%</span>
               <span className="text-[11px] text-muted-foreground uppercase tracking-wider mt-0.5">Used</span>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-5">
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">Total Budget</p>
-              <p className="font-mono text-xl font-bold tabular-nums">{formatCurrency(totalBudget)}</p>
+              <p className="font-mono tabular-nums text-[20px] font-bold">{formatCurrency(totalBudget)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">Spent</p>
-              <p className="font-mono text-xl font-bold tabular-nums text-loss">{formatCurrency(totalSpent)}</p>
+              <p className="font-mono tabular-nums text-[20px] font-bold text-loss">{formatCurrency(totalSpent)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">Remaining</p>
-              <p className="font-mono text-xl font-bold tabular-nums text-gain">{formatCurrency(Math.max(0, totalBudget - totalSpent))}</p>
+              <p className="font-mono tabular-nums text-[20px] font-bold text-gain">{formatCurrency(Math.max(0, totalBudget - totalSpent))}</p>
             </div>
           </div>
         </GlassCard>
@@ -138,7 +138,7 @@ export default function BudgetsPage() {
                 </div>
                 <div>
                   <div className="flex items-baseline justify-between mb-2">
-                    <span className={`font-mono text-xl font-bold tabular-nums ${over ? "text-loss" : ""}`}>
+                    <span className={`font-mono tabular-nums text-[20px] font-bold ${over ? "text-loss" : ""}`}>
                       {formatCurrency(b.spent)}
                     </span>
                     <span className="font-mono text-xs text-muted-foreground tabular-nums">
@@ -170,7 +170,7 @@ export default function BudgetsPage() {
           {/* Add new card */}
           <button
             onClick={() => setOpen(true)}
-            className="glass bg-card rounded-[20px] p-6 min-h-[180px] flex flex-col items-center justify-center gap-2.5 border-2 border-dashed border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-150 cursor-pointer"
+            className="glass bg-card rounded-[24px] p-6 min-h-[180px] flex flex-col items-center justify-center gap-2.5 border-2 border-dashed border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-150 cursor-pointer"
           >
             <div className="w-12 h-12 rounded-[14px] bg-accent flex items-center justify-center">
               <Plus className="h-5 w-5" />

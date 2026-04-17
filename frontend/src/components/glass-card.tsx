@@ -14,7 +14,7 @@ export function GlassCard({ children, className = "", delay = 0 }: GlassCardProp
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className={`glass bg-card rounded-[20px] p-6 ${className}`}
+      className={`glass bg-card rounded-[24px] p-[22px] ${className}`}
     >
       {children}
     </motion.div>

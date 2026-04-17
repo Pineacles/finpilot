@@ -130,8 +130,8 @@ export default function GoalsPage() {
                   </div>
                   <div className="relative z-10">
                     <div className="flex items-baseline justify-between mb-2">
-                      <span className="font-mono text-2xl font-bold tabular-nums">{formatCurrency(g.current_amount)}</span>
-                      <span className="font-mono text-xs text-muted-foreground tabular-nums">of {formatCurrency(g.target_amount)}</span>
+                      <span className="font-mono tabular-nums text-[20px] font-bold">{formatCurrency(g.current_amount)}</span>
+                      <span className="font-mono tabular-nums text-[11px] text-muted-foreground">of {formatCurrency(g.target_amount)}</span>
                     </div>
                     <div className="h-2.5 rounded-full bg-accent overflow-hidden">
                       <div
@@ -196,7 +196,7 @@ export default function GoalsPage() {
                     {m.target_net_worth && (
                       <>
                         <p className="text-[11px] text-muted-foreground mb-0.5">Target</p>
-                        <p className="font-mono text-sm font-semibold tabular-nums">{formatCurrency(m.target_net_worth)}</p>
+                        <p className="font-mono tabular-nums text-[13px] font-semibold">{formatCurrency(m.target_net_worth)}</p>
                       </>
                     )}
                     {m.achieved && (

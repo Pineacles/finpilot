@@ -51,7 +51,7 @@ function EconomyDetail({c}:{c:PortfolioAnalysis["content"]}){
           {c.key_indicators.map((ind,i)=>(
             <div key={i} className="p-4 rounded-2xl bg-accent/60 text-center">
               <p className="text-[13px] text-muted-foreground mb-1">{ind.name}</p>
-              <p className="text-2xl font-bold">{ind.value}</p>
+              <p className="font-mono tabular-nums text-[20px] font-bold">{ind.value}</p>
               <p className={`text-[12px] font-medium mt-1 ${ind.trend==="up"?"text-gain":ind.trend==="down"?"text-loss":"text-muted-foreground"}`}>
                 {ind.trend==="up"?"Trending up":ind.trend==="down"?"Trending down":"Stable"}
               </p>
@@ -287,7 +287,7 @@ export default function PublicPortfolioPage(){
   if(loading)return(
     <div className="min-h-screen">
       <div className="mx-auto max-w-7xl px-6 py-10 space-y-6">
-        {[...Array(4)].map((_,i)=><div key={i} className="h-32 rounded-[20px] bg-muted animate-pulse"/>)}
+        {[...Array(4)].map((_,i)=><div key={i} className="h-32 rounded-[24px] bg-muted animate-pulse"/>)}
       </div>
     </div>
   );
@@ -343,7 +343,7 @@ export default function PublicPortfolioPage(){
             <p className="text-[13px] text-muted-foreground uppercase tracking-wider">Total Value</p>
             <LivePill/>
           </div>
-          <p className="text-2xl font-bold tracking-tight tabular-nums"><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
+          <p className="font-mono tabular-nums text-[42px] font-extrabold" style={{letterSpacing: '-1.2px'}}><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
           <div className="flex items-center gap-2 justify-end mt-1"><PnlBadge value={liveTotals.pnl} pct={liveTotals.pnlPct}/><span className="text-[12px] text-muted-foreground">all time</span></div>
         </div>
       </motion.div>
@@ -354,7 +354,7 @@ export default function PublicPortfolioPage(){
           <p className="text-[13px] text-muted-foreground uppercase tracking-wider">Total Value</p>
           <LivePill/>
         </div>
-        <p className="text-3xl font-bold tracking-tight tabular-nums"><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
+        <p className="font-mono tabular-nums text-[42px] font-extrabold" style={{letterSpacing: '-1.2px'}}><AnimatedNumber value={liveTotals.value} format={formatCurrency}/></p>
         <div className="flex items-center gap-3 mt-2"><PnlBadge value={liveTotals.pnl} pct={liveTotals.pnlPct}/><span className="text-[13px] text-muted-foreground">all time</span></div>
       </div>
 
@@ -367,8 +367,8 @@ export default function PublicPortfolioPage(){
           {l:"Total",v:liveTotals.value+p.cash_balance,live:true},
         ].map((item,i)=>(
           <GlassCard key={item.l} delay={0.05+i*0.05}>
-            <p className="text-[13px] text-muted-foreground mb-1">{item.l}</p>
-            <p className="text-2xl font-semibold tabular-nums">{item.live?<AnimatedNumber value={item.v as number} format={formatCurrency}/>:(item.v as string)}</p>
+            <p className="text-[12px] text-muted-foreground mb-1">{item.l}</p>
+            <p className="font-mono tabular-nums text-[20px] font-bold">{item.live?<AnimatedNumber value={item.v as number} format={formatCurrency}/>:(item.v as string)}</p>
           </GlassCard>
         ))}
       </div>
@@ -385,7 +385,7 @@ export default function PublicPortfolioPage(){
 
         {/* Holdings */}
         <GlassCard delay={0.25} className="md:col-span-1 lg:col-span-2 !p-4">
-          <p className="text-[13px] font-medium text-muted-foreground mb-3">Holdings</p>
+          <p className="text-[14px] font-semibold text-muted-foreground mb-3">Holdings</p>
           <div className="space-y-1 max-h-[420px] overflow-y-auto pr-1" style={{scrollbarGutter:"stable"}}>
             {p.positions.map(pos=>{
               const live=livePrices[pos.symbol];
@@ -393,19 +393,19 @@ export default function PublicPortfolioPage(){
               const livePnlPct=pos.avg_cost_price?((livePrice/pos.avg_cost_price-1)*100):pos.pnl_pct;
               const flash=flashes[pos.symbol];
               return(
-              <div key={pos.id} className={`flex items-center justify-between px-3 py-3 pr-4 rounded-2xl cursor-pointer transition-all duration-200 hover:bg-accent ${chartTicker===pos.symbol?"bg-accent":""} ${flash==="up"?"flash-up":flash==="down"?"flash-down":""}`} onClick={()=>openChart(pos.symbol)}>
+              <div key={pos.id} className={`flex items-center justify-between px-3.5 py-3 pr-4 rounded-[14px] cursor-pointer transition-all duration-200 hover:bg-accent ${chartTicker===pos.symbol?"bg-accent":""} ${flash==="up"?"flash-up":flash==="down"?"flash-down":""}`} onClick={()=>openChart(pos.symbol)}>
                 <div className="min-w-[70px] shrink-0">
-                  <p className="font-semibold text-[15px]">{pos.symbol}</p>
+                  <p className="font-bold text-[14px]">{pos.symbol}</p>
                   <p className="text-[11px] text-muted-foreground truncate max-w-[80px]">{pos.name}</p>
                 </div>
                 <div className="hidden lg:block shrink-0"><SparklineChart data={pos.sparkline} width={90} height={36} color={livePnlPct>=0?"#3b82f6":"#ef4444"}/></div>
                 <div className="text-right shrink-0">
-                  <p className="text-[14px] font-medium tabular-nums">{livePrice.toFixed(2)}<span className="text-[10px] text-muted-foreground ml-1">{pos.currency}</span></p>
-                  <p className="text-[11px] text-muted-foreground tabular-nums">cost {pos.avg_cost_price.toFixed(2)}</p>
+                  <p className="font-mono tabular-nums text-[13px] font-semibold">{livePrice.toFixed(2)}<span className="text-[11px] text-muted-foreground ml-1">{pos.currency}</span></p>
+                  <p className="font-mono tabular-nums text-[11px] text-muted-foreground">cost {pos.avg_cost_price.toFixed(2)}</p>
                 </div>
                 <div className="text-right hidden sm:block shrink-0">
-                  <p className="text-[15px] font-semibold tabular-nums">{formatCurrency(pos.market_value)}</p>
-                  <p className={`text-[13px] font-semibold tabular-nums ${livePnlPct>=0?"text-gain":"text-loss"}`}>{livePnlPct>=0?"+":""}{livePnlPct.toFixed(1)}%</p>
+                  <p className="font-mono tabular-nums text-[13px] font-semibold">{formatCurrency(pos.market_value)}</p>
+                  <p className={`font-mono tabular-nums text-[11px] font-semibold ${livePnlPct>=0?"text-gain":"text-loss"}`}>{livePnlPct>=0?"+":""}{livePnlPct.toFixed(1)}%</p>
                   <p className={`text-[11px] tabular-nums ${pos.unrealized_pnl>=0?"text-gain":"text-loss"}`}>{pos.unrealized_pnl>=0?"+":""}{formatCurrency(pos.unrealized_pnl)}</p>
                   {pos.first_bought&&<p className="text-[10px] text-muted-foreground mt-0.5">since {new Date(pos.first_bought).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</p>}
                 </div>
