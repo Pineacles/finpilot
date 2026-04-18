@@ -1419,6 +1419,7 @@ async def batch_insert_signals(
     db: AsyncSession = Depends(get_db),
 ):
     """Batch insert signal history rows from one analysis run."""
+    normalized_regime = body.regime.lower().strip() if body.regime else None
     rows = []
     for s in body.signals:
         row = SignalHistory(
@@ -1427,7 +1428,7 @@ async def batch_insert_signals(
             symbol=s.symbol,
             raw_output=s.raw_output,
             signal_score=s.signal_score,
-            regime=body.regime,
+            regime=normalized_regime,
             regime_inputs=body.regime_inputs,
             user_id=user.id,
             run_timestamp=body.run_timestamp,
