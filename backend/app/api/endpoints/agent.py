@@ -566,9 +566,9 @@ class StockAnalysis(BaseModel):
     action: str  # HOLD | SELL | ADD | TRIM
     conviction: str = ""  # BULLISH | NEUTRAL | BEARISH
     conviction_score: int = 5  # 1-10
-    current_price: float  # REQUIRED — must be > 0
-    entry_price: float  # REQUIRED — must be > 0
-    unrealized_pnl_pct: float = 0
+    current_price: float = 0  # Server overrides from yfinance
+    entry_price: float = 0  # Server overrides from DB positions
+    unrealized_pnl_pct: float = 0  # Server computes from above
     rationale: str  # REQUIRED — must not be empty
     key_risks: list[str]  # REQUIRED — must have at least 2
     key_catalysts: list[str]  # REQUIRED — must have at least 2
@@ -615,16 +615,12 @@ async def store_analysis(
                    "Send ALL stocks in ONE request — do not make separate POST calls per stock."
         )
 
-    # Validate each stock has required fields filled
+    # Validate each stock has required text fields (prices are filled server-side)
     if body.analysis_type == "portfolio":
         errors = []
         for i, s in enumerate(body.stocks):
             if not s.rationale or not s.rationale.strip():
                 errors.append(f"stocks[{i}] ({s.symbol}): rationale is empty — must be 2-3 sentences")
-            if s.current_price <= 0:
-                errors.append(f"stocks[{i}] ({s.symbol}): current_price must be > 0")
-            if s.entry_price <= 0:
-                errors.append(f"stocks[{i}] ({s.symbol}): entry_price must be > 0")
             if len(s.key_risks) < 2:
                 errors.append(f"stocks[{i}] ({s.symbol}): key_risks must have at least 2 items, got {len(s.key_risks)}")
             if len(s.key_catalysts) < 2:
@@ -646,7 +642,41 @@ async def store_analysis(
         content["regime_transition"] = body.regime_transition
 
     if body.analysis_type == "portfolio":
-        content["stocks"] = [s.model_dump() for s in body.stocks]
+        # Fetch authoritative entry prices from DB positions
+        pos_result = await db.execute(
+            select(StockPosition).where(and_(
+                StockPosition.user_id == user.id,
+                StockPosition.symbol != "CASH",
+                StockPosition.quantity > 0,
+            ))
+        )
+        positions = {p.symbol: p for p in pos_result.scalars().all()}
+
+        # Fetch live prices from yfinance
+        from app.services.prices import get_quote
+        live_prices: dict[str, float] = {}
+        for s in body.stocks:
+            sym = s.symbol.upper()
+            q = await get_quote(sym)
+            if q:
+                live_prices[sym] = q["price"]
+
+        stocks_out = []
+        for s in body.stocks:
+            d = s.model_dump()
+            sym = s.symbol.upper()
+            # Override entry_price from DB (authoritative)
+            pos = positions.get(sym)
+            if pos:
+                d["entry_price"] = pos.avg_cost_price
+            # Override current_price from live yfinance
+            if sym in live_prices:
+                d["current_price"] = live_prices[sym]
+            # Always compute PnL server-side
+            if d["entry_price"] > 0 and d["current_price"] > 0:
+                d["unrealized_pnl_pct"] = round(((d["current_price"] - d["entry_price"]) / d["entry_price"]) * 100, 2)
+            stocks_out.append(d)
+        content["stocks"] = stocks_out
     else:
         content["key_indicators"] = body.key_indicators or []
         content["outlook"] = body.outlook or ""
