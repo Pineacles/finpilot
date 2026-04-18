@@ -173,7 +173,7 @@ async def delete_post_mortem(
 
 # ── Buy Assessments (user) ────────────────────────────────────────
 
-VALID_RECOMMENDATIONS = {"buy", "hold", "watch", "avoid"}
+VALID_RECOMMENDATIONS = {"buy", "watch", "avoid"}
 VALID_HORIZONS = {"short", "medium", "long", None}
 
 

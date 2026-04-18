@@ -335,6 +335,18 @@ async def execute_trade(
         executed_at=trade_date,
     ))
 
+    # Auto-clear buy assessments when a buy is executed for this symbol
+    if trade_type == "buy":
+        from app.models.stock import BuyAssessment
+        ba_result = await db.execute(
+            select(BuyAssessment).where(and_(
+                BuyAssessment.user_id == user.id,
+                BuyAssessment.symbol == ticker,
+            ))
+        )
+        for ba in ba_result.scalars().all():
+            await db.delete(ba)
+
     await db.commit()
     return {
         "status": "ok", "symbol": ticker, "type": trade_type,
