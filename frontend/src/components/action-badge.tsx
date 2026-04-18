@@ -4,12 +4,14 @@ interface ActionBadgeProps {
 }
 
 const ACTION_COLORS: Record<string, { bg: string; text: string }> = {
-  ADD:   { bg: "rgba(22,163,74,0.15)",   text: "#16a34a" },
-  BUY:   { bg: "rgba(22,163,74,0.15)",   text: "#16a34a" },
-  SELL:  { bg: "rgba(220,38,38,0.15)",   text: "#dc2626" },
-  HOLD:  { bg: "rgba(59,130,246,0.15)",  text: "#3b82f6" },
-  WATCH: { bg: "rgba(245,158,11,0.15)",  text: "#d97706" },
-  AVOID: { bg: "rgba(220,38,38,0.15)",   text: "#dc2626" },
+  ADD:             { bg: "rgba(22,163,74,0.15)",   text: "#16a34a" },
+  BUY:             { bg: "rgba(22,163,74,0.15)",   text: "#16a34a" },
+  SELL:            { bg: "rgba(220,38,38,0.15)",   text: "#dc2626" },
+  TRIM:            { bg: "rgba(245,158,11,0.15)",  text: "#d97706" },
+  HOLD:            { bg: "rgba(59,130,246,0.15)",  text: "#3b82f6" },
+  HOLD_WITH_STOP:  { bg: "rgba(59,130,246,0.15)",  text: "#3b82f6" },
+  WATCH:           { bg: "rgba(245,158,11,0.15)",  text: "#d97706" },
+  AVOID:           { bg: "rgba(220,38,38,0.15)",   text: "#dc2626" },
 };
 
 export function ActionBadge({ action, className = "" }: ActionBadgeProps) {
