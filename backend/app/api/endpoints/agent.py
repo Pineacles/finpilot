@@ -608,6 +608,13 @@ async def store_analysis(
     if body.analysis_type not in ("portfolio", "economy"):
         raise HTTPException(status_code=400, detail="analysis_type must be: portfolio, economy")
 
+    if body.analysis_type == "portfolio" and not body.stocks:
+        raise HTTPException(
+            status_code=422,
+            detail="Portfolio analysis must include at least one stock in the 'stocks' array. "
+                   "Send ALL stocks in ONE request — do not make separate POST calls per stock."
+        )
+
     content = {
         "market_summary": body.market_summary,
         "market_sentiment": body.market_sentiment,
