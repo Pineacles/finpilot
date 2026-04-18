@@ -12,6 +12,7 @@ const PAGE_META: Record<string, { eyebrow: string; subtitle: string }> = {
   "/goals": { eyebrow: "Goals & Milestones", subtitle: "Goals & Milestones" },
   "/stats": { eyebrow: "Financial Insights", subtitle: "Statistics" },
   "/categories": { eyebrow: "Categories", subtitle: "Categories" },
+  "/tools": { eyebrow: "Signal Evaluation", subtitle: "Tools" },
   "/settings": { eyebrow: "Settings", subtitle: "Settings" },
 };
 
