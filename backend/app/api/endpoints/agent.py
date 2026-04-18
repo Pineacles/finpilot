@@ -563,15 +563,15 @@ async def agent_import_file(
 
 class StockAnalysis(BaseModel):
     symbol: str
-    action: str  # HOLD | SELL | ADD
+    action: str  # HOLD | SELL | ADD | TRIM
     conviction: str = ""  # BULLISH | NEUTRAL | BEARISH
     conviction_score: int = 5  # 1-10
-    current_price: float = 0
-    entry_price: float = 0
+    current_price: float  # REQUIRED — must be > 0
+    entry_price: float  # REQUIRED — must be > 0
     unrealized_pnl_pct: float = 0
-    rationale: str = ""
-    key_risks: list[str] = []
-    key_catalysts: list[str] = []
+    rationale: str  # REQUIRED — must not be empty
+    key_risks: list[str]  # REQUIRED — must have at least 2
+    key_catalysts: list[str]  # REQUIRED — must have at least 2
     stop_loss: float | None = None
     take_profit: float | None = None
     divergences: list[str] = []
@@ -614,6 +614,26 @@ async def store_analysis(
             detail="Portfolio analysis must include at least one stock in the 'stocks' array. "
                    "Send ALL stocks in ONE request — do not make separate POST calls per stock."
         )
+
+    # Validate each stock has required fields filled
+    if body.analysis_type == "portfolio":
+        errors = []
+        for i, s in enumerate(body.stocks):
+            if not s.rationale or not s.rationale.strip():
+                errors.append(f"stocks[{i}] ({s.symbol}): rationale is empty — must be 2-3 sentences")
+            if s.current_price <= 0:
+                errors.append(f"stocks[{i}] ({s.symbol}): current_price must be > 0")
+            if s.entry_price <= 0:
+                errors.append(f"stocks[{i}] ({s.symbol}): entry_price must be > 0")
+            if len(s.key_risks) < 2:
+                errors.append(f"stocks[{i}] ({s.symbol}): key_risks must have at least 2 items, got {len(s.key_risks)}")
+            if len(s.key_catalysts) < 2:
+                errors.append(f"stocks[{i}] ({s.symbol}): key_catalysts must have at least 2 items, got {len(s.key_catalysts)}")
+            valid_actions = {"HOLD", "SELL", "ADD", "TRIM"}
+            if s.action.upper() not in valid_actions:
+                errors.append(f"stocks[{i}] ({s.symbol}): action '{s.action}' must be one of {valid_actions}")
+        if errors:
+            raise HTTPException(status_code=422, detail="Incomplete stock data: " + "; ".join(errors))
 
     content = {
         "market_summary": body.market_summary,
