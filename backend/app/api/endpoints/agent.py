@@ -1531,10 +1531,16 @@ async def update_tool_weight(
                         detail=f"Weight change {change_pct:.1%} exceeds {max_change_pct:.0%} limit for {body.review_type} review"
                     )
 
-        # Check observation count
+        # Check observation count — last 30d for weekly, last 60d for monthly
+        obs_window_days = 30 if body.review_type == "weekly" else 60
+        obs_cutoff = datetime.now(timezone.utc) - timedelta(days=obs_window_days)
         obs_result = await db.execute(
             select(func.count(SignalHistory.id)).where(
-                and_(SignalHistory.tool_name == tool_name, SignalHistory.user_id == user.id)
+                and_(
+                    SignalHistory.tool_name == tool_name,
+                    SignalHistory.user_id == user.id,
+                    SignalHistory.run_timestamp >= obs_cutoff,
+                )
             )
         )
         obs_count = obs_result.scalar() or 0
@@ -1637,7 +1643,27 @@ async def get_proposals(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Retrieve tool weight proposals."""
+    """Retrieve tool weight proposals. Lazily expires proposals older than 14 days."""
+    # Auto-expire stale pending proposals before returning
+    expire_cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    stale_result = await db.execute(
+        select(ToolWeightProposal).where(
+            and_(
+                ToolWeightProposal.user_id == user.id,
+                ToolWeightProposal.resolved_at == None,  # noqa: E711
+                ToolWeightProposal.proposed_at < expire_cutoff,
+            )
+        )
+    )
+    stale_proposals = stale_result.scalars().all()
+    if stale_proposals:
+        now_utc = datetime.now(timezone.utc)
+        for sp in stale_proposals:
+            sp.resolution = "expired"
+            sp.resolved_by = "system"
+            sp.resolved_at = now_utc
+        await db.commit()
+
     filters = [ToolWeightProposal.user_id == user.id]
     if status == "pending":
         filters.append(ToolWeightProposal.resolved_at == None)  # noqa: E711
