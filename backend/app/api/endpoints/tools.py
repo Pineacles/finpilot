@@ -60,9 +60,10 @@ async def tools_leaderboard(
             alphas = np.array([s.alpha_5d for s in sigs], dtype=float)
             if len(scores) < 2:
                 return None
-            if np.std(scores) == 0 or np.std(alphas) == 0:
+            if np.std(scores) < 1e-10 or np.std(alphas) < 1e-10:
                 return None
-            return float(np.corrcoef(scores, alphas)[0, 1])
+            r = np.corrcoef(scores, alphas)[0, 1]
+            return None if np.isnan(r) else float(r)
 
         sigs_30d = [s for s in signals if s.run_timestamp >= cutoff_30d]
         ic_30d = ic_for_window(sigs_30d)
@@ -131,9 +132,10 @@ async def tool_drill_down(
             if len(window_sigs) >= 2:
                 scores = np.array([s.signal_score for s in window_sigs], dtype=float)
                 alphas = np.array([s.alpha_5d for s in window_sigs], dtype=float)
-                if np.std(scores) > 0 and np.std(alphas) > 0:
-                    ic = float(np.corrcoef(scores, alphas)[0, 1])
-                    ic_series.append({"date": current.isoformat(), "ic": ic, "n": len(window_sigs)})
+                if np.std(scores) > 1e-10 and np.std(alphas) > 1e-10:
+                    r = np.corrcoef(scores, alphas)[0, 1]
+                    if not np.isnan(r):
+                        ic_series.append({"date": current.isoformat(), "ic": float(r), "n": len(window_sigs)})
             current += week
 
     return {
@@ -186,8 +188,11 @@ async def tool_regime_breakdown(
     for regime, sigs in by_regime.items():
         scores = np.array([s.signal_score for s in sigs], dtype=float)
         alphas = np.array([s.alpha_5d for s in sigs], dtype=float)
-        if len(scores) >= 2 and np.std(scores) > 0 and np.std(alphas) > 0:
-            ic = float(np.corrcoef(scores, alphas)[0, 1])
+        r = None
+        if len(scores) >= 2 and np.std(scores) > 1e-10 and np.std(alphas) > 1e-10:
+            r = np.corrcoef(scores, alphas)[0, 1]
+        if r is not None and not np.isnan(r):
+            ic = float(r)
         else:
             ic = None
         breakdown[regime] = {"ic": ic, "n": len(sigs)}
@@ -241,11 +246,16 @@ async def tools_correlation_matrix(
                 matrix[i, j] = 1.0
             else:
                 mask = ~(np.isnan(data[:, i]) | np.isnan(data[:, j]))
-                if mask.sum() >= 2:
+                if mask.sum() >= 3:  # need at least 3 points for meaningful correlation
                     col_i = data[mask, i]
                     col_j = data[mask, j]
-                    if np.std(col_i) > 0 and np.std(col_j) > 0:
-                        matrix[i, j] = float(np.corrcoef(col_i, col_j)[0, 1])
+                    if np.std(col_i) > 1e-10 and np.std(col_j) > 1e-10:
+                        r = np.corrcoef(col_i, col_j)[0, 1]
+                        matrix[i, j] = 0.0 if np.isnan(r) else float(r)
+                    # else: leave as 0.0 — constant signals have no meaningful correlation
+
+    # Replace any remaining NaN with 0.0
+    matrix = np.nan_to_num(matrix, nan=0.0)
 
     return {"tools": tools, "matrix": matrix.tolist()}
 
