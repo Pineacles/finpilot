@@ -223,6 +223,20 @@ export const api = {
   // Public journal
   publicJournal: (token: string) =>
     fetch(`/api/public/portfolio/${token}/journal`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json() as Promise<{ post_mortems: PostMortem[]; buy_assessments: BuyAssessment[] }>; }),
+
+  // Tools / Signal Evaluation
+  toolsLeaderboard: () => request<ToolLeaderboardEntry[]>("/api/dashboard/tools/leaderboard"),
+  toolsDrillDown: (name: string, windowDays = 60) =>
+    request<ToolDrillDown>(`/api/dashboard/tools/drill-down/${encodeURIComponent(name)}?window_days=${windowDays}`),
+  toolsRegimeBreakdown: (name: string) =>
+    request<ToolRegimeBreakdown>(`/api/dashboard/tools/regime-breakdown/${encodeURIComponent(name)}`),
+  toolsCorrelationMatrix: () => request<ToolCorrelationMatrix>("/api/dashboard/tools/correlation-matrix"),
+  toolsPendingProposals: () => request<ToolWeightProposal[]>("/api/dashboard/tools/pending-proposals"),
+  resolveProposal: (id: string, resolution: "approved" | "rejected") =>
+    request<{ status: string }>(`/api/dashboard/tools/proposals/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ resolution, resolved_by: "admin" }),
+    }),
 };
 
 // Types
@@ -427,4 +441,63 @@ export interface BuyAssessmentInput {
   conviction: number;
   time_horizon?: "short" | "medium" | "long";
   assessed_at?: string;
+}
+
+export interface ToolLeaderboardEntry {
+  tool_name: string;
+  ic_30d: number | null;
+  ic_60d: number | null;
+  weight: number;
+  locked: boolean;
+  last_weight_change: string | null;
+  observation_count: number;
+}
+
+export interface ToolSignalEntry {
+  date: string;
+  symbol: string;
+  signal_score: number;
+  forward_return_5d: number | null;
+  alpha_5d: number | null;
+  regime: string | null;
+}
+
+export interface ToolICPoint {
+  date: string;
+  ic: number;
+}
+
+export interface ToolDrillDown {
+  signals: ToolSignalEntry[];
+  ic_timeseries: ToolICPoint[];
+}
+
+export interface RegimeStat {
+  ic: number | null;
+  n: number;
+}
+
+export interface ToolRegimeBreakdown {
+  expansionary: RegimeStat;
+  inflationary: RegimeStat;
+  recessionary: RegimeStat;
+  stagflationary: RegimeStat;
+  [key: string]: RegimeStat;
+}
+
+export interface ToolCorrelationMatrix {
+  tools: string[];
+  matrix: number[][];
+}
+
+export interface ToolWeightProposal {
+  id: string;
+  tool_name: string;
+  current_weight: number;
+  proposed_weight: number;
+  rationale: string;
+  ic_30d?: number | null;
+  ic_60d?: number | null;
+  observation_count?: number;
+  created_at?: string;
 }
