@@ -564,18 +564,26 @@ async def agent_import_file(
 class StockAnalysis(BaseModel):
     symbol: str
     action: str  # HOLD | SELL | ADD
+    conviction: str = ""  # BULLISH | NEUTRAL | BEARISH
+    conviction_score: int = 5  # 1-10
     current_price: float = 0
     entry_price: float = 0
     unrealized_pnl_pct: float = 0
     rationale: str = ""
     key_risks: list[str] = []
     key_catalysts: list[str] = []
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    divergences: list[str] = []
+    post_mortem: str | None = None
 
 
 class AnalysisCreate(BaseModel):
     analysis_type: str = "portfolio"  # portfolio | economy
     market_summary: str
     market_sentiment: str  # bullish | bearish | neutral
+    regime: str | None = None  # expansionary | inflationary | stagflationary | recessionary
+    regime_transition: dict | None = None  # {"from": "...", "to": "...", "signals": [...]}
     stocks: list[StockAnalysis] = []
     # Economy-specific fields
     key_indicators: list[dict] | None = None  # [{"name": "GDP", "value": "2.1%", "trend": "up"}]
@@ -605,6 +613,10 @@ async def store_analysis(
         "market_sentiment": body.market_sentiment,
         "analyzed_at": body.analyzed_at or datetime.now(timezone.utc).isoformat(),
     }
+    if body.regime:
+        content["regime"] = body.regime
+    if body.regime_transition:
+        content["regime_transition"] = body.regime_transition
 
     if body.analysis_type == "portfolio":
         content["stocks"] = [s.model_dump() for s in body.stocks]
