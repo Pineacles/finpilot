@@ -1079,7 +1079,7 @@ class AgentBuyAssessmentUpdate(BaseModel):
     assessed_at: datetime | None = None
 
 
-_VALID_RECS = {"buy", "hold", "watch", "avoid"}
+_VALID_RECS = {"buy", "watch", "avoid"}
 _VALID_HORIZONS = {"short", "medium", "long", None}
 
 
