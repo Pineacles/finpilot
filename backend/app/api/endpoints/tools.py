@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -255,6 +256,26 @@ async def get_pending_proposals(
     db: AsyncSession = Depends(get_db),
 ):
     """Return pending (unresolved) tool weight proposals for the UI."""
+    # Auto-expire stale proposals older than 14 days
+    expire_cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    stale_result = await db.execute(
+        select(ToolWeightProposal).where(
+            and_(
+                ToolWeightProposal.user_id == user.id,
+                ToolWeightProposal.resolved_at == None,  # noqa: E711
+                ToolWeightProposal.proposed_at < expire_cutoff,
+            )
+        )
+    )
+    stale_proposals = stale_result.scalars().all()
+    if stale_proposals:
+        now_utc = datetime.now(timezone.utc)
+        for sp in stale_proposals:
+            sp.resolution = "expired"
+            sp.resolved_by = "system"
+            sp.resolved_at = now_utc
+        await db.commit()
+
     result = await db.execute(
         select(ToolWeightProposal).where(
             and_(
@@ -282,3 +303,66 @@ async def get_pending_proposals(
         }
         for r in rows
     ]
+
+
+class DashboardProposalResolve(BaseModel):
+    resolution: str  # approved|rejected
+    resolved_by: str
+
+
+@router.patch("/proposals/{proposal_id}")
+async def resolve_proposal_dashboard(
+    proposal_id: str,
+    body: DashboardProposalResolve,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve or reject a proposal from the dashboard UI. Auto-applies weight on approval."""
+    result = await db.execute(
+        select(ToolWeightProposal).where(
+            and_(ToolWeightProposal.id == proposal_id, ToolWeightProposal.user_id == user.id)
+        )
+    )
+    proposal = result.scalar_one_or_none()
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if proposal.resolved_at is not None:
+        raise HTTPException(status_code=400, detail="Proposal already resolved")
+
+    if body.resolution not in ("approved", "rejected"):
+        raise HTTPException(status_code=400, detail="resolution must be approved|rejected")
+
+    now_utc = datetime.now(timezone.utc)
+    proposal.resolved_at = now_utc
+    proposal.resolution = body.resolution
+    proposal.resolved_by = body.resolved_by
+
+    if body.resolution == "approved":
+        tw_result = await db.execute(
+            select(ToolWeight).where(
+                and_(ToolWeight.tool_name == proposal.tool_name, ToolWeight.user_id == user.id)
+            )
+        )
+        tw = tw_result.scalar_one_or_none()
+        if tw is None:
+            tw = ToolWeight(
+                tool_name=proposal.tool_name,
+                weight=proposal.proposed_weight,
+                user_id=user.id,
+                last_updated_by=body.resolved_by,
+            )
+            db.add(tw)
+        else:
+            tw.weight = proposal.proposed_weight
+            tw.last_updated_by = body.resolved_by
+            tw.last_updated_at = now_utc
+
+    await db.commit()
+    return {
+        "id": proposal.id,
+        "resolution": proposal.resolution,
+        "resolved_by": proposal.resolved_by,
+        "resolved_at": proposal.resolved_at.isoformat(),
+        "tool_name": proposal.tool_name,
+        "applied_weight": proposal.proposed_weight if body.resolution == "approved" else None,
+    }
