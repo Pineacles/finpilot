@@ -191,6 +191,28 @@ export const api = {
   syncGmail: () => request<{ status: string; new_transactions: number; balance: number | null; errors: string[] }>("/api/sync/gmail", { method: "POST" }),
   syncStatus: () => request<SyncStatus[]>("/api/sync/status"),
 
+  // Brokers
+  brokers: () => request<BrokerList>("/api/brokers"),
+  saxoStatus: () => request<BrokerStatus>("/api/brokers/saxo/status"),
+  saxoConnect: () => request<{ authorize_url: string; environment: string }>("/api/brokers/saxo/connect", { method: "POST" }),
+  saxoCompleteOAuth: (code: string, state: string) =>
+    request<BrokerStatus>("/api/brokers/saxo/callback", { method: "POST", body: JSON.stringify({ code, state }) }),
+  saxoDisconnect: () => request<{ status: string }>("/api/brokers/saxo/disconnect", { method: "POST" }),
+  saxoHealth: () => request<{ ok: boolean }>("/api/brokers/saxo/health"),
+  saxoAccounts: () => request<{ accounts: BrokerAccount[] }>("/api/brokers/saxo/accounts"),
+  saxoSync: () => request<SaxoSyncResult>("/api/brokers/saxo/sync", { method: "POST" }),
+  saxoSubPortfolio: () => request<SaxoSubPortfolio>("/api/brokers/saxo/sub-portfolio"),
+  saxoPrecheck: (order: SaxoOrderInput) =>
+    request<SaxoPrecheckResult>("/api/brokers/saxo/orders/precheck", { method: "POST", body: JSON.stringify(order) }),
+  saxoPlaceOrder: (order: SaxoOrderInput) =>
+    request<{ order_id: string }>("/api/brokers/saxo/orders", { method: "POST", body: JSON.stringify(order) }),
+  saxoCancelOrder: (orderId: string, accountKey: string) =>
+    request<{ status: string }>(`/api/brokers/saxo/orders/${orderId}?account_key=${encodeURIComponent(accountKey)}`, { method: "DELETE" }),
+  saxoModifyOrder: (input: SaxoModifyInput) =>
+    request<{ status: string }>("/api/brokers/saxo/orders", { method: "PATCH", body: JSON.stringify(input) }),
+  saxoListOrders: (accountKey: string) =>
+    request<{ orders: SaxoOrderSummary[] }>(`/api/brokers/saxo/orders?account_key=${encodeURIComponent(accountKey)}`),
+
   // Post-Mortems
   postMortems: (params?: { symbol?: string; limit?: number }) => {
     const qs = new URLSearchParams();
@@ -394,6 +416,103 @@ export interface PublicPortfolio {
 
 export interface SyncResult { status: string; records_synced: number; message: string }
 export interface SyncStatus { source: string; status: string; records_synced: number; synced_at: string | null; error_message: string | null }
+
+export interface BrokerDescriptor {
+  name: string;
+  label: string;
+  environments: string[];
+  trading_available: boolean;
+}
+export interface BrokerEnvironmentOption { value: string; label: string; enabled: boolean }
+export interface BrokerList { brokers: BrokerDescriptor[]; saxo_environments: BrokerEnvironmentOption[] }
+export interface BrokerStatus {
+  state: "disabled" | "setup_required" | "needs_auth" | "connecting" | "connected" | "error";
+  environment: string | null;
+  detail?: string | null;
+  last_error?: string | null;
+}
+export interface BrokerAccount {
+  external_id: string;
+  display_name: string;
+  currency: string;
+  environment: string;
+}
+
+export interface SaxoSyncResult {
+  status: "ok" | "noop";
+  reason?: string;
+  account_id?: string;
+  cash_balance?: number | null;
+  cash_currency?: string;
+  positions_upserted?: number;
+  positions_removed?: number;
+}
+
+export interface SaxoSubAccount {
+  account_id: string;
+  name: string;
+  currency: string;
+  cash: number;
+  cash_updated_at: string | null;
+  positions: {
+    id: string;
+    symbol: string;
+    name: string;
+    quantity: number;
+    avg_cost_price: number;
+    currency: string;
+    last_price: number | null;
+    unrealized_pnl: number | null;
+    market_value: number;
+  }[];
+}
+
+export interface SaxoSubPortfolio {
+  connected: boolean;
+  accounts: SaxoSubAccount[];
+}
+
+export interface SaxoOrderInput {
+  account_key: string;
+  symbol: string;
+  buy_sell: "Buy" | "Sell";
+  amount: number;
+  order_type: "Market" | "Limit" | "Stop" | "StopLimit";
+  duration?: "DayOrder" | "GoodTillCancel";
+  limit_price?: number;
+  stop_price?: number;
+  asset_type?: string;
+}
+
+export interface SaxoModifyInput {
+  order_id: string;
+  account_key: string;
+  amount?: number;
+  limit_price?: number;
+  stop_price?: number;
+  duration?: "DayOrder" | "GoodTillCancel";
+}
+
+export interface SaxoPrecheckResult {
+  ok: boolean;
+  estimated_cash_required: number | null;
+  estimated_fees: number | null;
+  currency: string | null;
+  warnings: string[];
+  error_message: string | null;
+}
+
+export interface SaxoOrderSummary {
+  order_id: string;
+  symbol: string;
+  uic: number;
+  asset_type: string;
+  buy_sell: string;
+  amount: number;
+  order_type: string;
+  status: string;
+  price: number | null;
+}
 
 export interface PostMortem {
   id: string;

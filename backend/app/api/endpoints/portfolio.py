@@ -611,7 +611,16 @@ async def get_live_prices(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Lightweight live prices for held positions. Uses 15s cache override for fresh data."""
+    """Lightweight live prices for held positions.
+
+    Routing: symbols that sit on a Saxo-sourced account are priced via Saxo's
+    native infoprices endpoint; everything else falls back to yfinance. If
+    Saxo pricing fails we silently fall back per-symbol so the ticker keeps
+    working during Saxo outages.
+    """
+    from app.brokers.saxo import sync as saxo_sync
+    from app.brokers import get_adapter
+
     result = await db.execute(
         select(StockPosition).where(and_(
             StockPosition.user_id == user.id,
@@ -623,15 +632,51 @@ async def get_live_prices(
     if not positions:
         return {}
 
-    tickers = list({p.symbol for p in positions})
-    quotes = await get_quotes_batch(tickers, cache_ttl=15)
+    # Which accounts are Saxo-sourced?
+    saxo_account_ids: set[str] = set()
+    acct_result = await db.execute(
+        select(Account).where(and_(
+            Account.user_id == user.id,
+            Account.name.like(f"{saxo_sync.SAXO_ACCOUNT_NAME_PREFIX}%"),
+        ))
+    )
+    for a in acct_result.scalars().all():
+        saxo_account_ids.add(a.id)
 
+    saxo_symbols = {p.symbol for p in positions if p.account_id in saxo_account_ids}
+    other_symbols = {p.symbol for p in positions if p.account_id not in saxo_account_ids}
+
+    quotes: dict[str, dict] = {}
+
+    if saxo_symbols:
+        try:
+            saxo_adapter = get_adapter("saxo")
+            saxo_quotes = await saxo_adapter.get_live_prices(
+                db, user.id, symbols=list(saxo_symbols)
+            )
+            for sym, q in saxo_quotes.items():
+                quotes[sym] = q
+            # Fall back to yfinance for symbols Saxo couldn't price.
+            missing_from_saxo = saxo_symbols - set(saxo_quotes.keys())
+            other_symbols |= missing_from_saxo
+        except Exception:
+            # Broker-side failure — fall back to yfinance for all symbols.
+            other_symbols |= saxo_symbols
+
+    if other_symbols:
+        yf_quotes = await get_quotes_batch(list(other_symbols), cache_ttl=15)
+        for sym, q in yf_quotes.items():
+            if sym not in quotes:
+                quotes[sym] = {
+                    "price": q["price"],
+                    "change": q.get("change", 0),
+                    "change_pct": q.get("change_pct", 0),
+                    "source": "yfinance",
+                }
+
+    # Strip source from payload for backwards compat (frontend doesn't need it yet).
     return {
-        sym: {
-            "price": q["price"],
-            "change": q.get("change", 0),
-            "change_pct": q.get("change_pct", 0),
-        }
+        sym: {"price": q["price"], "change": q.get("change", 0), "change_pct": q.get("change_pct", 0)}
         for sym, q in quotes.items()
     }
 

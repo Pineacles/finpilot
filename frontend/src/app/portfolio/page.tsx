@@ -15,6 +15,7 @@ import { Sparkline as SparklineChart } from "@/components/sparkline";
 import { RangeSwitcher } from "@/components/range-switcher";
 import { ActionBadge } from "@/components/action-badge";
 import { ConvictionDots } from "@/components/conviction-dots";
+import { SaxoSection } from "@/components/saxo-section";
 
 const COLORS = ["#3b82f6","#f97316","#ef4444","#a855f7","#14b8a6","#f59e0b","#ec4899","#22c55e","#06b6d4","#8b5cf6","#e11d48","#84cc16","#6366f1","#d946ef","#0ea5e9","#fb923c"];
 const RANGES = [{value:"1d",label:"1D"},{value:"5d",label:"1W"},{value:"1mo",label:"1M"},{value:"3mo",label:"3M"},{value:"6mo",label:"6M"},{value:"1y",label:"1Y"},{value:"2y",label:"2Y"},{value:"5y",label:"5Y"}];
@@ -865,6 +866,9 @@ export default function PortfolioPage(){
             </div>
           </GlassCard>
         )}
+
+        {/* Saxo broker-synced sub-portfolio. Renders nothing unless connected. */}
+        <SaxoSection />
       </div>
 
       {/* Trade Chart Dialog */}
