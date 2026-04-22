@@ -12,6 +12,7 @@ import {
   Save, CheckCircle2, RefreshCw, Brain, Bot, Mail, Clock, XCircle,
   Key, ClipboardCheck, Copy, AlertTriangle, User, Building2, Plug, PlugZap, Link2Off,
 } from "lucide-react";
+import { AiTradingCard } from "@/components/ai-trading-card";
 
 const LABELS: Record<string, string> = {
   anthropic_api_key: "Anthropic API Key", analysis_model: "Analysis Model",
@@ -240,6 +241,9 @@ export default function SettingsPage() {
           }}
         />
       </Suspense>
+
+      {/* AI Trading — shared card, also mounted on /portfolio for quick access */}
+      <AiTradingCard />
 
       {/* Danger zone */}
       <GlassCard delay={0.32} className="border-l-4 border-l-red-500/70">

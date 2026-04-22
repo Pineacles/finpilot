@@ -14,7 +14,9 @@ Design notes:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import random
 import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +33,7 @@ from app.brokers.base import (
 from app.brokers.saxo import config as saxo_config
 from app.brokers.saxo import instruments as saxo_instruments
 from app.brokers.saxo import mapping
+from app.brokers.saxo import oauth as saxo_oauth
 from app.brokers.saxo.client import SaxoHTTPClient, SaxoHTTPError
 from app.brokers.saxo.oauth import build_authorize_url
 from app.brokers.saxo.orders import (
@@ -46,7 +49,9 @@ from app.services import settings as settings_svc
 
 logger = logging.getLogger("app.brokers.saxo")
 
-_ACCESS_TOKEN_SKEW_SECONDS = 60
+_ACCESS_TOKEN_SKEW_SECONDS = 300  # 5-minute early-refresh buffer
+_REFRESH_MAX_ATTEMPTS = 3
+_REFRESH_BACKOFF_BASE_SECONDS = 2.0  # 2s, 8s, 32s (+ small jitter)
 
 
 class SaxoAdapter(BrokerAdapter):
@@ -80,7 +85,8 @@ class SaxoAdapter(BrokerAdapter):
         access = await settings_svc.get_setting(db, user_id, "saxo_access_token")
         refresh = await settings_svc.get_setting(db, user_id, "saxo_refresh_token")
         last_error = await settings_svc.get_setting(db, user_id, "saxo_last_error")
-        if not access and not refresh:
+        needs_reauth = await settings_svc.get_setting(db, user_id, "saxo_needs_reauth")
+        if needs_reauth == "1" or (not access and not refresh):
             state = AuthState.NEEDS_AUTH
         else:
             state = AuthState.CONNECTED
@@ -166,6 +172,7 @@ class SaxoAdapter(BrokerAdapter):
             "saxo_pkce_verifier",
             "saxo_oauth_state",
             "saxo_last_error",
+            "saxo_needs_reauth",
         ])
         logger.info("saxo auth=disconnect user=%s", user_id)
 
@@ -500,6 +507,12 @@ class SaxoAdapter(BrokerAdapter):
         return await self._refresh(db, user_id, env), env
 
     async def _refresh(self, db: AsyncSession, user_id: str, env) -> str:
+        """Refresh the access token with retry + classification.
+
+        Transient errors (5xx, network, 429) retry with exponential backoff.
+        Permanent errors (400/401/403 with invalid_grant etc.) delete stored
+        tokens and flip `saxo_needs_reauth=1` so the UI can prompt Reconnect.
+        """
         async with self._refresh_lock(user_id):
             # Recheck inside the lock — another coroutine may have refreshed.
             expires_at = _as_int(await settings_svc.get_setting(db, user_id, "saxo_token_expires_at"))
@@ -514,25 +527,52 @@ class SaxoAdapter(BrokerAdapter):
             app_key = await settings_svc.get_setting(db, user_id, "saxo_app_key")
             app_secret = await settings_svc.get_setting(db, user_id, "saxo_app_secret")
             client = self._client_for(env.api_base, env.token_url)
-            try:
-                body = await client.token_post(form={
-                    "grant_type": "refresh_token",
-                    "refresh_token": refresh_token,
-                    "client_id": app_key,
-                    "client_secret": app_secret,
-                })
-            except SaxoHTTPError as exc:
-                # Saxo invalidated the refresh token — force re-auth.
-                await settings_svc.delete_keys(db, user_id, [
-                    "saxo_access_token",
-                    "saxo_refresh_token",
-                    "saxo_token_expires_at",
-                ])
-                await self._record_error(db, user_id, f"refresh_failed:{exc.status}")
-                raise RuntimeError("needs_auth") from None
 
-            await self._persist_tokens(db, user_id, body, fallback_refresh=refresh_token)
-            return body["access_token"]
+            last_error = ""
+            for attempt in range(1, _REFRESH_MAX_ATTEMPTS + 1):
+                try:
+                    body = await client.token_post(form={
+                        "grant_type": "refresh_token",
+                        "refresh_token": refresh_token,
+                        "client_id": app_key,
+                        "client_secret": app_secret,
+                    })
+                except SaxoHTTPError as exc:
+                    oauth_error = _extract_oauth_error(exc.detail)
+                    permanent = saxo_oauth.classify_refresh_error(
+                        http_status=exc.status, oauth_error=oauth_error,
+                    )
+                    last_error = f"{exc.status or 'net'}:{oauth_error or exc.detail[:40]}"
+                    logger.warning(
+                        "saxo refresh attempt=%s user=%s status=%s permanent=%s oauth=%s",
+                        attempt, user_id, exc.status, permanent, oauth_error or "-",
+                    )
+                    if permanent:
+                        # Refresh token is dead — clear and require re-auth.
+                        await settings_svc.delete_keys(db, user_id, [
+                            "saxo_access_token",
+                            "saxo_refresh_token",
+                            "saxo_token_expires_at",
+                        ])
+                        await settings_svc.set_many_atomic(db, user_id, {
+                            "saxo_needs_reauth": "1",
+                            "saxo_last_error": f"refresh_failed:{last_error}"[:200],
+                        })
+                        raise RuntimeError("needs_auth") from None
+                    if attempt < _REFRESH_MAX_ATTEMPTS:
+                        delay = _REFRESH_BACKOFF_BASE_SECONDS * (4 ** (attempt - 1))
+                        delay += random.uniform(0, 1.5)
+                        await asyncio.sleep(delay)
+                        continue
+                    # Exhausted retries on transient error — record but keep tokens.
+                    await self._record_error(db, user_id, f"refresh_transient_exhausted:{last_error}")
+                    raise RuntimeError("needs_auth") from None
+
+                await self._persist_tokens(db, user_id, body, fallback_refresh=refresh_token)
+                return body["access_token"]
+
+            # Should be unreachable — the loop always continues or raises.
+            raise RuntimeError("needs_auth")
 
     async def _persist_tokens(
         self,
@@ -551,6 +591,7 @@ class SaxoAdapter(BrokerAdapter):
             "saxo_refresh_token": refresh,
             "saxo_token_expires_at": str(expires_at),
             "saxo_last_error": "",
+            "saxo_needs_reauth": "0",
         })
 
     async def _record_error(self, db: AsyncSession, user_id: str, detail: str) -> None:
@@ -565,6 +606,33 @@ class SaxoAdapter(BrokerAdapter):
             if account.get("AccountKey") == account_key:
                 return account.get("ClientKey") or "me"
         return "me"
+
+
+def _extract_oauth_error(detail: str | None) -> str | None:
+    """Parse the `error` field out of an OAuth2 token error body.
+
+    `detail` comes from SaxoHTTPClient._safe_detail, which hands back either
+    the raw error code or a short `http_NNN`. When Saxo's token endpoint
+    returns a JSON body we can also see it in detail — try both shapes.
+    """
+    if not detail:
+        return None
+    s = detail.strip()
+    if not s:
+        return None
+    if s.startswith("{"):
+        try:
+            obj = json.loads(s)
+            err = obj.get("error") if isinstance(obj, dict) else None
+            if isinstance(err, str):
+                return err
+        except Exception:
+            return None
+        return None
+    if s.startswith("http_"):
+        return None
+    # Plain `invalid_grant`, `invalid_client`, etc.
+    return s.split()[0] if " " in s else s
 
 
 def _truthy(value: str | None) -> bool:

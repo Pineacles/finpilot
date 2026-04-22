@@ -604,6 +604,85 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
     return timeline
 
 
+# ── Benchmark comparison (individual stocks TWR vs. S&P 500) ──
+
+class ClassifyRequest(BaseModel):
+    asset_type: str  # equity|etf|index|crypto|bond|commodity|cash
+
+
+@router.get("/benchmark-comparison")
+async def get_benchmark_comparison(
+    range: str = "1M",
+    benchmark: str = "SPY",
+    start: str | None = None,
+    end: str | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """TWR of individual-stock holdings vs. benchmark (default SPY).
+
+    Only symbols classified as 'equity' count. ETFs/indexes/crypto are listed
+    under `excluded_symbols`. Saxo-synced positions without StockTransaction
+    history are called out as caveats.
+    """
+    from app.services.benchmark import compute_benchmark_comparison
+    try:
+        result = await compute_benchmark_comparison(
+            db, user.id,
+            range_key=range, benchmark_symbol=benchmark,
+            custom_start=start, custom_end=end,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return result.__dict__
+
+
+@router.get("/classifications")
+async def list_classifications(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Every per-symbol classification this user has (or that was auto-detected)."""
+    from app.models.stock import SymbolClassification
+    result = await db.execute(
+        select(SymbolClassification).where(SymbolClassification.user_id == user.id)
+    )
+    rows = result.scalars().all()
+    return [
+        {"symbol": r.symbol, "asset_type": r.asset_type, "source": r.source,
+         "updated_at": r.updated_at.isoformat()}
+        for r in rows
+    ]
+
+
+@router.post("/classifications/{symbol}")
+async def set_classification(
+    symbol: str,
+    body: ClassifyRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """User sets/overrides a symbol's asset_type. Auto-classifier won't overwrite this."""
+    from app.services import classification as classification_svc
+    try:
+        row = await classification_svc.set_classification(
+            db, user.id, symbol, body.asset_type, source="user"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"symbol": row.symbol, "asset_type": row.asset_type, "source": row.source}
+
+
+@router.post("/classifications/backfill")
+async def backfill_classifications(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Classify every symbol the user has touched that isn't already classified."""
+    from app.services import classification as classification_svc
+    return await classification_svc.backfill_user_classifications(db, user.id)
+
+
 # ── Live prices (lightweight, polled every few seconds for live ticker) ──
 
 @router.get("/live-prices")

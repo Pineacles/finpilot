@@ -213,6 +213,23 @@ export const api = {
   saxoListOrders: (accountKey: string) =>
     request<{ orders: SaxoOrderSummary[] }>(`/api/brokers/saxo/orders?account_key=${encodeURIComponent(accountKey)}`),
 
+  // Benchmark comparison (individual stocks TWR vs S&P 500)
+  benchmarkComparison: (params: { range: string; benchmark?: string; start?: string; end?: string }) => {
+    const qs = new URLSearchParams();
+    qs.set("range", params.range);
+    if (params.benchmark) qs.set("benchmark", params.benchmark);
+    if (params.start) qs.set("start", params.start);
+    if (params.end) qs.set("end", params.end);
+    return request<BenchmarkComparison>(`/api/dashboard/portfolio/benchmark-comparison?${qs}`);
+  },
+  listClassifications: () => request<SymbolClassification[]>("/api/dashboard/portfolio/classifications"),
+  setClassification: (symbol: string, assetType: string) =>
+    request<SymbolClassification>(`/api/dashboard/portfolio/classifications/${encodeURIComponent(symbol)}`, {
+      method: "POST", body: JSON.stringify({ asset_type: assetType }),
+    }),
+  backfillClassifications: () =>
+    request<{ created: number; skipped: number; total_symbols: number }>("/api/dashboard/portfolio/classifications/backfill", { method: "POST" }),
+
   // Post-Mortems
   postMortems: (params?: { symbol?: string; limit?: number }) => {
     const qs = new URLSearchParams();
@@ -259,6 +276,23 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ resolution, resolved_by: "admin" }),
     }),
+
+  // AI Trading (pending orders)
+  listPendingOrders: (status?: PendingOrderStatus) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return request<{ pending_orders: PendingOrder[] }>(`/api/dashboard/trading/pending-orders${qs}`);
+  },
+  approvePendingOrder: (id: string) =>
+    request<PendingOrder>(`/api/dashboard/trading/pending-orders/${encodeURIComponent(id)}/approve`, { method: "POST" }),
+  rejectPendingOrder: (id: string, reason?: string) =>
+    request<PendingOrder>(`/api/dashboard/trading/pending-orders/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason ?? null }),
+    }),
+  expirePendingOrder: (id: string) =>
+    request<PendingOrder>(`/api/dashboard/trading/pending-orders/${encodeURIComponent(id)}/expire`, { method: "POST" }),
+  expireStalePendingOrders: () =>
+    request<{ expired: number }>("/api/dashboard/trading/expire-stale", { method: "POST" }),
 };
 
 // Types
@@ -514,6 +548,48 @@ export interface SaxoOrderSummary {
   price: number | null;
 }
 
+export type AssetType = "equity" | "etf" | "index" | "crypto" | "bond" | "commodity" | "cash";
+export type ClassificationSource = "auto" | "user" | "agent";
+
+export interface SymbolClassification {
+  symbol: string;
+  asset_type: AssetType;
+  source: ClassificationSource;
+  updated_at: string;
+}
+
+export interface BenchmarkPortfolioPoint { date: string; index: number; value_chf: number }
+export interface BenchmarkSeriesPoint { date: string; index: number; close: number }
+export interface BenchmarkCountedSymbol {
+  symbol: string;
+  asset_type: AssetType;
+  source: ClassificationSource;
+  quantity: number;
+  first_tx_date: string;
+}
+export interface BenchmarkExcludedSymbol {
+  symbol: string;
+  asset_type: AssetType;
+  source: ClassificationSource;
+  reason: "classified_non_equity" | "no_transactions" | "saxo_only";
+}
+export interface BenchmarkComparison {
+  range: string;
+  start_date: string;
+  end_date: string;
+  benchmark_symbol: string;
+  portfolio_series: BenchmarkPortfolioPoint[];
+  benchmark_series: BenchmarkSeriesPoint[];
+  summary: {
+    portfolio_return_pct: number;
+    benchmark_return_pct: number;
+    alpha_pct: number;
+  };
+  counted_symbols: BenchmarkCountedSymbol[];
+  excluded_symbols: BenchmarkExcludedSymbol[];
+  caveats: string[];
+}
+
 export interface PostMortem {
   id: string;
   user_id: string;
@@ -619,4 +695,62 @@ export interface ToolWeightProposal {
   ic_60d?: number | null;
   observation_count?: number;
   created_at?: string;
+}
+
+// ── AI Trading ───────────────────────────────────────────────────────────────
+
+export type PendingOrderAction = "place" | "modify" | "cancel";
+export type PendingOrderMode = "semi" | "auto";
+export type PendingOrderStatus =
+  | "pending_approval"
+  | "approved"
+  | "placed"
+  | "rejected"
+  | "failed"
+  | "expired";
+
+export interface PendingOrder {
+  pending_order_id: string;
+  user_id: string;
+  account_key: string;
+  symbol: string | null;
+  action: PendingOrderAction;
+  target_order_id: string | null;
+  buy_sell: "Buy" | "Sell" | null;
+  amount: number | null;
+  order_type: string | null;
+  duration: string | null;
+  limit_price: number | null;
+  stop_price: number | null;
+  mode: PendingOrderMode;
+  status: PendingOrderStatus;
+  buy_assessment_id: string | null;
+  rationale: string | null;
+  estimated_cash_required_chf: number | null;
+  estimated_fees_chf: number | null;
+  currency: string | null;
+  idempotency_key: string;
+  expires_at: string | null;
+  created_at: string | null;
+  approved_at: string | null;
+  placed_at: string | null;
+  rejected_at: string | null;
+  rejected_reason: string | null;
+  broker_order_id: string | null;
+  broker_response: Record<string, unknown> | null;
+}
+
+export interface TradingSettings {
+  trading_ai_enabled: string;
+  trading_mode: string;
+  trading_allowed_actions: string;
+  trading_symbol_whitelist: string;
+  trading_symbol_blacklist: string;
+  trading_order_max_chf: string;
+  trading_daily_count_max: string;
+  trading_daily_chf_max: string;
+  trading_position_size_max_pct: string;
+  trading_per_symbol_max_pct: string;
+  trading_semi_approval_timeout_s: string;
+  trading_timezone: string;
 }
