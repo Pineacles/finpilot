@@ -1824,3 +1824,69 @@ async def resolve_proposal(
         "resolved_by": proposal.resolved_by,
         "resolved_at": proposal.resolved_at.isoformat(),
     }
+
+
+# ── Symbol classification (agent can reclassify to keep benchmark card honest) ──
+
+class AgentClassifyRequest(BaseModel):
+    asset_type: str  # equity|etf|index|crypto|bond|commodity|cash
+
+
+@router.get("/classifications")
+async def agent_list_classifications(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.stock import SymbolClassification
+    result = await db.execute(
+        select(SymbolClassification).where(SymbolClassification.user_id == user.id)
+    )
+    rows = result.scalars().all()
+    return [
+        {"symbol": r.symbol, "asset_type": r.asset_type, "source": r.source,
+         "updated_at": r.updated_at.isoformat()}
+        for r in rows
+    ]
+
+
+@router.post("/classifications/{symbol}")
+async def agent_set_classification(
+    symbol: str,
+    body: AgentClassifyRequest,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Agent sets/overrides a symbol's asset_type. Used when the agent decides
+    an ETF or index fund shouldn't count toward the individual-stock benchmark.
+    """
+    from app.services import classification as classification_svc
+    try:
+        row = await classification_svc.set_classification(
+            db, user.id, symbol, body.asset_type, source="agent"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"symbol": row.symbol, "asset_type": row.asset_type, "source": row.source}
+
+
+@router.get("/benchmark-comparison")
+async def agent_benchmark_comparison(
+    range: str = "1M",
+    benchmark: str = "SPY",
+    start: str | None = None,
+    end: str | None = None,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read-only: TWR of individual stocks vs benchmark. Same shape as the user
+    endpoint — useful for the agent to assess its own picks."""
+    from app.services.benchmark import compute_benchmark_comparison
+    try:
+        result = await compute_benchmark_comparison(
+            db, user.id,
+            range_key=range, benchmark_symbol=benchmark,
+            custom_start=start, custom_end=end,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return result.__dict__

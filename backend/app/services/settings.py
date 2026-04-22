@@ -34,6 +34,20 @@ SETTING_KEYS = {
     "saxo_pkce_verifier": None,
     "saxo_oauth_state": None,
     "saxo_last_error": None,
+    "saxo_needs_reauth": None,  # "1" when refresh failed permanently — UI shows Reconnect banner
+    # AI auto-trading controls
+    "trading_ai_enabled": None,           # "0" | "1"
+    "trading_mode": None,                 # off | semi | auto
+    "trading_allowed_actions": None,      # comma-sep: place,modify,cancel
+    "trading_symbol_whitelist": None,     # comma-sep, empty = allow all
+    "trading_symbol_blacklist": None,     # comma-sep
+    "trading_order_max_chf": None,        # per-order CHF cap
+    "trading_daily_count_max": None,      # max orders per day
+    "trading_daily_chf_max": None,        # max CHF notional per day
+    "trading_position_size_max_pct": None,  # % of portfolio per position
+    "trading_per_symbol_max_pct": None,   # finer per-symbol cap %
+    "trading_semi_approval_timeout_s": None,  # seconds before pending expires
+    "trading_timezone": None,             # IANA tz, e.g. Europe/Zurich
 }
 
 # Keys that should be masked in API responses
