@@ -32,3 +32,10 @@ design-system/
 
 # Tooling output
 graphify-out/
+
+# Claude skills lock files
+skills-lock.json
+**/skills-lock.json
+
+# Screenshots / scratch images
+screenshots/
