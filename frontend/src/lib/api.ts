@@ -649,22 +649,28 @@ export interface ToolLeaderboardEntry {
 }
 
 export interface ToolSignalEntry {
-  date: string;
-  symbol: string;
-  signal_score: number;
-  forward_return_5d: number | null;
-  alpha_5d: number | null;
+  id: string;
+  run_id: string;
+  symbol: string | null;
+  signal_score: number | null;
   regime: string | null;
+  run_timestamp: string;
+  forward_return_1d: number | null;
+  forward_return_5d: number | null;
+  forward_return_20d: number | null;
+  alpha_5d: number | null;
 }
 
 export interface ToolICPoint {
   date: string;
   ic: number;
+  n: number;
 }
 
 export interface ToolDrillDown {
-  signals: ToolSignalEntry[];
-  ic_timeseries: ToolICPoint[];
+  tool_name: string;
+  recent_signals: ToolSignalEntry[];
+  ic_time_series: ToolICPoint[];
 }
 
 export interface RegimeStat {

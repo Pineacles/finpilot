@@ -167,15 +167,15 @@ function DrillDownTab({ toolNames }: { toolNames: string[] }) {
     if (selected) load(selected);
   }, [selected, load]);
 
-  const scatterData = (data?.signals ?? [])
+  const scatterData = (data?.recent_signals ?? [])
     .filter(s => s.signal_score !== null && s.alpha_5d !== null)
     .map(s => ({
-      x: s.signal_score,
+      x: s.signal_score!,
       y: s.alpha_5d!,
       regime: s.regime ?? "unknown",
     }));
 
-  const recentSignals = (data?.signals ?? []).slice(-50).reverse();
+  const recentSignals = (data?.recent_signals ?? []).slice(0, 50);
 
   return (
     <div className="space-y-5">
@@ -262,11 +262,11 @@ function DrillDownTab({ toolNames }: { toolNames: string[] }) {
           {/* IC Time Series */}
           <GlassCard>
             <p className="text-[13px] font-semibold mb-4">Rolling 30d IC Over Time</p>
-            {data.ic_timeseries.length === 0 ? (
+            {data.ic_time_series.length === 0 ? (
               <p className="text-[13px] text-muted-foreground text-center py-8">No IC time series data available</p>
             ) : (
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={data.ic_timeseries} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                <LineChart data={data.ic_time_series} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis
                     dataKey="date"
@@ -325,9 +325,9 @@ function DrillDownTab({ toolNames }: { toolNames: string[] }) {
                   <tbody>
                     {recentSignals.map((s, i) => (
                       <tr key={i} className="border-b border-border/50 last:border-0 hover:bg-accent/40 transition-colors">
-                        <td className="px-5 py-2.5 text-[13px] text-muted-foreground">{fmtDate(s.date)}</td>
-                        <td className="px-5 py-2.5 text-[13px] font-semibold">{s.symbol}</td>
-                        <td className="px-5 py-2.5 text-[13px] font-mono tabular-nums">{s.signal_score.toFixed(3)}</td>
+                        <td className="px-5 py-2.5 text-[13px] text-muted-foreground">{fmtDate(s.run_timestamp)}</td>
+                        <td className="px-5 py-2.5 text-[13px] font-semibold">{s.symbol ?? "—"}</td>
+                        <td className="px-5 py-2.5 text-[13px] font-mono tabular-nums">{s.signal_score !== null ? s.signal_score.toFixed(3) : "—"}</td>
                         <td className={`px-5 py-2.5 text-[13px] font-mono tabular-nums ${s.forward_return_5d !== null ? (s.forward_return_5d >= 0 ? "text-gain" : "text-loss") : "text-muted-foreground"}`}>
                           {s.forward_return_5d !== null ? s.forward_return_5d.toFixed(3) : "—"}
                         </td>
