@@ -10,3 +10,25 @@ node_modules/
 pgdata/
 frontend/node_modules/
 frontend/.next/
+
+# Internal AI/agent docs (kept local, never pushed)
+AGENT_API.md
+ARCHITECTURE.md
+.impeccable.md
+HANDOFF*.md
+CLAUDE.md
+AGENTS.md
+**/CLAUDE.md
+**/AGENTS.md
+
+# Claude Code / agent tooling
+.agents/
+.claude/
+**/.agents/
+**/.claude/
+
+# Internal design system docs
+design-system/
+
+# Tooling output
+graphify-out/
