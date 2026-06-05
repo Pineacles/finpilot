@@ -81,6 +81,7 @@ class BuyAssessment(Base):
     risk_factors: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     conviction: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-5
     time_horizon: Mapped[str | None] = mapped_column(String(10), nullable=True)  # short|medium|long
+    time_stop: Mapped[date | None] = mapped_column(Date, nullable=True)
     assessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

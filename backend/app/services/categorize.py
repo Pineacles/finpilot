@@ -156,7 +156,7 @@ async def categorize_transaction(
     pm = payment_method or parsed["payment_method"] or ""
 
     # 0. Merchant DB lookup FIRST — user-created rules take priority over keywords
-    result = await db.execute(select(Merchant))
+    result = await db.execute(select(Merchant).where(Merchant.user_id == user_id))
     merchants = result.scalars().all()
     search_text = f"{normalized} {counterparty.lower()}"
     matched = _fuzzy_match_merchant(merchants, search_text)

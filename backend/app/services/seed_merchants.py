@@ -98,19 +98,16 @@ SWISS_MERCHANTS = {
     "Lidl": ("lidl", "Supermarket"),
     "Volg": ("volg", "Supermarket"),
     "Spar": ("spar ", "Supermarket"),
+    "Landi": ("landi ", "Supermarket"),
     # Groceries > Convenience
-    "7-Eleven": ("7-eleven|seven-eleven", "Convenience"),
-    "GS25": ("gs25", "Convenience"),
     "Kiosk": ("kiosk|avec", "Convenience"),
     # Dining > Restaurants
     "McDonald's": ("mcdonald", "Restaurants"),
     "Burger King": ("burger king", "Restaurants"),
     "Starbucks": ("starbucks", "Cafe & Snacks"),
-    "Taste Designer": ("taste designer", "Restaurants"),
     # Dining > Delivery
     "JustEat": ("justeat|just eat|eat.ch", "Delivery"),
     "Uber Eats": ("uber eats", "Delivery"),
-    "BAEMIN": ("baemin|nice*baemin", "Delivery"),
     # Transport > Public Transport
     "SBB": ("sbb|schweizerische bundesbahnen", "Public Transport"),
     "BLS": ("bls ", "Public Transport"),
@@ -119,8 +116,7 @@ SWISS_MERCHANTS = {
     "AGROLA": ("agrola", "Fuel"),
     "Migrol": ("migrol", "Fuel"),
     "Shell": ("shell |shell-", "Fuel"),
-    "BP": ("bp ", "Fuel"),
-    "Tankomat": ("tankomat|ts garage", "Fuel"),
+    "BP": ("bp tankstelle|bp ", "Fuel"),
     # Car > Parking
     "Parkingpay": ("parkingpay", "Parking"),
     # Entertainment > Subscriptions
@@ -130,16 +126,8 @@ SWISS_MERCHANTS = {
     "Disney+": ("disney", "Subscriptions"),
     "Apple": ("apple.com|apple store", "Subscriptions"),
     "Google One": ("google one", "Subscriptions"),
-    "Patreon": ("patreon", "Subscriptions"),
-    "Claude AI": ("claude.ai", "Subscriptions"),
-    "OpenAI": ("openai", "Subscriptions"),
-    "Teacher AI": ("teacher ai", "Subscriptions"),
-    "Google Duolingo": ("duolingo", "Learning"),
     # Entertainment > Gaming
     "Steam": ("steam", "Gaming"),
-    "Riot Games": ("riot", "Gaming"),
-    "Mobalytics": ("mobalytics", "Gaming"),
-    "Tebex": ("tebex", "Gaming"),
     # Shopping > Online Shopping
     "Galaxus": ("galaxus|digitec", "Online Shopping"),
     "Zalando": ("zalando", "Clothing"),
@@ -148,7 +136,6 @@ SWISS_MERCHANTS = {
     "Manor": ("manor", "Online Shopping"),
     # Shopping
     "IKEA": ("ikea", "Household"),
-    "Jumbo": ("jumbo", "Household"),
     # Telecom
     "Swisscom": ("swisscom", "Mobile"),
     "Sunrise": ("sunrise", "Mobile"),
@@ -160,24 +147,13 @@ SWISS_MERCHANTS = {
     "Concordia": ("concordia", "Insurance"),
     "Mobiliar": ("mobiliar", "Insurance"),
     "AXA": ("axa ", "Insurance"),
-    "Zurich": ("zurich versicherung", "Insurance"),
-    "Cembra": ("cembra", "Insurance"),
-    # Education
-    "Hochschule Luzern": ("hochschule luzern|hslu", "Tuition"),
     # Finance
-    "bob Finance": ("bob finance", "Bank Fees"),
     "Viseca": ("viseca payment|viseca card", "Transfer"),
     "PostFinance": ("postfinance", "Transfer"),
     "PayPal": ("paypal", "Online Shopping"),
-    "Wise": ("wise|money send.*wise", "Transfer"),
     "Revolut": ("revolut", "Transfer"),
     # Taxes & Fees
     "Strassenverkehrsamt": ("strassenverkehrsamt", "Government Fees"),
-    # Other
-    "Artefides AG": ("artefides", "Other"),
-    "Vending Service": ("vending service", "Cafe & Snacks"),
-    "EXIMBAY": ("eximbay", "Subscriptions"),
-    "Google DEAR U": ("google dear u|dear u", "Subscriptions"),
 }
 
 
@@ -223,7 +199,7 @@ async def seed_merchants(db: AsyncSession, user_id: str):
                 existing[sub_name] = sub
 
     # 2. Seed merchants
-    result = await db.execute(select(Merchant))
+    result = await db.execute(select(Merchant).where(Merchant.user_id == user_id))
     existing_merchants = {m.name: m for m in result.scalars().all()}
 
     for name, (patterns, cat_name) in SWISS_MERCHANTS.items():
@@ -236,6 +212,7 @@ async def seed_merchants(db: AsyncSession, user_id: str):
                 m.patterns = patterns
         else:
             db.add(Merchant(
+                user_id=user_id,
                 name=name,
                 patterns=patterns,
                 default_category_id=cat_id,

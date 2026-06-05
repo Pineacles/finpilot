@@ -73,7 +73,7 @@ async def manual_categorize(
     # Upsert Merchant DB rule so future imports auto-categorize correctly
     final_merchant_name = body.new_merchant or original_merchant
     if final_merchant_name and final_merchant_name != "Pending":
-        await _upsert_merchant_rule(db, final_merchant_name, original_merchant, body.category_id)
+        await _upsert_merchant_rule(db, user.id, final_merchant_name, original_merchant, body.category_id)
 
     await db.commit()
 
@@ -88,7 +88,7 @@ async def manual_categorize(
 
 
 async def _upsert_merchant_rule(
-    db: AsyncSession, merchant_name: str, original_name: str | None, category_id: str,
+    db: AsyncSession, user_id: str, merchant_name: str, original_name: str | None, category_id: str,
 ):
     """Create or update a Merchant DB entry so future imports auto-categorize."""
     patterns_set: set[str] = set()
@@ -105,7 +105,7 @@ async def _upsert_merchant_rule(
         return
 
     result = await db.execute(
-        select(Merchant).where(Merchant.name == merchant_name)
+        select(Merchant).where(and_(Merchant.name == merchant_name, Merchant.user_id == user_id))
     )
     existing = result.scalar_one_or_none()
 
@@ -116,6 +116,7 @@ async def _upsert_merchant_rule(
         existing.default_category_id = category_id
     else:
         db.add(Merchant(
+            user_id=user_id,
             name=merchant_name,
             patterns="|".join(sorted(patterns_set)),
             default_category_id=category_id,

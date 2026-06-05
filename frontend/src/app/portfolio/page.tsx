@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar } from "recharts";
-import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, BookOpen, Target } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, BookOpen, Target, Building2 } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
 import { AnimatedNumber } from "@/components/animated-number";
 import { LivePill } from "@/components/live-pill";
@@ -303,19 +303,39 @@ export default function PortfolioPage(){
   };
   useEffect(()=>{if(tradeChartSymbol)openTradeChart(tradeChartSymbol,tradeChartRange);},[tradeChartRange]);
 
+  // Total Value = live market value of stocks + cash. Always recomputed on
+  // the client from live prices + cash_balance — never read from a cached
+  // server-side total_value.
+  //
+  // All-time P&L is measured against NET DEPOSITS (what the user actually put
+  // in, minus withdrawals), NOT cost basis. This is the true wealth delta and
+  // correctly captures realised gains that have been booked to cash.
+  //
+  // Day P&L is separate: intraday change only (live price - previous close)
+  // summed per position, with its own percentage against the stock value at
+  // yesterday's close.
   const liveTotals=useMemo(()=>{
-    if(!p)return{value:0,pnl:0,pnlPct:0};
-    let liveValue=0;
+    if(!p)return{value:0,pnl:0,pnlPct:0,dayPnl:0,dayPnlPct:0};
+    let liveMarketValue=0;
+    let dayChangeChf=0;
+    let stockValueAtOpen=0;
     for(const pos of p.positions){
       const live=livePrices[pos.symbol];
       const refPrice=pos.last_price||pos.avg_cost_price||0;
       const fx=refPrice&&pos.quantity?(pos.market_value/(refPrice*pos.quantity)):1;
       const livePrice=live?.price??pos.last_price??pos.avg_cost_price??0;
-      liveValue+=livePrice*pos.quantity*fx;
+      liveMarketValue+=livePrice*pos.quantity*fx;
+      const changePerShare=live?.change??0;
+      dayChangeChf+=changePerShare*pos.quantity*fx;
+      stockValueAtOpen+=(livePrice-changePerShare)*pos.quantity*fx;
     }
-    const pnl=liveValue-p.total_cost;
-    const pnlPct=p.total_cost>0?(pnl/p.total_cost*100):0;
-    return{value:liveValue,pnl,pnlPct};
+    const cash=p.cash_balance??0;
+    const value=liveMarketValue+cash;
+    const netDeposits=p.net_deposits??0;
+    const pnl=value-netDeposits;
+    const pnlPct=netDeposits>0?(pnl/netDeposits*100):0;
+    const dayPnlPct=stockValueAtOpen>0?(dayChangeChf/stockValueAtOpen*100):0;
+    return{value,pnl,pnlPct,dayPnl:dayChangeChf,dayPnlPct};
   },[p,livePrices]);
 
   const pnlUp=(p?.total_pnl??0)>=0;
@@ -380,7 +400,7 @@ export default function PortfolioPage(){
           {l:"Invested",v:p?.total_cost??0,fmt:formatCurrency,pct:undefined as number|undefined},
           {l:"Cash",v:p?.cash_balance??0,fmt:formatCurrency,pct:undefined},
           {l:"Positions",v:p?.positions_count??0,fmt:(n:number)=>String(Math.round(n)),pct:undefined},
-          {l:"Day P&L",v:liveTotals.pnl,fmt:formatCurrency,pct:liveTotals.pnlPct},
+          {l:"Day P&L",v:liveTotals.dayPnl,fmt:formatCurrency,pct:liveTotals.dayPnlPct},
         ].map((item,i)=>(
           <GlassCard key={item.l} delay={0.05+i*0.05} className="!rounded-[20px] !p-[18px]">
             <p className="text-[12px] text-muted-foreground mb-1.5 uppercase tracking-wider font-medium">{item.l}</p>
@@ -870,16 +890,18 @@ export default function PortfolioPage(){
           </GlassCard>
         )}
 
-        {/* Shows only when Saxo refresh has failed permanently. */}
+        {/* Reconnect banner first — self-hides when not needed. */}
         <SaxoReconnectBanner />
 
-        {/* Individual-stock TWR vs S&P 500. Index/ETF holdings auto-excluded. */}
-        <BenchmarkCard />
+        {/* Benchmark vs S&P 500 */}
+        <div>
+          <BenchmarkCard />
+        </div>
 
-        {/* Saxo broker-synced sub-portfolio. Renders nothing unless connected. */}
+        {/* Saxo brokerage — section header + card live inside SaxoSection, self-hides when not connected. */}
         <SaxoSection />
 
-        {/* AI pending orders — renders nothing if no orders exist. */}
+        {/* AI pending orders — section header + card live inside PendingOrdersCard, self-hides when no orders. */}
         <PendingOrdersCard />
       </div>
 

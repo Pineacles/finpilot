@@ -8,12 +8,13 @@ from app.core.database import Base
 
 
 class Merchant(Base):
-    """Known merchant with matching patterns and default category."""
+    """Known merchant with matching patterns and default category. Per-user."""
     __tablename__ = "merchants"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    patterns: Mapped[str] = mapped_column(Text, nullable=False, default="")  # pipe-separated lowercase patterns
+    patterns: Mapped[str] = mapped_column(Text, nullable=False, default="")
     default_category_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("categories.id"), nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

@@ -1106,6 +1106,7 @@ def _ba_to_dict(ba: BuyAssessment) -> dict:
         "risk_factors": ba.risk_factors,
         "conviction": ba.conviction,
         "time_horizon": ba.time_horizon,
+        "time_stop": ba.time_stop.isoformat() if ba.time_stop else None,
         "assessed_at": ba.assessed_at.isoformat(),
         "created_at": ba.created_at.isoformat(),
         "updated_at": ba.updated_at.isoformat(),
@@ -1135,6 +1136,7 @@ class AgentBuyAssessmentCreate(BaseModel):
     risk_factors: str | None = None
     conviction: int
     time_horizon: str | None = None
+    time_stop: date | None = None
     assessed_at: datetime | None = None
 
 
@@ -1146,6 +1148,7 @@ class AgentBuyAssessmentUpdate(BaseModel):
     risk_factors: str | None = None
     conviction: int | None = None
     time_horizon: str | None = None
+    time_stop: date | None = None
     assessed_at: datetime | None = None
 
 
@@ -1272,6 +1275,7 @@ async def agent_create_buy_assessment(
         risk_factors=body.risk_factors,
         conviction=body.conviction,
         time_horizon=body.time_horizon,
+        time_stop=body.time_stop,
         assessed_at=body.assessed_at or datetime.now(timezone.utc),
     )
     db.add(ba)
@@ -1311,6 +1315,8 @@ async def agent_update_buy_assessment(
         if body.time_horizon not in {"short", "medium", "long"}:
             raise HTTPException(status_code=422, detail="time_horizon must be short, medium, or long")
         ba.time_horizon = body.time_horizon
+    if body.time_stop is not None:
+        ba.time_stop = body.time_stop
     if body.assessed_at is not None:
         ba.assessed_at = body.assessed_at
     ba.updated_at = datetime.now(timezone.utc)

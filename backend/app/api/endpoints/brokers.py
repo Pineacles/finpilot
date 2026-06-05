@@ -416,6 +416,20 @@ async def saxo_sub_portfolio(
     from sqlalchemy import select, and_
     from app.models.account import Account
     from app.models.stock import StockPosition
+    from app.services import settings as settings_svc
+
+    # Gate on user actually having Saxo enabled with valid (non-revoked) tokens.
+    saxo_enabled = await settings_svc.get_setting(db, user.id, "saxo_enabled")
+    saxo_access_token = await settings_svc.get_setting(db, user.id, "saxo_access_token")
+    saxo_refresh_token = await settings_svc.get_setting(db, user.id, "saxo_refresh_token")
+    saxo_needs_reauth = await settings_svc.get_setting(db, user.id, "saxo_needs_reauth")
+
+    if (
+        saxo_enabled != "1"
+        or (not saxo_access_token and not saxo_refresh_token)
+        or saxo_needs_reauth == "1"
+    ):
+        return {"connected": False, "accounts": []}
 
     result = await db.execute(
         select(Account).where(and_(

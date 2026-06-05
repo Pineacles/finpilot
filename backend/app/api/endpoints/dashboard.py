@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select, desc, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,13 +39,28 @@ async def get_overview(
     bank_balance = 0.0
     cc_balance = 0.0
     for acct in raw_accounts:
-        # Compute balance from transactions
-        bal_result = await db.execute(
-            select(func.coalesce(func.sum(Transaction.amount), 0)).where(
-                and_(Transaction.user_id == user.id, Transaction.account_id == acct.id)
+        if acct.balance is not None and acct.balance_date is not None:
+            # Anchor balance + all transactions AFTER the anchor date
+            delta_result = await db.execute(
+                select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+                    and_(
+                        Transaction.user_id == user.id,
+                        Transaction.account_id == acct.id,
+                        Transaction.date > acct.balance_date.date(),
+                    )
+                )
             )
-        )
-        balance = float(bal_result.scalar())
+            balance = acct.balance + float(delta_result.scalar())
+        elif acct.balance is not None:
+            balance = acct.balance
+        else:
+            # No anchor set — compute from all transactions
+            bal_result = await db.execute(
+                select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+                    and_(Transaction.user_id == user.id, Transaction.account_id == acct.id)
+                )
+            )
+            balance = float(bal_result.scalar())
 
         ab = AccountBalance.model_validate(acct)
         ab.balance = balance
@@ -101,3 +117,35 @@ async def get_overview(
         recent_transactions=recent,
         budget_health=budget_health,
     )
+
+
+class SetBalanceRequest(BaseModel):
+    balance: float
+
+@router.post("/accounts/{account_id}/set-balance")
+async def set_account_balance(
+    account_id: str,
+    body: SetBalanceRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set the actual balance for an account. Stores directly — no fake transactions."""
+    result = await db.execute(
+        select(Account).where(and_(Account.id == account_id, Account.user_id == user.id))
+    )
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    from datetime import datetime, timezone
+    previous = account.balance
+    account.balance = body.balance
+    account.balance_date = datetime.now(timezone.utc)
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "previous_balance": previous,
+        "new_balance": body.balance,
+        "balance_date": account.balance_date.isoformat(),
+    }

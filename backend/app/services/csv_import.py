@@ -16,7 +16,7 @@ from datetime import date, datetime
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.finance import Transaction
+from app.models.finance import Transaction, Category
 from app.models.account import Account
 from app.services.categorize import categorize_transaction, batch_categorize_with_ai
 from app.services.seed_merchants import seed_merchants
@@ -261,8 +261,10 @@ def parse_postfinance_csv(content: str) -> list[dict]:
                 else:
                     merchant = "TWINT"
 
-        # Build a reference for dedup (date + amount + first 40 chars of description)
-        ref = f"pf-{date_str}-{amount}-{description[:40]}"
+        # Build a reference for dedup using hash of full description
+        import hashlib
+        desc_hash = hashlib.md5(description.encode()).hexdigest()[:12]
+        ref = f"pf-{date_str}-{amount}-{desc_hash}"
 
         transactions.append({
             "date": txn_date,
@@ -303,28 +305,61 @@ async def import_transactions(
     account_id: str,
     content: str,
     use_ai: bool = True,
+    pre_parsed: list[dict] | None = None,
+    opening_balance: float | None = None,
 ) -> dict:
-    """Import transactions from CSV or camt.053 with auto-categorization."""
+    """Import transactions from CSV, PDF, or camt.053 with auto-categorization."""
     log: list[dict] = []
 
     def _log(msg: str, detail: str = ""):
         log.append({"msg": msg, "detail": detail})
 
-    fmt = detect_format(content)
-    _log(f"Detected format: {fmt}")
-
-    if fmt == "viseca":
-        raw_transactions = parse_viseca_csv(content)
-    elif fmt == "camt053":
-        raw_transactions = parse_camt053(content)
-    elif fmt == "valiant":
-        raw_transactions = parse_valiant_csv(content)
-    elif fmt == "postfinance":
-        raw_transactions = parse_postfinance_csv(content)
+    if pre_parsed is not None:
+        # Pre-parsed transactions (e.g. from PDF)
+        raw_transactions = pre_parsed
+        fmt = "postfinance_pdf"
+        _log(f"Detected format: {fmt}")
     else:
-        raise ValueError("Unsupported file format. Use Valiant CSV, PostFinance CSV, or camt.053 XML.")
+        fmt = detect_format(content)
+        _log(f"Detected format: {fmt}")
+
+        if fmt == "viseca":
+            raw_transactions = parse_viseca_csv(content)
+        elif fmt == "camt053":
+            raw_transactions = parse_camt053(content)
+        elif fmt == "valiant":
+            raw_transactions = parse_valiant_csv(content)
+        elif fmt == "postfinance":
+            raw_transactions = parse_postfinance_csv(content)
+        else:
+            raise ValueError("Unsupported file format. Use Valiant CSV, PostFinance CSV/PDF, or camt.053 XML.")
 
     _log(f"Parsed {len(raw_transactions)} transactions from file")
+
+    # If we have an opening balance, add it as the first transaction
+    if opening_balance is not None and raw_transactions:
+        earliest_date = min(t["date"] for t in raw_transactions)
+        from datetime import timedelta
+        # Find Transfer category
+        from app.models.finance import Category
+        cat_result = await db.execute(
+            select(Category).where(and_(Category.user_id == user_id, Category.name == "Transfer"))
+        )
+        transfer_cat = cat_result.scalar_one_or_none()
+
+        opening_txn = Transaction(
+            user_id=user_id,
+            account_id=account_id,
+            date=earliest_date - timedelta(days=1),
+            merchant="Opening Balance",
+            amount=opening_balance,
+            currency="CHF",
+            category_id=transfer_cat.id if transfer_cat else None,
+            notes="Opening balance from PostFinance statement",
+        )
+        db.add(opening_txn)
+        await db.flush()
+        _log(f"Added opening balance: CHF {opening_balance:.2f}")
 
     imported = 0
     skipped = 0
@@ -350,23 +385,37 @@ async def import_transactions(
         desc = raw["description"]
         ref = raw.get("reference", "")
 
-        # Primary dedup: by reference (AcctSvcrRef)
+        # Primary dedup: by reference (AcctSvcrRef / viseca_transaction_id)
         if ref and ref != "NOTPROVIDED" and ref in existing_refs:
             skipped += 1
             continue
 
-        # Secondary dedup: date + amount + description (for CSV imports without refs)
-        if not ref or ref == "NOTPROVIDED":
-            merchant_hint = raw.get("merchant", desc[:30])
-            existing = await db.execute(
-                select(Transaction).where(
+        # Secondary dedup: date + amount + merchant (always check, catches re-imports)
+        merchant_hint = raw.get("merchant", desc[:30])
+        existing = await db.execute(
+            select(Transaction).where(and_(
+                Transaction.user_id == user_id,
+                Transaction.date == raw["date"],
+                Transaction.amount == raw["amount"],
+                Transaction.merchant == merchant_hint,
+            ))
+        )
+        if existing.scalar_one_or_none():
+            skipped += 1
+            continue
+
+        # Tertiary dedup: date + amount + description notes (catches same txn with different merchant extraction)
+        if desc:
+            existing2 = await db.execute(
+                select(Transaction).where(and_(
                     Transaction.user_id == user_id,
+                    Transaction.account_id == account_id,
                     Transaction.date == raw["date"],
                     Transaction.amount == raw["amount"],
-                    Transaction.merchant == merchant_hint,
-                )
+                    Transaction.notes.ilike(f"%{desc[:30]}%"),
+                ))
             )
-            if existing.scalar_one_or_none():
+            if existing2.scalar_one_or_none():
                 skipped += 1
                 continue
 
@@ -387,6 +436,8 @@ async def import_transactions(
         if addr:
             notes_parts.append(addr)
         notes = " | ".join(notes_parts) if notes_parts else None
+        if notes and len(notes) > 490:
+            notes = notes[:490]
 
         # Check for pending transaction from email notification (match by date + amount)
         pending_result = await db.execute(
@@ -400,12 +451,14 @@ async def import_transactions(
         )
         pending_txn = pending_result.scalar_one_or_none()
 
+        txn = None
         if pending_txn:
             # Upgrade pending transaction with real details
             pending_txn.merchant = merchant_name
             pending_txn.category_id = cat_id
             pending_txn.viseca_transaction_id = ref if ref and ref != "NOTPROVIDED" else None
             pending_txn.notes = notes
+            txn = pending_txn
             imported += 1
             imported_txns.append(pending_txn)
             method_counts["upgraded"] = method_counts.get("upgraded", 0) + 1
@@ -424,11 +477,17 @@ async def import_transactions(
                 notes=notes,
             )
             db.add(txn)
-            await db.flush()
+            try:
+                await db.flush()
+            except Exception:
+                # Duplicate reference — skip gracefully
+                await db.rollback()
+                skipped += 1
+                continue
             imported += 1
             imported_txns.append(txn)
 
-        if not cat_id:
+        if not cat_id and txn:
             uncategorized_txns.append({
                 "id": txn.id,
                 "description": desc,

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/glass-card";
-import { PlugZap, RefreshCw, ShoppingCart, X } from "lucide-react";
+import { PlugZap, RefreshCw, ShoppingCart, X, Building2 } from "lucide-react";
 import {
   api,
   type SaxoOrderInput,
@@ -173,7 +173,17 @@ export function SaxoSection() {
   const positionsValueLocal = account.positions.reduce((sum, p) => sum + p.market_value, 0);
 
   return (
-    <GlassCard delay={0.48}>
+    <div>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="h-10 w-10 rounded-2xl bg-sky-100 dark:bg-sky-500/15 flex items-center justify-center">
+          <Building2 className="h-5 w-5 text-sky-600 dark:text-sky-400" strokeWidth={1.8} />
+        </div>
+        <h2 className="text-[16px] font-semibold">Saxo Brokerage</h2>
+        <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">
+          {account.positions.length} position{account.positions.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <GlassCard delay={0.48}>
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-500 flex items-center justify-center">
@@ -417,6 +427,7 @@ export function SaxoSection() {
         </DialogContent>
       </Dialog>
     </GlassCard>
+    </div>
   );
 }
 

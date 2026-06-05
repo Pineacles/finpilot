@@ -5,7 +5,7 @@ import { GlassCard } from "@/components/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Bot, CheckCircle2, XCircle, Clock, AlertTriangle } from "lucide-react";
+import { Bot, CheckCircle2, XCircle, Clock, AlertTriangle, ClipboardCheck } from "lucide-react";
 import { api, type PendingOrder, type PendingOrderStatus } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -281,25 +281,21 @@ export function PendingOrdersCard() {
 
   return (
     <>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="h-10 w-10 rounded-2xl bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center">
+          <ClipboardCheck className="h-5 w-5 text-violet-600 dark:text-violet-400" strokeWidth={1.8} />
+        </div>
+        <h2 className="text-[16px] font-semibold">AI Pending Orders</h2>
+        <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">
+          {pendingCount > 0 ? (
+            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold">
+              <AlertTriangle className="h-3 w-3" />{pendingCount} need approval
+            </span>
+          ) : orders.length}
+        </span>
+      </div>
       <GlassCard delay={0.52}>
         <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-              <Bot className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-[16px] font-semibold flex items-center gap-2">
-                AI Orders
-                {pendingCount > 0 && (
-                  <span className="text-[12px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    {pendingCount} need approval
-                  </span>
-                )}
-              </h2>
-              <p className="text-[12px] text-muted-foreground">Orders submitted by the AI agent</p>
-            </div>
-          </div>
           <div className="flex gap-1.5">
             {STATUS_FILTER_OPTIONS.map(opt => (
               <button
@@ -420,3 +416,4 @@ export function PendingOrdersCard() {
     </>
   );
 }
+

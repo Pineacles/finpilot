@@ -44,6 +44,7 @@ async def list_merchants(
     result = await db.execute(
         select(Merchant, Category)
         .outerjoin(Category, Merchant.default_category_id == Category.id)
+        .where(Merchant.user_id == user.id)
         .order_by(Merchant.name)
     )
     merchants = []
@@ -60,7 +61,7 @@ async def create_merchant(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    m = Merchant(name=body.name, patterns=body.patterns, default_category_id=body.default_category_id, is_system=False)
+    m = Merchant(user_id=user.id, name=body.name, patterns=body.patterns, default_category_id=body.default_category_id, is_system=False)
     db.add(m)
     await db.commit()
     await db.refresh(m)
@@ -74,7 +75,7 @@ async def update_merchant(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Merchant).where(Merchant.id == merchant_id))
+    result = await db.execute(select(Merchant).where(Merchant.id == merchant_id, Merchant.user_id == user.id))
     m = result.scalar_one_or_none()
     if not m:
         raise HTTPException(status_code=404, detail="Merchant not found")
@@ -99,7 +100,7 @@ async def delete_merchant(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Merchant).where(Merchant.id == merchant_id))
+    result = await db.execute(select(Merchant).where(Merchant.id == merchant_id, Merchant.user_id == user.id))
     m = result.scalar_one_or_none()
     if not m:
         raise HTTPException(status_code=404, detail="Merchant not found")

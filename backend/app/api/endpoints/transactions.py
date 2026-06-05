@@ -128,7 +128,7 @@ async def update_transaction(
     if final_merchant and final_merchant != "Pending" and final_category:
         # Include description_filter as a pattern so future imports with that keyword also match
         await _upsert_merchant_rule(
-            db, final_merchant,
+            db, user.id, final_merchant,
             old_merchant if merchant_changed else None,
             final_category,
             extra_pattern=body.description_filter,
@@ -140,7 +140,7 @@ async def update_transaction(
 
 
 async def _upsert_merchant_rule(
-    db: AsyncSession, merchant_name: str, original_name: str | None, category_id: str,
+    db: AsyncSession, user_id: str, merchant_name: str, original_name: str | None, category_id: str,
     extra_pattern: str | None = None,
 ):
     """Create or update a Merchant DB entry so future imports auto-categorize."""
@@ -162,7 +162,7 @@ async def _upsert_merchant_rule(
         return
 
     result = await db.execute(
-        select(Merchant).where(Merchant.name == merchant_name)
+        select(Merchant).where(and_(Merchant.name == merchant_name, Merchant.user_id == user_id))
     )
     existing = result.scalar_one_or_none()
 
@@ -173,6 +173,7 @@ async def _upsert_merchant_rule(
         existing.default_category_id = category_id
     else:
         db.add(Merchant(
+            user_id=user_id,
             name=merchant_name,
             patterns="|".join(sorted(patterns_set)),
             default_category_id=category_id,

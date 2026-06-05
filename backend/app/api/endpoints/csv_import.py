@@ -25,29 +25,52 @@ async def upload_file(
         raise HTTPException(status_code=400, detail="No file provided")
 
     ext = file.filename.rsplit(".", 1)[-1].lower()
-    if ext not in ("csv", "xml", "tsv"):
-        raise HTTPException(status_code=400, detail="File must be .csv, .tsv, or .xml")
+    if ext not in ("csv", "xml", "tsv", "pdf"):
+        raise HTTPException(status_code=400, detail="File must be .csv, .tsv, .xml, or .pdf")
 
     raw = await file.read()
-    # Try multiple encodings for CSV, XML is usually UTF-8
-    for encoding in ("utf-8-sig", "utf-8", "iso-8859-1", "cp1252"):
-        try:
-            content = raw.decode(encoding)
-            break
-        except (UnicodeDecodeError, ValueError):
-            continue
-    else:
-        raise HTTPException(status_code=400, detail="Could not decode file")
 
-    # Detect format to choose correct account type
-    from app.services.csv_import import detect_format
-    fmt = detect_format(content)
-    is_credit_card = fmt == "viseca"
+    # PDF files are handled separately (binary, not text)
+    if ext == "pdf":
+        from app.services.pdf_import import parse_postfinance_pdf_auto
+        try:
+            parsed = parse_postfinance_pdf_auto(raw)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"PDF parse failed: {e}")
+
+        fmt = "postfinance_cc_pdf" if parsed.get("is_credit_card") else "postfinance_pdf"
+        content = None  # not used for PDF
+        raw_transactions = parsed["transactions"]
+        opening_balance = parsed.get("opening_balance")
+    else:
+        # Text-based files
+        for encoding in ("utf-8-sig", "utf-8", "iso-8859-1", "cp1252"):
+            try:
+                content = raw.decode(encoding)
+                break
+            except (UnicodeDecodeError, ValueError):
+                continue
+        else:
+            raise HTTPException(status_code=400, detail="Could not decode file")
+
+        from app.services.csv_import import detect_format
+        fmt = detect_format(content)
+        raw_transactions = None
+        opening_balance = None
+
+    is_credit_card = fmt in ("viseca", "postfinance_cc_pdf")
 
     # Find or create the right account
     if not account_id:
         acct_type = "credit_card" if is_credit_card else "bank"
-        acct_name = "Viseca Credit Card" if is_credit_card else "PostFinance" if fmt == "postfinance" else "Valiant Bank"
+        if fmt == "viseca":
+            acct_name = "Viseca Credit Card"
+        elif fmt == "postfinance_cc_pdf":
+            acct_name = "PostFinance Mastercard"
+        elif fmt in ("postfinance", "postfinance_pdf"):
+            acct_name = "PostFinance"
+        else:
+            acct_name = "Valiant Bank"
         result = await db.execute(
             select(Account).where(Account.user_id == user.id, Account.type == acct_type)
         )
@@ -61,11 +84,22 @@ async def upload_file(
     await seed_merchants(db, user.id)
 
     try:
-        result = await import_transactions(db, user.id, account_id, content, use_ai=use_ai)
+        if fmt in ("postfinance_pdf", "postfinance_cc_pdf"):
+            # Pass pre-parsed transactions to import function
+            result = await import_transactions(
+                db, user.id, account_id, "",
+                use_ai=use_ai,
+                pre_parsed=raw_transactions,
+                opening_balance=opening_balance,
+            )
+        else:
+            result = await import_transactions(db, user.id, account_id, content, use_ai=use_ai)
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        import traceback, logging
+        logging.getLogger(__name__).error(f"Import failed:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Import failed: {e}")
 
 

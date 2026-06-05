@@ -85,7 +85,7 @@ async def get_portfolio(
     if not positions:
         return {
             "total_value": 0, "total_cost": 0, "total_pnl": 0, "total_pnl_pct": 0,
-            "cash_balance": 0, "positions_count": 0, "positions": [],
+            "cash_balance": 0, "net_deposits": 0, "positions_count": 0, "positions": [],
         }
 
     # Separate cash from stock positions
@@ -122,6 +122,26 @@ async def get_portfolio(
     total_pnl = total_value - total_cost
     total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else 0
     cash_balance = cash_pos.quantity if cash_pos else 0  # Already in CHF
+
+    # Net deposits (all-time): CASH deposits minus withdrawals. This is the
+    # denominator for true all-time P&L — market-value-of-stocks + cash minus
+    # the money the user actually put in. Reading from cost-basis would
+    # under-report P&L when realised gains have already been booked to cash.
+    dep_result = await db.execute(
+        select(func.coalesce(func.sum(StockTransaction.quantity), 0)).where(and_(
+            StockTransaction.user_id == user.id,
+            StockTransaction.symbol == "CASH",
+            StockTransaction.type == "deposit",
+        ))
+    )
+    wd_result = await db.execute(
+        select(func.coalesce(func.sum(StockTransaction.quantity), 0)).where(and_(
+            StockTransaction.user_id == user.id,
+            StockTransaction.symbol == "CASH",
+            StockTransaction.type == "withdraw",
+        ))
+    )
+    net_deposits = float(dep_result.scalar() or 0) - float(wd_result.scalar() or 0)
 
     # Get trade history for "bought on" dates
     trade_dates = {}
@@ -202,6 +222,7 @@ async def get_portfolio(
         "total_pnl": total_pnl,
         "total_pnl_pct": total_pnl_pct,
         "cash_balance": cash_balance,
+        "net_deposits": net_deposits,
         "base_currency": BASE_CCY,
         "fx_rates": {k: round(v, 4) for k, v in fx_rates.items()},
         "positions_count": len(pos_list),

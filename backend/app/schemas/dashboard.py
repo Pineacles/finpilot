@@ -7,7 +7,7 @@ class AccountBalance(BaseModel):
     name: str
     type: str
     currency: str
-    balance: float = 0.0
+    balance: float | None = 0.0
 
     model_config = {"from_attributes": True}
 

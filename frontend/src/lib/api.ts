@@ -313,6 +313,7 @@ export interface PortfolioSummary {
   total_pnl: number;
   total_pnl_pct: number;
   cash_balance: number;
+  net_deposits: number;
   positions_count: number;
   positions: Position[];
 }
@@ -558,20 +559,30 @@ export interface SymbolClassification {
   updated_at: string;
 }
 
-export interface BenchmarkPortfolioPoint { date: string; index: number; value_chf: number }
+export interface BenchmarkPortfolioPoint {
+  date: string;
+  index: number;
+  value_chf: number;
+  contributors?: Record<string, number>;  // symbol -> contribution_pp
+}
 export interface BenchmarkSeriesPoint { date: string; index: number; close: number }
 export interface BenchmarkCountedSymbol {
   symbol: string;
   asset_type: AssetType;
   source: ClassificationSource;
-  quantity: number;
-  first_tx_date: string;
+  active_from: string;       // ISO date — first day held in window
+  active_to: string | null;  // ISO date — last day held, or null if still held
+  current_qty: number;
+  contribution_pp: number;
+  // Legacy fields for backward-compat
+  quantity?: number;
+  first_tx_date?: string;
 }
 export interface BenchmarkExcludedSymbol {
   symbol: string;
   asset_type: AssetType;
   source: ClassificationSource;
-  reason: "classified_non_equity" | "no_transactions" | "saxo_only";
+  reason: "classified_non_equity" | "no_transactions" | "saxo_only" | "closed_before_window" | "closed";
 }
 export interface BenchmarkComparison {
   range: string;
@@ -584,6 +595,9 @@ export interface BenchmarkComparison {
     portfolio_return_pct: number;
     benchmark_return_pct: number;
     alpha_pct: number;
+    avg_daily_alpha_pp: number;
+    days_portfolio_ahead: number;
+    total_days_compared: number;
   };
   counted_symbols: BenchmarkCountedSymbol[];
   excluded_symbols: BenchmarkExcludedSymbol[];
