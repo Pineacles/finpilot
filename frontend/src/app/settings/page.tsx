@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
-import { api, type BrokerList, type BrokerStatus } from "@/lib/api";
+import { api, type BrokerList, type BrokerStatus, type SyncStatus } from "@/lib/api";
 import { GlassCard } from "@/components/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +39,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [gmailResult, setGmailResult] = useState<string | null>(null);
-  const [syncStatus, setSyncStatus] = useState<any[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -198,7 +198,7 @@ export default function SettingsPage() {
       {/* Settings groups */}
       {Object.entries(groups).map(([groupKey, group], gi) => {
         const Icon = GROUP_ICONS[groupKey] || Brain;
-        const status = syncStatus.find((s: any) => s.source === groupKey);
+        const status = syncStatus.find((s) => s.source === groupKey);
         return (
           <GlassCard key={groupKey} delay={0.1 + gi * 0.05}>
             <div className="flex items-center gap-3 mb-5">

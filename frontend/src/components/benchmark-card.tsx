@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Legend, ReferenceLine,
+  type TooltipProps,
 } from "recharts";
+import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { TrendingUp, TrendingDown, Info, Settings2, LineChart as LineChartIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,11 +68,11 @@ function fmtDate(iso: string): string {
   }
 }
 
-function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) {
+function CustomTooltip({ active, payload, label }: TooltipProps<ValueType, NameType>) {
   if (!active || !payload || payload.length === 0) return null;
 
-  const portEntry = payload.find((p: any) => p.dataKey === "portfolio");
-  const benchEntry = payload.find((p: any) => p.dataKey === "benchmark");
+  const portEntry = payload.find((p) => p.dataKey === "portfolio");
+  const benchEntry = payload.find((p) => p.dataKey === "benchmark");
 
   const portVal = portEntry?.value ?? null;
   const benchVal = benchEntry?.value ?? null;
