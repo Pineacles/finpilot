@@ -1,15 +1,30 @@
+# Python
 __pycache__/
+**/__pycache__/
 *.pyc
-.env
+*.pyo
+*.pyd
 *.egg-info/
 dist/
 build/
 .venv/
+*.db
+*.sqlite
+*.sqlite3
+
+# Node
 node_modules/
+**/node_modules/
 .next/
+**/.next/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Docker data volumes
 pgdata/
-frontend/node_modules/
-frontend/.next/
 
 # Internal AI/agent docs (kept local, never pushed)
 AGENT_API.md
