@@ -187,7 +187,7 @@ def _handle_run_failed(reason: str) -> None:
             count,
             reason,
         )
-        # TODO: send WhatsApp via NanoClaw IPC when integration is available
+        # TODO: send alert via external notification integration when available
 
 
 def _handle_run_success() -> None:

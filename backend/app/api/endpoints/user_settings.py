@@ -29,7 +29,7 @@ async def get_settings(
                 "keys": ["anthropic_api_key", "analysis_model", "analysis_endpoint", "analysis_auth_header"],
             },
             "agent": {
-                "label": "Agent (NanoClaw)",
+                "label": "Agent",
                 "keys": ["agent_endpoint", "agent_auth_header"],
             },
             "gmail": {

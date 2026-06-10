@@ -5,8 +5,9 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-User=example
-WorkingDirectory=/home/example/finpilot
+# Adjust User and WorkingDirectory to match your deployment
+User=finpilot
+WorkingDirectory=/opt/finpilot
 
 # Run inside the already-running api container so it shares the same Python env,
 # DB credentials, and network as the application.

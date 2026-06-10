@@ -21,8 +21,7 @@ _task: asyncio.Task | None = None
 
 async def _poll_loop():
     """Main polling loop. Checks every 60 seconds which users need polling."""
-    print("Gmail auto-poll scheduler started", flush=True)
-    logger.info("Gmail scheduler started")
+    logger.info("Gmail auto-poll scheduler started")
     # Track last poll time per user
     last_polled: dict[str, datetime] = {}
 

@@ -12,8 +12,8 @@ SETTING_KEYS = {
     "analysis_model": "ANALYSIS_MODEL",
     "analysis_endpoint": None,
     "analysis_auth_header": None,
-    # Agent (NanoClaw) — can scrape banks, fetch data, run tasks
-    "agent_endpoint": None,  # e.g. https://assistant.example.ch/api/finpilot
+    # Agent — can scrape banks, fetch data, run tasks
+    "agent_endpoint": None,  # e.g. https://your-agent.example.com/api/finpilot
     "agent_auth_header": None,
     # Gmail (for bank email notifications)
     "gmail_address": None,

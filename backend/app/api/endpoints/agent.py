@@ -1568,7 +1568,7 @@ async def update_tool_weight(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update a tool weight. Assistant is subject to guardrails; Admin bypasses all."""
+    """Update a tool weight. The agent is subject to guardrails; a configured admin bypasses all."""
     result = await db.execute(
         select(ToolWeight).where(
             and_(ToolWeight.tool_name == tool_name, ToolWeight.user_id == user.id)
@@ -1692,7 +1692,7 @@ async def create_proposal(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a tool weight proposal (submitted by Assistant, resolved by Admin)."""
+    """Create a tool weight proposal (submitted by the agent, reviewed by the user)."""
     proposal = ToolWeightProposal(
         tool_name=body.tool_name,
         current_weight=body.current_weight,
@@ -1704,7 +1704,7 @@ async def create_proposal(
         ic_30d=body.ic_30d,
         ic_60d=body.ic_60d,
         observations_count=body.observations_count,
-        proposed_by="assistant",
+        proposed_by="agent",
         user_id=user.id,
     )
     db.add(proposal)

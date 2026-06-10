@@ -111,9 +111,9 @@ export default function SettingsPage() {
             <User className="h-7 w-7 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[16px] font-bold">Demo User</p>
+            <p className="text-[16px] font-bold">FinPilot User</p>
             <p className="text-[13px] text-muted-foreground truncate">
-              {settings["gmail_address"] || "user@example.com"} · FinPilot
+              {settings["gmail_address"] || "your-gmail@example.com"} · FinPilot
             </p>
           </div>
           <div className="hidden sm:flex gap-6 text-[12px] shrink-0">
@@ -471,7 +471,7 @@ function BrokersSection({ settings, edits, onChange, onSaveThenAction }: Brokers
             <Input
               value={value("saxo_redirect_url")}
               onChange={e => onChange("saxo_redirect_url", e.target.value)}
-              placeholder="https://finpilot.example.com/settings/saxo/callback"
+              placeholder="https://your-finpilot-domain.example.com/settings/saxo/callback"
               className="rounded-xl h-11"
             />
             <p className="text-[11px] text-muted-foreground mt-1">

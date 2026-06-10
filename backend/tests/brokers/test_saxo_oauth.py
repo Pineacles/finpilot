@@ -27,7 +27,7 @@ async def _seed_configured(db, user_id):
         "saxo_environment": "sim",
         "saxo_app_key": "app-key-xyz",
         "saxo_app_secret": "app-secret-xyz",
-        "saxo_redirect_url": "https://finpilot.example.com/settings/saxo/callback",
+        "saxo_redirect_url": "https://your-finpilot-domain.example.com/settings/saxo/callback",
     })
 
 

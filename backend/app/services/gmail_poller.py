@@ -63,7 +63,7 @@ async def poll_gmail(db: AsyncSession, user_id: str) -> dict:
     """Poll Gmail for new Valiant notifications.
 
     Settings needed:
-      - gmail_address: email address (e.g. user@example.com)
+      - gmail_address: email address (e.g. your-email@gmail.com)
       - gmail_app_password: 16-char app password
       - gmail_last_uid: last processed email UID (for incremental polling)
 

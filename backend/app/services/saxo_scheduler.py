@@ -84,7 +84,6 @@ async def _refresh_one(user_id: str) -> None:
 
 async def _loop() -> None:
     """Every TICK_SECONDS, find near-expiry tokens and refresh them."""
-    print("Saxo refresh scheduler started", flush=True)
     logger.info("Saxo refresh scheduler started")
     while True:
         try:

@@ -25,7 +25,7 @@ async def _seed_connected(db, user_id, *, expires_in_seconds: int = 1200) -> Non
         "saxo_environment": "sim",
         "saxo_app_key": "k",
         "saxo_app_secret": "s",
-        "saxo_redirect_url": "https://finpilot.example.com/settings/saxo/callback",
+        "saxo_redirect_url": "https://your-finpilot-domain.example.com/settings/saxo/callback",
         "saxo_access_token": "access-v1",
         "saxo_refresh_token": "refresh-v1",
         "saxo_token_expires_at": str(int(time.time()) + expires_in_seconds),

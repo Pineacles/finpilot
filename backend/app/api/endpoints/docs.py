@@ -43,7 +43,7 @@ async def get_agent_docs_json():
     return {
         "title": "FinPilot API",
         "description": "Personal finance dashboard + stock portfolio tracker for Swiss banking",
-        "base_url": "https://finpilot.example.com/api",
+        "base_url": "https://your-finpilot-domain.example.com/api",
         "auth": {
             "jwt": {
                 "description": "For dashboard/user endpoints",

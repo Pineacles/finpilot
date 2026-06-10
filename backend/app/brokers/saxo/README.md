@@ -10,7 +10,7 @@ in this release — LIVE hosts are wired but rejected at runtime. Order routing
 1. Create a SIM developer app at <https://www.developer.saxo> ("Applications"
    → "Create Application"). Select:
    - **Grant Type**: Code
-   - **Redirect URL**: `https://finpilot.example.com/settings/saxo/callback`
+   - **Redirect URL**: `https://your-finpilot-domain.example.com/settings/saxo/callback`
    - **PKCE**: enabled (S256)
 2. Copy the generated **AppKey**, **AppSecret**, and the redirect URL back into
    FinPilot → Settings → Brokers → Saxo Bank.
