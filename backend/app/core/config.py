@@ -3,12 +3,19 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://finpilot:finpilot_dev@localhost:5432/finpilot"
-    SECRET_KEY: str = "change-me-in-production"
+    SECRET_KEY: str = ""
     ENVIRONMENT: str = "development"
 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
+
+    # Comma-separated CORS origins (e.g. "http://localhost:3000,https://your-domain.example.com")
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3010"
+
+    # When non-empty, a caller supplying this name as `updated_by` bypasses tool-weight guardrails.
+    # Set to the owner's display name in .env; leave blank to disable the bypass entirely.
+    GUARDRAIL_ADMIN_NAME: str = ""
 
     # Saxo Bank
     SAXO_APP_KEY: str = ""

@@ -11,6 +11,7 @@ from sqlalchemy import select, and_, func, case, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_user_by_api_key
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.account import Account
 from app.models.finance import Transaction, Budget, Category, RecurringExpense, SavingsGoal, Milestone
@@ -1582,7 +1583,9 @@ async def update_tool_weight(
         db.add(tw)
         await db.flush()
 
-    if body.updated_by != "admin":
+    admin = settings.GUARDRAIL_ADMIN_NAME
+    is_admin = bool(admin) and body.updated_by == admin
+    if not is_admin:
         if tw.locked:
             raise HTTPException(status_code=403, detail="Tool is locked — cannot update weight")
 

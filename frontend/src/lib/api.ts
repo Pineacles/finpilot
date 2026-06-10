@@ -271,10 +271,10 @@ export const api = {
     request<ToolRegimeBreakdown>(`/api/dashboard/tools/regime-breakdown/${encodeURIComponent(name)}`),
   toolsCorrelationMatrix: () => request<ToolCorrelationMatrix>("/api/dashboard/tools/correlation-matrix"),
   toolsPendingProposals: () => request<ToolWeightProposal[]>("/api/dashboard/tools/pending-proposals"),
-  resolveProposal: (id: string, resolution: "approved" | "rejected") =>
+  resolveProposal: (id: string, resolution: "approved" | "rejected", resolvedBy?: string) =>
     request<{ status: string }>(`/api/dashboard/tools/proposals/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ resolution, resolved_by: "admin" }),
+      body: JSON.stringify({ resolution, resolved_by: resolvedBy ?? process.env.NEXT_PUBLIC_ADMIN_NAME ?? "admin" }),
     }),
 
   // AI Trading (pending orders)
