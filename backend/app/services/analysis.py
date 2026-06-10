@@ -7,7 +7,10 @@ If `analysis_endpoint` is set, it POSTs to that URL instead of Anthropic —
 so you can point it at your own AI agent.
 """
 import json
+import logging
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 import anthropic
 import httpx
@@ -96,7 +99,8 @@ async def fetch_market_data_for_positions(positions: list[StockPosition]) -> dic
                 pos_data["pe_ratio"] = info.get("trailingPE")
                 pos_data["market_cap"] = info.get("marketCap")
                 pos_data["dividend_yield"] = info.get("dividendYield")
-        except Exception:
+        except Exception as _exc:
+            logger.warning("Failed to fetch market data for position: %s", _exc)
             pos_data["price_history_30d"] = []
 
         data["positions"].append(pos_data)
@@ -113,8 +117,8 @@ async def fetch_market_data_for_positions(positions: list[StockPosition]) -> dic
             data["market_overview"]["sp500_change_1m"] = round(
                 (spy_hist["Close"].iloc[-1] / spy_hist["Close"].iloc[0] - 1) * 100, 2
             )
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.warning("Failed to fetch S&P 500 data: %s", _exc)
 
     # 10Y Treasury
     try:
@@ -122,8 +126,8 @@ async def fetch_market_data_for_positions(positions: list[StockPosition]) -> dic
         tnx_hist = tnx.history(period="5d")
         if not tnx_hist.empty:
             data["economic_indicators"]["us_10y_yield"] = round(tnx_hist["Close"].iloc[-1], 2)
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.warning("Failed to fetch 10Y Treasury data: %s", _exc)
 
     # VIX
     try:
@@ -131,8 +135,8 @@ async def fetch_market_data_for_positions(positions: list[StockPosition]) -> dic
         vix_hist = vix.history(period="5d")
         if not vix_hist.empty:
             data["economic_indicators"]["vix"] = round(vix_hist["Close"].iloc[-1], 2)
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.warning("Failed to fetch VIX data: %s", _exc)
 
     return data
 

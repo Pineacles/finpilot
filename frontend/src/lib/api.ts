@@ -186,6 +186,8 @@ export const api = {
   getSettings: () => request<{ settings: Record<string, string>; groups: Record<string, { label: string; keys: string[] }>; api_key?: string }>("/api/settings"),
   updateSettings: (settings: Record<string, string>) =>
     request<{ status: string; updated: string[] }>("/api/settings", { method: "PUT", body: JSON.stringify({ settings }) }),
+  regenerateApiKey: () =>
+    request<{ api_key: string; message: string }>("/api/settings/api-key/regenerate", { method: "POST" }),
 
   // Sync
   syncGmail: () => request<{ status: string; new_transactions: number; balance: number | null; errors: string[] }>("/api/sync/gmail", { method: "POST" }),

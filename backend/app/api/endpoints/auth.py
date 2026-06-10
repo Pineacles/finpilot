@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
-from jose import JWTError
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,9 +12,12 @@ from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+limiter = Limiter(key_func=get_remote_address)
+
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(body.password, user.password_hash):
@@ -30,7 +35,7 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Invalid token type")
         user_id = payload.get("sub")
-    except JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     result = await db.execute(select(User).where(User.id == user_id))

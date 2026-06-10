@@ -42,6 +42,8 @@ export default function SettingsPage() {
   const [syncStatus, setSyncStatus] = useState<any[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([api.getSettings(), api.syncStatus()]).then(([s, st]) => {
@@ -49,6 +51,20 @@ export default function SettingsPage() {
       if (s.api_key) setApiKey(s.api_key);
     });
   }, []);
+
+  const handleRegenerateApiKey = async () => {
+    if (!confirm("Regenerate your API key? Any agents using the current key will stop working until updated.")) return;
+    setRegenerating(true);
+    try {
+      const r = await api.regenerateApiKey();
+      setNewApiKey(r.api_key);
+      setApiKey("••••••••••••" + r.api_key.slice(-4));
+    } catch {
+      alert("Failed to regenerate API key.");
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -146,18 +162,36 @@ export default function SettingsPage() {
               {apiKey}
             </code>
             <button
-              onClick={() => {
-                navigator.clipboard.writeText(apiKey);
-                setApiKeyCopied(true);
-                setTimeout(() => setApiKeyCopied(false), 2000);
-              }}
+              onClick={handleRegenerateApiKey}
+              disabled={regenerating}
               className="h-11 px-4 rounded-xl bg-accent hover:bg-muted transition-colors cursor-pointer flex items-center gap-1.5 text-[13px] font-medium shrink-0"
+              title="Regenerate API key"
             >
-              {apiKeyCopied
-                ? <><ClipboardCheck className="h-4 w-4 text-emerald-500" />Copied</>
-                : <><Copy className="h-4 w-4" />Copy</>}
+              <RefreshCw className={`h-4 w-4 ${regenerating ? "animate-spin" : ""}`} />
             </button>
           </div>
+          {newApiKey && (
+            <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+              <p className="text-[12px] text-amber-600 dark:text-amber-400 font-semibold mb-1">
+                New API key — copy it now, it will not be shown again:
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-[12px] font-mono break-all">{newApiKey}</code>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(newApiKey);
+                    setApiKeyCopied(true);
+                    setTimeout(() => setApiKeyCopied(false), 2000);
+                  }}
+                  className="h-8 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 transition-colors flex items-center gap-1 text-[12px] shrink-0"
+                >
+                  {apiKeyCopied
+                    ? <><ClipboardCheck className="h-3 w-3 text-emerald-500" />Copied</>
+                    : <><Copy className="h-3 w-3" />Copy</>}
+                </button>
+              </div>
+            </div>
+          )}
         </GlassCard>
       )}
 

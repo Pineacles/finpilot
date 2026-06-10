@@ -6,8 +6,11 @@ Saxo HTTP layer directly.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 import zoneinfo
+
+logger = logging.getLogger(__name__)
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
@@ -140,7 +143,8 @@ async def request_order(
     tz_name = await _get(db, user_id, "trading_timezone")
     try:
         user_tz = zoneinfo.ZoneInfo(tz_name)
-    except Exception:
+    except Exception as _exc:
+        logger.warning("Invalid trading_timezone %r, falling back to Europe/Zurich: %s", tz_name, _exc)
         user_tz = zoneinfo.ZoneInfo("Europe/Zurich")
 
     local_now = datetime.now(user_tz)
@@ -422,8 +426,8 @@ async def _estimate_notional_chf(
         currency = precheck.currency
         fx = await _get_fx(currency, "CHF")
         return cash * fx, fees * fx, currency
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.warning("Order precheck failed for %s, falling back to estimate: %s", symbol, _exc)
 
     # Fallback: use limit price or 0
     price = limit_price or 0.0
@@ -438,12 +442,13 @@ async def _get_fx(from_currency: str | None, to_currency: str) -> float:
     try:
         from app.services.portfolio_analytics import get_fx_rate  # type: ignore
         return await get_fx_rate(from_currency, to_currency)
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.warning("portfolio_analytics FX rate unavailable (%s→%s): %s", from_currency, to_currency, _exc)
     try:
         from app.services.benchmark import get_fx_rate as bget_fx  # type: ignore
         return await bget_fx(from_currency, to_currency)
-    except Exception:
+    except Exception as _exc:
+        logger.warning("benchmark FX rate unavailable (%s→%s): %s; defaulting to 1.0", from_currency, to_currency, _exc)
         return 1.0
 
 
