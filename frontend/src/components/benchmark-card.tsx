@@ -4,9 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Legend, ReferenceLine,
-  type TooltipProps,
 } from "recharts";
-import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { TrendingUp, TrendingDown, Info, Settings2, LineChart as LineChartIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,20 +66,27 @@ function fmtDate(iso: string): string {
   }
 }
 
-function CustomTooltip({ active, payload, label }: TooltipProps<ValueType, NameType>) {
+interface TooltipEntry {
+  dataKey?: string;
+  value?: number;
+  // recharts attaches the raw row data under `.payload`
+  payload?: { contributors?: Record<string, number> };
+}
+
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipEntry[]; label?: string | number }) {
   if (!active || !payload || payload.length === 0) return null;
 
   const portEntry = payload.find((p) => p.dataKey === "portfolio");
   const benchEntry = payload.find((p) => p.dataKey === "benchmark");
 
-  const portVal = portEntry?.value ?? null;
-  const benchVal = benchEntry?.value ?? null;
+  const portVal: number | null = portEntry?.value ?? null;
+  const benchVal: number | null = benchEntry?.value ?? null;
   const contributors: Record<string, number> = portEntry?.payload?.contributors ?? {};
   const alphaVal = portVal !== null && benchVal !== null ? portVal - benchVal : null;
 
   return (
     <div className="rounded-xl border border-border/60 bg-background/95 shadow-lg p-3 text-[12px] min-w-[160px]">
-      <div className="font-medium text-foreground mb-2">{label ? fmtDate(label) : ""}</div>
+      <div className="font-medium text-foreground mb-2">{label ? fmtDate(label as string) : ""}</div>
       {portVal !== null && (
         <div className="mb-1">
           <span className="text-blue-500 font-medium">Portfolio</span>

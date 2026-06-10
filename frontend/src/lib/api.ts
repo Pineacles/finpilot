@@ -1,6 +1,22 @@
 // All API calls go through the Next.js proxy at /api/* (same origin)
 // The proxy forwards to the backend at localhost:8001
 
+// Import all types for use within this file.
+// They are also re-exported at the bottom so callers can import from '@/lib/api'.
+import type {
+  Overview, PortfolioSummary, PortfolioSnapshot, ValueTimelinePoint, Trade,
+  StockTransaction, PublicPortfolio, StockAnalysisEntry, TransactionItem,
+  CreateTransaction, Category, Budget, CreateBudget, SavingsGoal, CreateGoal,
+  Milestone, CreateMilestone, MerchantRule, ImportResult, MonthlyStats,
+  YearlyStats, PortfolioAnalysis, AnalysisListItem, SyncStatus, BrokerList,
+  BrokerStatus, BrokerAccount, SaxoSyncResult, SaxoSubPortfolio,
+  SaxoOrderInput, SaxoPrecheckResult, SaxoModifyInput, SaxoOrderSummary,
+  BenchmarkComparison, SymbolClassification, PostMortem, PostMortemInput,
+  BuyAssessment, BuyAssessmentInput, ToolLeaderboardEntry, ToolDrillDown,
+  ToolRegimeBreakdown, ToolCorrelationMatrix, ToolWeightProposal,
+  PendingOrder, PendingOrderStatus, AssetType,
+} from "@/lib/types";
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const headers: Record<string, string> = {
