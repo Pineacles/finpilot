@@ -71,7 +71,26 @@ export interface CreateMilestone { name: string; description?: string; target_da
 export interface MerchantRule { id: string; name: string; patterns: string; default_category_id: string | null; category_name: string | null; is_system: boolean }
 
 export interface ImportLogEntry { msg: string; detail: string }
-export interface ImportResult { imported: number; skipped: number; categorized: number; uncategorized: number; total_rows: number; log?: ImportLogEntry[] }
+export interface SettlementResult { card_account_id: string; card_account_name: string; settled_amount: number; settlement_date: string; skipped: boolean }
+export interface ImportResult { imported: number; skipped: number; categorized: number; uncategorized: number; total_rows: number; log?: ImportLogEntry[]; settlements?: SettlementResult[]; format?: string; saved_profile?: string }
+
+// Credit-card settlement patterns (Feature A settings UI)
+export interface CreditCardAccount { id: string; name: string; currency: string; settlement_patterns: string[] | null }
+
+// Generic CSV column-mapper (Feature B)
+export interface ColumnMapping {
+  date_col: string;
+  amount_col?: string | null;
+  description_col?: string | null;
+  debit_col?: string | null;
+  credit_col?: string | null;
+  date_format: string;
+  decimal_separator: string;
+  invert_amount: boolean;
+  currency: string;
+}
+export interface CsvPreview { columns: string[]; rows: Record<string, string>[]; delimiter: string; encoding: string }
+export interface ImportProfile { id: string; name: string; account_id: string | null; mapping: ColumnMapping; created_at: string }
 
 export interface MonthlyStats {
   period: { year: number; month: number; start: string; end: string };

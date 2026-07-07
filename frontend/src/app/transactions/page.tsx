@@ -13,6 +13,7 @@ import {
 import { formatCurrency, formatDate, cn } from "@/lib/format";
 import { GlassCard } from "@/components/glass-card";
 import { CategoryPill } from "@/components/category-pill";
+import { CsvMapperModal } from "@/components/csv-mapper-modal";
 import {
   Upload,
   Sparkles,
@@ -69,15 +70,19 @@ function TransactionsInner() {
   const [importLogs, setImportLogs] = useState<ImportLogEntry[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
+  const [lastImportFile, setLastImportFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const consoleRef = useRef<HTMLDivElement>(null);
 
   const [showImportPage, setShowImportPage] = useState(false);
   const [importFiles, setImportFiles] = useState<File[]>([]);
-  const [importResults, setImportResults] = useState<{file: string; status: "pending"|"importing"|"done"|"error"; result?: ImportResult; error?: string}[]>([]);
+  const [importResults, setImportResults] = useState<{file: string; status: "pending"|"importing"|"done"|"error"; result?: ImportResult; error?: string; fileObj?: File}[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [bulkImporting, setBulkImporting] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
+
+  // Generic CSV column-mapper (fallback for unrecognized formats)
+  const [mapperFile, setMapperFile] = useState<File | null>(null);
 
   // Uncategorized panel
   const [selectedUncategorized, setSelectedUncategorized] = useState<Set<string>>(
@@ -213,6 +218,7 @@ function TransactionsInner() {
     setImportResult(null);
     setImportLogs([]);
     setImportError(null);
+    setLastImportFile(file);
     setShowConsole(true);
 
     // Simulate progress during the network request
@@ -269,6 +275,7 @@ function TransactionsInner() {
     const results = importFiles.map(f => ({
       file: f.name,
       status: "pending" as const,
+      fileObj: f,
     }));
     setImportResults([...results]);
 
@@ -293,6 +300,19 @@ function TransactionsInner() {
     setImportResults([]);
     setBulkImporting(false);
     setIsDragging(false);
+  };
+
+  /* ---- Generic CSV column-mapper (fallback for unrecognized formats) --- */
+  const handleMapperImported = async (result: ImportResult) => {
+    const importedFile = mapperFile;
+    setMapperFile(null);
+    setImportResults(prev => prev.map(r => (r.fileObj === importedFile ? { ...r, status: "done" as const, result } : r)));
+    if (importedFile === lastImportFile) {
+      setImportResult(result);
+      if (result.log) setImportLogs(result.log);
+      setShowConsole(true);
+    }
+    await load();
   };
 
   /* ---- Auto-scroll console --------------------------------------- */
@@ -592,7 +612,17 @@ function TransactionsInner() {
                             </div>
                           )}
                           {r.status === "error" && r.error && (
-                            <p className="text-[12px] text-loss">{r.error}</p>
+                            <div className="space-y-2">
+                              <p className="text-[12px] text-loss">{r.error}</p>
+                              {r.fileObj && (
+                                <button
+                                  onClick={() => setMapperFile(r.fileObj!)}
+                                  className="text-[12px] font-medium text-primary hover:underline cursor-pointer"
+                                >
+                                  Map columns manually →
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       ))}
@@ -675,9 +705,19 @@ function TransactionsInner() {
 
               {/* Error */}
               {importError && (
-                <div className="flex items-center gap-2 text-[13px] text-loss">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  {importError}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[13px] text-loss">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    {importError}
+                  </div>
+                  {lastImportFile && (
+                    <button
+                      onClick={() => setMapperFile(lastImportFile)}
+                      className="text-[13px] font-medium text-primary hover:underline cursor-pointer"
+                    >
+                      Map columns manually →
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -702,6 +742,17 @@ function TransactionsInner() {
               </div>
             </GlassCard>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ---- Generic CSV column-mapper (unrecognized formats) ------- */}
+      <AnimatePresence>
+        {mapperFile && (
+          <CsvMapperModal
+            file={mapperFile}
+            onClose={() => setMapperFile(null)}
+            onImported={handleMapperImported}
+          />
         )}
       </AnimatePresence>
 

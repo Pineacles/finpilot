@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
-import { api, type BrokerList, type BrokerStatus, type SyncStatus } from "@/lib/api";
+import { api, type BrokerList, type BrokerStatus, type SyncStatus, type CreditCardAccount } from "@/lib/api";
 import { GlassCard } from "@/components/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import {
   Save, CheckCircle2, RefreshCw, Brain, Bot, Mail, Clock, XCircle,
   Key, ClipboardCheck, Copy, AlertTriangle, User, Building2, Plug, PlugZap, Link2Off,
+  CreditCard, Tag,
 } from "lucide-react";
+
+const DEFAULT_SETTLEMENT_PATTERNS = ["cembra", "cumulus", "migros bank cumulus", "viseca payment services", "viseca card services"];
 
 const LABELS: Record<string, string> = {
   anthropic_api_key: "Anthropic API Key", ai_model: "AI Model",
@@ -275,6 +278,9 @@ export default function SettingsPage() {
         />
       </Suspense>
 
+      {/* Accounts — credit-card settlement patterns */}
+      <AccountsSection />
+
       {/* Danger zone */}
       <GlassCard delay={0.32} className="border-l-4 border-l-red-500/70">
         <div className="flex items-center gap-2 mb-1">
@@ -530,6 +536,130 @@ function BrokersSection({ settings, edits, onChange, onSaveThenAction }: Brokers
             </Button>
           </div>
         </div>
+      </div>
+    </GlassCard>
+  );
+}
+
+
+// ─── Accounts section — credit-card settlement patterns ────────────────────
+// Configures the issuer-match keywords services/settlement.py uses to detect
+// a credit card's bank-side statement payment (e.g. Migros Cumulus, issued
+// by Cembra) and auto-reset that card's balance to 0 on import.
+
+function AccountsSection() {
+  const [cards, setCards] = useState<CreditCardAccount[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const load = async () => {
+    try {
+      const data = await api.creditCardAccounts();
+      setCards(data);
+      setDrafts(Object.fromEntries(data.map(c => [c.id, (c.settlement_patterns || []).join(", ")])));
+    } finally {
+      setLoaded(true);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  if (!loaded || cards.length === 0) return null;
+
+  const handleSave = async (id: string) => {
+    setSaving(id); setSavedId(null);
+    const patterns = (drafts[id] || "")
+      .split(",")
+      .map(p => p.trim())
+      .filter(Boolean);
+    try {
+      const updated = await api.updateSettlementPatterns(id, patterns.length ? patterns : null);
+      setCards(prev => prev.map(c => (c.id === id ? updated : c)));
+      setDrafts(prev => ({ ...prev, [id]: (updated.settlement_patterns || []).join(", ") }));
+      setSavedId(id);
+      setTimeout(() => setSavedId(null), 2500);
+    } catch (e: any) {
+      alert(e?.message || "Failed to save settlement patterns.");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleReset = async (id: string) => {
+    setSaving(id);
+    try {
+      const updated = await api.updateSettlementPatterns(id, null);
+      setCards(prev => prev.map(c => (c.id === id ? updated : c)));
+      setDrafts(prev => ({ ...prev, [id]: "" }));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <GlassCard delay={0.3}>
+      <div className="flex items-center gap-3 mb-2">
+        <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
+          <CreditCard className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <div>
+          <h2 className="text-[16px] font-semibold">Accounts</h2>
+          <p className="text-[12px] text-muted-foreground">Credit-card settlement auto-reset</p>
+        </div>
+      </div>
+      <p className="text-[12px] text-muted-foreground mb-5">
+        When a bank import contains the payment to your card issuer, FinPilot categorizes it as a
+        Transfer and resets that card&apos;s balance to 0. Configure the keywords used to match the
+        issuer (comma-separated) — leave blank to use the defaults.
+      </p>
+
+      <div className="space-y-4">
+        {cards.map(card => (
+          <div key={card.id} className="rounded-2xl border border-border p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Tag className="h-4 w-4 text-muted-foreground" />
+                <p className="text-[14px] font-semibold">{card.name}</p>
+                <Badge variant="secondary" className="rounded-lg text-[11px]">{card.currency}</Badge>
+              </div>
+              {savedId === card.id && (
+                <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 rounded-xl">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />Saved
+                </Badge>
+              )}
+            </div>
+            <Input
+              value={drafts[card.id] ?? ""}
+              onChange={e => setDrafts(prev => ({ ...prev, [card.id]: e.target.value }))}
+              placeholder={`Default: ${DEFAULT_SETTLEMENT_PATTERNS.join(", ")}`}
+              className="rounded-xl h-11 text-[13px]"
+            />
+            <div className="flex justify-end gap-2 mt-3">
+              {card.settlement_patterns && card.settlement_patterns.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl text-[12px]"
+                  onClick={() => handleReset(card.id)}
+                  disabled={saving === card.id}
+                >
+                  Reset to defaults
+                </Button>
+              )}
+              <Button
+                size="sm"
+                className="rounded-xl text-[12px]"
+                onClick={() => handleSave(card.id)}
+                disabled={saving === card.id}
+              >
+                <Save className="h-3.5 w-3.5 mr-1.5" />
+                {saving === card.id ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </div>
+        ))}
       </div>
     </GlassCard>
   );

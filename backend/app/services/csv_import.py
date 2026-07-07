@@ -22,6 +22,7 @@ from app.services.categorize import categorize_transaction, batch_categorize_wit
 from app.services.seed_merchants import seed_merchants
 from app.services.camt053 import parse_camt053
 from app.services import classifier
+from app.services import settlement as settlement_service
 
 
 def parse_valiant_csv(content: str) -> list[dict]:
@@ -307,6 +308,7 @@ async def import_transactions(
     use_ai: bool = True,
     pre_parsed: list[dict] | None = None,
     opening_balance: float | None = None,
+    source_format: str | None = None,
 ) -> dict:
     """Import transactions from CSV, PDF, or camt.053 with auto-categorization."""
     log: list[dict] = []
@@ -315,9 +317,9 @@ async def import_transactions(
         log.append({"msg": msg, "detail": detail})
 
     if pre_parsed is not None:
-        # Pre-parsed transactions (e.g. from PDF)
+        # Pre-parsed transactions (e.g. from PDF, or the generic column-mapper)
         raw_transactions = pre_parsed
-        fmt = "postfinance_pdf"
+        fmt = source_format or "postfinance_pdf"
         _log(f"Detected format: {fmt}")
     else:
         fmt = detect_format(content)
@@ -609,6 +611,32 @@ async def import_transactions(
     else:
         _log("AI: skipped (no uncategorized or AI disabled)")
 
+    # ── Credit-card settlement auto-reset ───────────────────────────
+    # Piggybacks on the dedup above: only transactions newly inserted (or
+    # upgraded from a "Pending" placeholder) in *this* import are examined,
+    # never existing rows — so re-importing the same file is a no-op here
+    # too (nothing new to settle).
+    settlement_results: list[dict] = []
+    if imported_txns:
+        account_result = await db.execute(select(Account).where(Account.id == account_id))
+        source_account = account_result.scalar_one_or_none()
+        if source_account is not None:
+            settlement_results = await settlement_service.detect_and_settle(
+                db, user_id, source_account, imported_txns,
+            )
+            for r in settlement_results:
+                if r["skipped"]:
+                    _log(
+                        f"Settlement match on {r['card_account_name']} but balance already CHF 0.00 — no reset needed",
+                        "settlement",
+                    )
+                else:
+                    _log(
+                        f"Detected {r['card_account_name']} settlement of CHF {r['settled_amount']:.2f} "
+                        f"→ credit card reset to 0",
+                        "settlement",
+                    )
+
     await db.commit()
 
     categorized = sum(1 for t in imported_txns if t.category_id) + ai_categorized
@@ -632,4 +660,5 @@ async def import_transactions(
         "uncategorized": still_uncategorized,
         "total_rows": len(raw_transactions),
         "log": log,
+        "settlements": settlement_results,
     }

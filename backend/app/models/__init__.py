@@ -5,6 +5,7 @@ from app.models.finance import Transaction, Category, Budget, SavingsGoal, Miles
 from app.models.sync import SyncLog
 from app.models.settings import UserSetting
 from app.models.merchant import Merchant, CategorizationLog
+from app.models.import_profile import ImportProfile
 
 __all__ = [
     "User",
@@ -23,4 +24,5 @@ __all__ = [
     "UserSetting",
     "Merchant",
     "CategorizationLog",
+    "ImportProfile",
 ]

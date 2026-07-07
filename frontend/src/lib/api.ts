@@ -11,6 +11,7 @@ import type {
   YearlyStats, SyncStatus, BrokerList,
   BrokerStatus, BrokerAccount, SaxoSyncResult, SaxoSubPortfolio,
   SymbolClassification, AssetType,
+  CreditCardAccount, ColumnMapping, CsvPreview, ImportProfile,
 } from "@/lib/types";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -169,6 +170,56 @@ export const api = {
     }
     return res.json() as Promise<ImportResult>;
   },
+
+  // Generic CSV column-mapper (fallback for unrecognized formats, e.g. Cumulus exports)
+  csvPreview: async (file: File) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/import/csv/preview", {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || "Preview failed");
+    }
+    return res.json() as Promise<CsvPreview>;
+  },
+  csvMappedImport: async (
+    file: File, accountId: string, mapping: ColumnMapping, useAi = true, saveAsProfileName?: string,
+  ) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const form = new FormData();
+    form.append("file", file);
+    form.append("account_id", accountId);
+    form.append("mapping", JSON.stringify(mapping));
+    form.append("use_ai", String(useAi));
+    if (saveAsProfileName) form.append("save_as_profile_name", saveAsProfileName);
+    const res = await fetch("/api/import/csv/mapped", {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || "Import failed");
+    }
+    return res.json() as Promise<ImportResult>;
+  },
+  importProfiles: () => request<ImportProfile[]>("/api/import/profiles"),
+  createImportProfile: (data: { name: string; account_id?: string; mapping: ColumnMapping }) =>
+    request<ImportProfile>("/api/import/profiles", { method: "POST", body: JSON.stringify(data) }),
+  deleteImportProfile: (id: string) =>
+    request<{ status: string; id: string }>(`/api/import/profiles/${id}`, { method: "DELETE" }),
+
+  // Credit-card settlement patterns (Cumulus/Cembra auto-reset config)
+  creditCardAccounts: () => request<CreditCardAccount[]>("/api/dashboard/accounts/credit-cards"),
+  updateSettlementPatterns: (accountId: string, patterns: string[] | null) =>
+    request<CreditCardAccount>(`/api/dashboard/accounts/${accountId}/settlement-patterns`, {
+      method: "PATCH", body: JSON.stringify({ patterns }),
+    }),
 
   // Stats
   monthlyStats: (year?: number, month?: number) => {
