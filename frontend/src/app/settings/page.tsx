@@ -14,21 +14,21 @@ import {
 } from "lucide-react";
 
 const LABELS: Record<string, string> = {
-  anthropic_api_key: "Anthropic API Key", analysis_model: "Analysis Model",
-  analysis_endpoint: "Custom Agent Endpoint", analysis_auth_header: "Agent Auth Header",
+  anthropic_api_key: "Anthropic API Key", ai_model: "AI Model",
+  ai_endpoint: "Custom Agent Endpoint", ai_auth_header: "Agent Auth Header",
   agent_endpoint: "Agent API Endpoint", agent_auth_header: "Agent Auth Header",
   gmail_address: "Gmail Address", gmail_app_password: "App Password",
   gmail_poll_interval: "Auto-poll Interval (minutes)", gmail_sender_filter: "Sender Emails to Monitor",
 };
 const PLACEHOLDERS: Record<string, string> = {
-  anthropic_api_key: "sk-ant-...", analysis_model: "claude-sonnet-4-20250514",
-  analysis_endpoint: "https://your-agent.example.com/analyze", analysis_auth_header: "Bearer sk-your-token",
+  anthropic_api_key: "sk-ant-...", ai_model: "claude-sonnet-4-20250514",
+  ai_endpoint: "https://your-agent.example.com/analyze", ai_auth_header: "Bearer sk-your-token",
   agent_endpoint: "https://your-agent.example.com/api/finpilot", agent_auth_header: "Bearer sk-your-token",
   gmail_address: "your-email@gmail.com", gmail_app_password: "16-char app password",
   gmail_poll_interval: "15 (minutes), 0 = manual", gmail_sender_filter: "noreply@valiant.ch",
 };
-const SENSITIVE = new Set(["anthropic_api_key", "analysis_auth_header", "agent_auth_header", "gmail_app_password"]);
-const GROUP_ICONS: Record<string, typeof Brain> = { analysis: Brain, agent: Bot, gmail: Mail };
+const SENSITIVE = new Set(["anthropic_api_key", "ai_auth_header", "agent_auth_header", "gmail_app_password"]);
+const GROUP_ICONS: Record<string, typeof Brain> = { ai: Brain, agent: Bot, gmail: Mail };
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});

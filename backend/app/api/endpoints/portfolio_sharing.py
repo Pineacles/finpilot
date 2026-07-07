@@ -11,6 +11,7 @@ from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot
 from app.models.user import User
 from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate
 from app.services.currency import normalize_currency
+from app.services.portfolio_service import build_value_timeline
 
 # ── Public portfolio view (no auth) ────────────────────────────
 
@@ -227,7 +228,7 @@ async def get_public_value_timeline(token: str, db: AsyncSession = Depends(get_d
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Portfolio not found")
-    return await _build_value_timeline(db, user.id)
+    return await build_value_timeline(db, user.id)
 
 
 @public_router.get("/portfolio/{token}/history")

@@ -7,11 +7,12 @@ from app.core.database import get_db
 from app.models.sync import SyncLog
 from app.models.user import User
 from app.schemas.stock import SyncStatusResponse
+from app.schemas.sync import GmailPollResponse
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
 
-@router.post("/gmail")
+@router.post("/gmail", response_model=GmailPollResponse)
 async def trigger_gmail_poll(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

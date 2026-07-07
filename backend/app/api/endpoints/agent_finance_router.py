@@ -1,19 +1,21 @@
 """Agent sub-router — API key auth for AI assistant integration."""
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, and_, func, case, desc
+from sqlalchemy import select, and_, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_user_by_api_key
 from app.core.database import get_db
 from app.models.account import Account
-from app.models.finance import Transaction, Budget, Category, RecurringExpense, SavingsGoal, Milestone
-from app.models.merchant import Merchant
-from app.models.stock import StockPosition, StockTransaction
+from app.models.finance import Transaction, Budget, Category, RecurringExpense
+from app.models.stock import StockPosition
 from app.models.user import User
-from app.schemas.finance import TransactionCreate, TransactionResponse
+from app.schemas.finance import TransactionCreate
+from app.schemas.stats import MonthlyStatsResponse, YearlyStatsResponse
+from app.services import transaction_service, stats_service
+from app.services.transaction_service import TransactionNotFoundError
 
 router = APIRouter(tags=["agent"])
 
@@ -139,7 +141,7 @@ async def portfolio_summary(
 
 # ── Stats ────────────────────────────────────────────────────────
 
-@router.get("/stats/monthly")
+@router.get("/stats/monthly", response_model=MonthlyStatsResponse)
 async def agent_monthly_stats(
     year: int | None = None,
     month: int | None = None,
@@ -147,20 +149,17 @@ async def agent_monthly_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Monthly stats — same as dashboard endpoint but with API key auth."""
-    from app.api.endpoints.stats import monthly_stats
-    # Inject user into the request
-    return await monthly_stats(year=year, month=month, user=user, db=db)
+    return await stats_service.monthly_stats(db, user.id, year=year, month=month)
 
 
-@router.get("/stats/yearly")
+@router.get("/stats/yearly", response_model=YearlyStatsResponse)
 async def agent_yearly_stats(
     year: int | None = None,
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
     """Yearly stats — same as dashboard endpoint but with API key auth."""
-    from app.api.endpoints.stats import yearly_stats
-    return await yearly_stats(year=year, user=user, db=db)
+    return await stats_service.yearly_stats(db, user.id, year=year)
 
 
 # ── Transactions ─────────────────────────────────────────────────
@@ -176,30 +175,20 @@ async def agent_list_transactions(
     db: AsyncSession = Depends(get_db),
 ):
     """List transactions with filtering."""
-    query = (
-        select(Transaction, Category)
-        .outerjoin(Category, Transaction.category_id == Category.id)
-        .where(Transaction.user_id == user.id)
+    txns = await transaction_service.list_transactions(
+        db, user.id,
+        category_name=category,
+        from_date=date.fromisoformat(from_date) if from_date else None,
+        to_date=date.fromisoformat(to_date) if to_date else None,
+        search=search, limit=limit,
     )
-    if category:
-        query = query.where(Category.name == category)
-    if from_date:
-        query = query.where(Transaction.date >= date.fromisoformat(from_date))
-    if to_date:
-        query = query.where(Transaction.date <= date.fromisoformat(to_date))
-    if search:
-        query = query.where(Transaction.merchant.ilike(f"%{search}%"))
-
-    query = query.order_by(desc(Transaction.date)).limit(limit)
-    result = await db.execute(query)
-
     return [
         {
-            "id": txn.id, "date": txn.date.isoformat(), "merchant": txn.merchant,
-            "amount": txn.amount, "currency": txn.currency,
-            "category": cat.name if cat else None, "notes": txn.notes,
+            "id": t.id, "date": t.date.isoformat(), "merchant": t.merchant,
+            "amount": t.amount, "currency": t.currency,
+            "category": t.category_name, "notes": t.notes,
         }
-        for txn, cat in result.all()
+        for t in txns
     ]
 
 
@@ -210,56 +199,40 @@ async def log_transaction(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a transaction."""
-    txn = Transaction(user_id=user.id, **body.model_dump())
-    db.add(txn)
-    await db.commit()
+    txn = await transaction_service.create_transaction(db, user.id, body)
     return {"status": "ok", "id": txn.id}
 
 
-# ── Categorization ───────────────────────────────────────────────
-
-
-async def _upsert_merchant_rule(
-    db: AsyncSession, merchant_name: str, original_name: str | None, category_id: str,
+@router.delete("/transactions/{transaction_id}")
+async def agent_delete_transaction(
+    transaction_id: str,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Create or update a Merchant DB entry so future imports auto-categorize.
+    """Delete a transaction."""
+    try:
+        await transaction_service.delete_transaction(db, user.id, transaction_id)
+    except TransactionNotFoundError:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return {"status": "deleted", "id": transaction_id}
 
-    Builds patterns from both the new merchant name and the original name.
-    """
-    # Build patterns: lowercase, pipe-separated, deduplicated
-    patterns_set: set[str] = set()
-    for name in (merchant_name, original_name):
-        if name:
-            cleaned = name.strip().lower()
-            if cleaned:
-                patterns_set.add(cleaned)
-                # Also add significant words (3+ chars) as individual patterns
-                for word in cleaned.split():
-                    if len(word) >= 4 and word not in ("gmbh", "sarl", "bank", "card", "payment", "services"):
-                        patterns_set.add(word)
 
-    if not patterns_set:
-        return
+class BulkDeleteRequest(BaseModel):
+    transaction_ids: list[str]
 
-    # Check if a merchant with this name already exists
-    result = await db.execute(
-        select(Merchant).where(Merchant.name == merchant_name)
-    )
-    existing = result.scalar_one_or_none()
 
-    if existing:
-        # Merge new patterns into existing
-        old_patterns = set(p.strip().lower() for p in existing.patterns.split("|") if p.strip())
-        merged = old_patterns | patterns_set
-        existing.patterns = "|".join(sorted(merged))
-        existing.default_category_id = category_id
-    else:
-        db.add(Merchant(
-            name=merchant_name,
-            patterns="|".join(sorted(patterns_set)),
-            default_category_id=category_id,
-            is_system=False,
-        ))
+@router.post("/transactions/bulk-delete")
+async def agent_bulk_delete_transactions(
+    body: BulkDeleteRequest,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete multiple transactions by id in one call."""
+    deleted = await transaction_service.bulk_delete_transactions(db, user.id, body.transaction_ids)
+    return {"status": "ok", "deleted": deleted}
+
+
+# ── Categorization ───────────────────────────────────────────────
 
 
 @router.post("/categorize")
@@ -356,7 +329,9 @@ async def agent_categorize(
     # Upsert Merchant DB rule so future imports auto-categorize correctly
     final_merchant_name = new_merchant or matched_merchant or merchant
     if final_merchant_name and final_merchant_name != "Pending":
-        await _upsert_merchant_rule(db, final_merchant_name, matched_merchant or merchant, cat.id)
+        await transaction_service.upsert_merchant_rule(
+            db, user.id, final_merchant_name, matched_merchant or merchant, cat.id,
+        )
 
     await db.commit()
 

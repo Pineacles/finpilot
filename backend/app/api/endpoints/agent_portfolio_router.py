@@ -3,17 +3,22 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
-from sqlalchemy import select, and_, func, case, desc
+from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_user_by_api_key
 from app.core.database import get_db
 from app.models.account import Account
-from app.models.finance import Transaction, Budget, Category, RecurringExpense, SavingsGoal, Milestone
-from app.models.merchant import Merchant
-from app.models.stock import StockPosition, StockTransaction
+from app.models.finance import Transaction, Budget, Category, SavingsGoal, Milestone
+from app.models.stock import StockPosition
 from app.models.user import User
-from app.schemas.finance import TransactionCreate, TransactionResponse
+from app.services import portfolio_service
+from app.services.portfolio_service import (
+    TradeNotFoundError,
+    InsufficientCashError,
+    InsufficientSharesError,
+    InvalidTickerError,
+)
 
 router = APIRouter(tags=["agent"])
 
@@ -39,9 +44,26 @@ async def agent_trade(
     db: AsyncSession = Depends(get_db),
 ):
     """Execute a portfolio trade. Same as dashboard but with API key auth."""
-    from app.api.endpoints.portfolio import execute_trade, TradeRequest
-    trade_req = TradeRequest(**body.model_dump())
-    return await execute_trade(body=trade_req, user=user, db=db)
+    try:
+        return await portfolio_service.execute_trade(
+            db, user.id,
+            symbol=body.symbol, type=body.type, quantity=body.quantity,
+            price=body.price, currency=body.currency, trade_date=body.date,
+            fees=body.fees, deduct_from_cash=body.deduct_from_cash,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except InvalidTickerError as e:
+        raise HTTPException(status_code=400, detail=f"Ticker {e.ticker} not found")
+    except InsufficientCashError as e:
+        if e.needed is not None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient cash: {e.available:.2f} CHF, need {e.needed:.2f} CHF. Deposit cash first or disable deduct_from_cash."
+            )
+        raise HTTPException(status_code=400, detail=f"Insufficient cash: {e.available:.2f}")
+    except InsufficientSharesError as e:
+        raise HTTPException(status_code=400, detail=f"Insufficient shares: {e.available}")
 
 
 @router.get("/trades")
@@ -52,17 +74,13 @@ async def agent_trades(
     db: AsyncSession = Depends(get_db),
 ):
     """Trade history."""
-    query = select(StockTransaction).where(StockTransaction.user_id == user.id)
-    if symbol:
-        query = query.where(StockTransaction.symbol == symbol.upper())
-    query = query.order_by(desc(StockTransaction.executed_at)).limit(limit)
-    result = await db.execute(query)
+    trades = await portfolio_service.list_stock_transactions(db, user.id, symbol=symbol, limit=limit)
     return [
         {
             "id": t.id, "symbol": t.symbol, "type": t.type, "quantity": t.quantity,
             "price": t.price, "fees": t.fees, "currency": t.currency, "date": t.executed_at.isoformat(),
         }
-        for t in result.scalars().all()
+        for t in trades
     ]
 
 
@@ -84,30 +102,10 @@ async def agent_update_trade(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a stock transaction."""
-    result = await db.execute(
-        select(StockTransaction).where(and_(StockTransaction.id == trade_id, StockTransaction.user_id == user.id))
-    )
-    txn = result.scalar_one_or_none()
-    if not txn:
+    try:
+        await portfolio_service.update_trade(db, user.id, trade_id, body.model_dump())
+    except TradeNotFoundError:
         raise HTTPException(status_code=404, detail="Trade not found")
-
-    if body.symbol is not None:
-        txn.symbol = body.symbol.upper().strip()
-    if body.type is not None:
-        txn.type = body.type
-    if body.quantity is not None:
-        txn.quantity = body.quantity
-    if body.price is not None:
-        txn.price = body.price
-    if body.fees is not None:
-        txn.fees = body.fees
-    if body.currency is not None:
-        txn.currency = body.currency
-    if body.date is not None:
-        from datetime import datetime, timezone
-        txn.executed_at = datetime.fromisoformat(body.date).replace(tzinfo=timezone.utc)
-
-    await db.commit()
     return {"status": "ok", "id": trade_id}
 
 
@@ -118,14 +116,10 @@ async def agent_delete_trade(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a stock transaction."""
-    result = await db.execute(
-        select(StockTransaction).where(and_(StockTransaction.id == trade_id, StockTransaction.user_id == user.id))
-    )
-    txn = result.scalar_one_or_none()
-    if not txn:
+    try:
+        await portfolio_service.delete_trade(db, user.id, trade_id)
+    except TradeNotFoundError:
         raise HTTPException(status_code=404, detail="Trade not found")
-    await db.delete(txn)
-    await db.commit()
     return {"status": "deleted", "id": trade_id}
 
 

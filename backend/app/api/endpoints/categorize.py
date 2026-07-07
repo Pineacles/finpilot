@@ -6,10 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
-from app.models.finance import Transaction, Category
-from app.models.merchant import Merchant
+from app.models.finance import Transaction
 from app.models.user import User
+from app.schemas.categorize import ManualCategorizeResponse, BulkCategorizeResponse, AICategorizeResponse
 from app.services.categorize import batch_categorize_with_ai
+from app.services.transaction_service import upsert_merchant_rule
 from app.services import classifier
 
 router = APIRouter(prefix="/api/dashboard", tags=["categorize"])
@@ -27,7 +28,7 @@ class AICategorizeRequest(BaseModel):
     custom_prompt: str | None = None
 
 
-@router.post("/categorize/manual")
+@router.post("/categorize/manual", response_model=ManualCategorizeResponse, response_model_exclude_none=True)
 async def manual_categorize(
     body: ManualCategorize,
     user: User = Depends(get_current_user),
@@ -73,7 +74,7 @@ async def manual_categorize(
     # Upsert Merchant DB rule so future imports auto-categorize correctly
     final_merchant_name = body.new_merchant or original_merchant
     if final_merchant_name and final_merchant_name != "Pending":
-        await _upsert_merchant_rule(db, user.id, final_merchant_name, original_merchant, body.category_id)
+        await upsert_merchant_rule(db, user.id, final_merchant_name, original_merchant, body.category_id)
 
     await db.commit()
 
@@ -87,49 +88,12 @@ async def manual_categorize(
     return resp
 
 
-async def _upsert_merchant_rule(
-    db: AsyncSession, user_id: str, merchant_name: str, original_name: str | None, category_id: str,
-):
-    """Create or update a Merchant DB entry so future imports auto-categorize."""
-    patterns_set: set[str] = set()
-    for name in (merchant_name, original_name):
-        if name:
-            cleaned = name.strip().lower()
-            if cleaned:
-                patterns_set.add(cleaned)
-                for word in cleaned.split():
-                    if len(word) >= 4 and word not in ("gmbh", "sarl", "bank", "card", "payment", "services"):
-                        patterns_set.add(word)
-
-    if not patterns_set:
-        return
-
-    result = await db.execute(
-        select(Merchant).where(and_(Merchant.name == merchant_name, Merchant.user_id == user_id))
-    )
-    existing = result.scalar_one_or_none()
-
-    if existing:
-        old_patterns = set(p.strip().lower() for p in existing.patterns.split("|") if p.strip())
-        merged = old_patterns | patterns_set
-        existing.patterns = "|".join(sorted(merged))
-        existing.default_category_id = category_id
-    else:
-        db.add(Merchant(
-            user_id=user_id,
-            name=merchant_name,
-            patterns="|".join(sorted(patterns_set)),
-            default_category_id=category_id,
-            is_system=False,
-        ))
-
-
 class BulkManualCategorize(BaseModel):
     transaction_ids: list[str]
     category_id: str
 
 
-@router.post("/categorize/bulk-manual")
+@router.post("/categorize/bulk-manual", response_model=BulkCategorizeResponse)
 async def bulk_manual_categorize(
     body: BulkManualCategorize,
     user: User = Depends(get_current_user),
@@ -151,7 +115,7 @@ async def bulk_manual_categorize(
     return {"status": "ok", "updated": count}
 
 
-@router.post("/categorize/ai")
+@router.post("/categorize/ai", response_model=AICategorizeResponse)
 async def ai_categorize(
     body: AICategorizeRequest,
     user: User = Depends(get_current_user),

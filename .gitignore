@@ -26,6 +26,10 @@ node_modules/
 # Docker data volumes
 pgdata/
 
+# Locally-persisted ML model artifacts (classifier.py CLASSIFIER_MODEL_DIR
+# fallback when not running in Docker)
+backend/.local/
+
 # Internal AI/agent docs (kept local, never pushed)
 AGENT_API.md
 ARCHITECTURE.md

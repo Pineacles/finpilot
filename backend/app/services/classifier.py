@@ -24,7 +24,13 @@ from app.models.finance import Transaction, Category
 
 logger = logging.getLogger(__name__)
 
-MODEL_DIR = Path(os.environ.get("CLASSIFIER_MODEL_DIR", "/tmp/finpilot_models"))
+# Persisted so trained models survive a container restart. In Docker this is
+# backed by the `classifier_models` named volume (see docker-compose.yml,
+# CLASSIFIER_MODEL_DIR=/data/models on the api service). Outside Docker it
+# falls back to a gitignored directory under the backend package rather than
+# /tmp, which gets wiped on reboot and is world-readable on shared hosts.
+_DEFAULT_LOCAL_MODEL_DIR = Path(__file__).resolve().parent.parent.parent / ".local" / "models"
+MODEL_DIR = Path(os.environ.get("CLASSIFIER_MODEL_DIR") or _DEFAULT_LOCAL_MODEL_DIR)
 MIN_SAMPLES = 50  # Minimum categorized transactions before training
 MIN_SAMPLES_PER_CLASS = 3  # Minimum samples per category to include
 

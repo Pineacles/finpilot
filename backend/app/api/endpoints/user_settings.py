@@ -1,13 +1,18 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
 from app.core.security import generate_api_key
 from app.models.user import User
+from app.schemas.user_settings import (
+    SettingsGetResponse,
+    SettingsUpdate,
+    SettingsUpdateResponse,
+    ApiKeyRegenerateResponse,
+)
 from app.services.settings import get_all_settings, set_many, SETTING_KEYS, HIDDEN_KEYS
 
 logger = logging.getLogger(__name__)
@@ -24,11 +29,7 @@ def _mask_api_key(key: str) -> str:
     return "••••••••••••" + key[-4:]
 
 
-class SettingsUpdate(BaseModel):
-    settings: dict[str, str]
-
-
-@router.get("")
+@router.get("", response_model=SettingsGetResponse)
 async def get_settings(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -38,9 +39,9 @@ async def get_settings(
         "api_key": _mask_api_key(user.api_key or ""),
         "settings": all_settings,
         "groups": {
-            "analysis": {
+            "ai": {
                 "label": "AI categorization",
-                "keys": ["anthropic_api_key", "analysis_model", "analysis_endpoint", "analysis_auth_header"],
+                "keys": ["anthropic_api_key", "ai_model", "ai_endpoint", "ai_auth_header"],
             },
             "agent": {
                 "label": "Agent",
@@ -54,7 +55,7 @@ async def get_settings(
     }
 
 
-@router.put("")
+@router.put("", response_model=SettingsUpdateResponse)
 async def update_settings(
     body: SettingsUpdate,
     user: User = Depends(get_current_user),
@@ -69,7 +70,7 @@ async def update_settings(
     return {"status": "ok", "updated": list(valid.keys())}
 
 
-@router.post("/api-key/regenerate")
+@router.post("/api-key/regenerate", response_model=ApiKeyRegenerateResponse)
 async def regenerate_api_key(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

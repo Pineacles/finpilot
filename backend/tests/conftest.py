@@ -16,6 +16,8 @@ from app.models import sync as _sync  # noqa: F401
 from app.models import user as _user  # noqa: F401
 from app.models import stock as _stock  # noqa: F401
 from app.models import account as _account  # noqa: F401
+from app.models import finance as _finance  # noqa: F401
+from app.models import merchant as _merchant  # noqa: F401
 
 
 @pytest_asyncio.fixture

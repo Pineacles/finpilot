@@ -269,10 +269,10 @@ async def batch_categorize_with_ai(
     cat_tree_prompt, categories = await _build_category_tree_prompt(db, user_id)
 
     # Load AI settings once
-    custom_endpoint = await get_setting(db, user_id, "analysis_endpoint")
-    auth_header = await get_setting(db, user_id, "analysis_auth_header")
+    custom_endpoint = await get_setting(db, user_id, "ai_endpoint")
+    auth_header = await get_setting(db, user_id, "ai_auth_header")
     api_key = await get_setting(db, user_id, "anthropic_api_key")
-    model = await get_setting(db, user_id, "analysis_model") or "claude-haiku-4-5-20251001"
+    model = await get_setting(db, user_id, "ai_model") or "claude-haiku-4-5-20251001"
 
     if not custom_endpoint and not api_key:
         logger.warning("No AI backend configured for categorization")
@@ -430,10 +430,10 @@ async def _ai_categorize_with_custom_prompt(
 
     cat_tree_prompt, categories = await _build_category_tree_prompt(db, user_id)
 
-    custom_endpoint = await get_setting(db, user_id, "analysis_endpoint")
-    auth_header = await get_setting(db, user_id, "analysis_auth_header")
+    custom_endpoint = await get_setting(db, user_id, "ai_endpoint")
+    auth_header = await get_setting(db, user_id, "ai_auth_header")
     api_key = await get_setting(db, user_id, "anthropic_api_key")
-    model = await get_setting(db, user_id, "analysis_model") or "claude-haiku-4-5-20251001"
+    model = await get_setting(db, user_id, "ai_model") or "claude-haiku-4-5-20251001"
 
     all_results: list[dict] = []
     for chunk_start in range(0, len(transactions), CHUNK_SIZE):

@@ -34,8 +34,11 @@ services:
       SAXO_ACCOUNT_KEY: ${SAXO_ACCOUNT_KEY:-}
       VISECA_USERNAME: ${VISECA_USERNAME:-}
       VISECA_PASSWORD: ${VISECA_PASSWORD:-}
+      CLASSIFIER_MODEL_DIR: /data/models
     ports:
       - "${API_PORT:-8001}:8000"
+    volumes:
+      - classifier_models:/data/models
     depends_on:
       db:
         condition: service_healthy
@@ -54,3 +57,4 @@ services:
 
 volumes:
   pgdata:
+  classifier_models:

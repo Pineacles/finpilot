@@ -9,7 +9,6 @@ frontend callback URL, not this backend endpoint.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
@@ -20,32 +19,24 @@ from app.brokers.saxo import sync as saxo_sync
 from app.brokers.saxo.client import SaxoHTTPError
 from app.core.database import get_db
 from app.models.user import User
+from app.schemas.brokers import (
+    ConnectResponse,
+    StatusResponse,
+    CallbackPayload,
+    DisconnectResponse,
+    HealthResponse,
+    BrokersListResponse,
+    SaxoAccountsResponse,
+    SaxoBalanceResponse,
+    SaxoPositionsResponse,
+    SaxoSyncResponse,
+    SaxoSubPortfolioResponse,
+)
 
 router = APIRouter(prefix="/api/brokers", tags=["brokers"])
 
 
-class ConnectResponse(BaseModel):
-    authorize_url: str
-    environment: str
-
-
-class StatusResponse(BaseModel):
-    state: str
-    environment: str | None
-    detail: str | None = None
-    last_error: str | None = None
-
-
-class CallbackPayload(BaseModel):
-    code: str
-    state: str
-
-
-class QuickQuery(BaseModel):
-    account_key: str
-
-
-@router.get("")
+@router.get("", response_model=BrokersListResponse)
 async def list_brokers():
     """Public metadata about all registered broker adapters."""
     return {
@@ -109,7 +100,7 @@ async def saxo_callback(
     )
 
 
-@router.post("/saxo/disconnect")
+@router.post("/saxo/disconnect", response_model=DisconnectResponse)
 async def saxo_disconnect(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -119,7 +110,7 @@ async def saxo_disconnect(
     return {"status": "ok"}
 
 
-@router.get("/saxo/health")
+@router.get("/saxo/health", response_model=HealthResponse)
 async def saxo_health(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -129,7 +120,7 @@ async def saxo_health(
     return {"ok": ok}
 
 
-@router.get("/saxo/accounts")
+@router.get("/saxo/accounts", response_model=SaxoAccountsResponse)
 async def saxo_accounts(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -144,7 +135,7 @@ async def saxo_accounts(
     return {"accounts": [_account_dict(a) for a in accounts]}
 
 
-@router.get("/saxo/balances")
+@router.get("/saxo/balances", response_model=SaxoBalanceResponse)
 async def saxo_balances(
     account_key: str,
     user: User = Depends(get_current_user),
@@ -160,7 +151,7 @@ async def saxo_balances(
     return _balance_dict(balance)
 
 
-@router.get("/saxo/positions")
+@router.get("/saxo/positions", response_model=SaxoPositionsResponse)
 async def saxo_positions(
     account_key: str,
     user: User = Depends(get_current_user),
@@ -211,7 +202,7 @@ async def _run_sync(db: AsyncSession, user_id: str) -> saxo_sync.SyncResult | No
     return result
 
 
-@router.post("/saxo/sync")
+@router.post("/saxo/sync", response_model=SaxoSyncResponse)
 async def saxo_sync_endpoint(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -235,7 +226,7 @@ async def saxo_sync_endpoint(
     }
 
 
-@router.get("/saxo/sub-portfolio")
+@router.get("/saxo/sub-portfolio", response_model=SaxoSubPortfolioResponse)
 async def saxo_sub_portfolio(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

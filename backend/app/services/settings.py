@@ -1,4 +1,15 @@
-"""User settings service — DB-first with env var fallback."""
+"""User settings service — DB-first with env var fallback.
+
+Naming note: the AI-categorization settings used to be named
+`analysis_model`/`analysis_endpoint`/`analysis_auth_header` — a name that
+predates this app dropping AI *stock* analysis and reads confusingly next to
+"analysis" of transactions/stats. They're renamed to `ai_model`/`ai_endpoint`/
+`ai_auth_header`. The old keys are kept in SETTING_KEYS (so old writes still
+validate) and LEGACY_ALIASES maps new -> old so reads transparently fall back
+to a value stored under the old name, and `get_all_settings` migrates it to
+the new key on first read (a plain key/value table needs no schema migration
+for a rename like this).
+"""
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,8 +18,14 @@ from app.models.settings import UserSetting
 
 # Setting keys and their env var fallbacks
 SETTING_KEYS = {
-    # Analysis / AI
+    # AI categorization (current names)
     "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "ai_model": "ANALYSIS_MODEL",
+    "ai_endpoint": None,
+    "ai_auth_header": None,
+    # Deprecated aliases — kept so old reads/writes (and any external agent
+    # still using the old names) keep working. New code should use the
+    # ai_* keys above. See LEGACY_ALIASES / migrate_legacy_settings().
     "analysis_model": "ANALYSIS_MODEL",
     "analysis_endpoint": None,
     "analysis_auth_header": None,
@@ -36,9 +53,22 @@ SETTING_KEYS = {
     "saxo_needs_reauth": None,  # "1" when refresh failed permanently — UI shows Reconnect banner
 }
 
+# new key -> deprecated key it replaces
+LEGACY_ALIASES = {
+    "ai_model": "analysis_model",
+    "ai_endpoint": "analysis_endpoint",
+    "ai_auth_header": "analysis_auth_header",
+}
+
+# Keys that are never shown as their own group/field in the settings UI —
+# they're superseded by their ai_* counterpart (still readable/writable for
+# compatibility, just not enumerated).
+DEPRECATED_KEYS = set(LEGACY_ALIASES.values())
+
 # Keys that should be masked in API responses
 SENSITIVE_KEYS = {
     "anthropic_api_key",
+    "ai_auth_header",
     "analysis_auth_header",
     "agent_auth_header",
     "gmail_app_password",
@@ -61,7 +91,7 @@ HIDDEN_KEYS = {
 
 
 async def get_setting(db: AsyncSession, user_id: str, key: str) -> str:
-    """Get a setting value. DB first, then env var fallback."""
+    """Get a setting value. DB first, then legacy-key fallback, then env var."""
     result = await db.execute(
         select(UserSetting).where(
             and_(UserSetting.user_id == user_id, UserSetting.key == key)
@@ -70,6 +100,18 @@ async def get_setting(db: AsyncSession, user_id: str, key: str) -> str:
     setting = result.scalar_one_or_none()
     if setting and setting.value:
         return setting.value
+
+    # Legacy-key fallback (e.g. "ai_model" falls back to "analysis_model")
+    legacy_key = LEGACY_ALIASES.get(key)
+    if legacy_key:
+        legacy_result = await db.execute(
+            select(UserSetting).where(
+                and_(UserSetting.user_id == user_id, UserSetting.key == legacy_key)
+            )
+        )
+        legacy_setting = legacy_result.scalar_one_or_none()
+        if legacy_setting and legacy_setting.value:
+            return legacy_setting.value
 
     # Env var fallback
     env_key = SETTING_KEYS.get(key)
@@ -81,17 +123,22 @@ async def get_setting(db: AsyncSession, user_id: str, key: str) -> str:
 async def get_all_settings(db: AsyncSession, user_id: str) -> dict[str, str]:
     """Get all settings for a user, merged with env fallbacks.
 
-    Hidden keys (internal token/verifier state) are stripped entirely. Sensitive
-    keys are masked.
+    Hidden keys (internal token/verifier state) are stripped entirely.
+    Deprecated keys (old ai_* names) are not enumerated on their own — their
+    value is folded into the new key instead. Sensitive keys are masked.
+    Values still stored under an old key are migrated (copied) to the new key
+    so subsequent reads/writes stay on the new name.
     """
     result = await db.execute(
         select(UserSetting).where(UserSetting.user_id == user_id)
     )
     db_settings = {s.key: s.value for s in result.scalars().all()}
 
+    await _migrate_legacy_settings(db, user_id, db_settings)
+
     merged = {}
     for key, env_key in SETTING_KEYS.items():
-        if key in HIDDEN_KEYS:
+        if key in HIDDEN_KEYS or key in DEPRECATED_KEYS:
             continue
         value = db_settings.get(key, "")
         if not value and env_key:
@@ -102,6 +149,22 @@ async def get_all_settings(db: AsyncSession, user_id: str) -> dict[str, str]:
         else:
             merged[key] = value
     return merged
+
+
+async def _migrate_legacy_settings(db: AsyncSession, user_id: str, db_settings: dict[str, str]) -> None:
+    """Copy any value still stored under a deprecated key to its new key.
+
+    No-op if the new key already has a value, or the old key has none.
+    """
+    migrated = False
+    for new_key, legacy_key in LEGACY_ALIASES.items():
+        legacy_value = db_settings.get(legacy_key)
+        if legacy_value and not db_settings.get(new_key):
+            await set_setting(db, user_id, new_key, legacy_value)
+            db_settings[new_key] = legacy_value
+            migrated = True
+    # set_setting already commits per key; nothing more to do here.
+    _ = migrated
 
 
 async def set_setting(db: AsyncSession, user_id: str, key: str, value: str) -> None:

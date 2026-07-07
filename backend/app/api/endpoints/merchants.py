@@ -1,7 +1,6 @@
 """Merchant management — view, add, edit categorization rules."""
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
@@ -9,31 +8,9 @@ from app.core.database import get_db
 from app.models.finance import Category
 from app.models.merchant import Merchant
 from app.models.user import User
+from app.schemas.merchants import MerchantResponse, MerchantCreate, MerchantUpdate
 
 router = APIRouter(prefix="/api/dashboard/merchants", tags=["merchants"])
-
-
-class MerchantResponse(BaseModel):
-    id: str
-    name: str
-    patterns: str
-    default_category_id: str | None
-    category_name: str | None = None
-    is_system: bool
-
-    model_config = {"from_attributes": True}
-
-
-class MerchantCreate(BaseModel):
-    name: str
-    patterns: str  # pipe-separated
-    default_category_id: str | None = None
-
-
-class MerchantUpdate(BaseModel):
-    name: str | None = None
-    patterns: str | None = None
-    default_category_id: str | None = None
 
 
 @router.get("", response_model=list[MerchantResponse])
