@@ -164,6 +164,27 @@ class RecurringExpenseResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RecurringExpenseUpdate(BaseModel):
+    name: str | None = None
+    amount: float | None = None
+    currency: str | None = None
+    frequency: str | None = None
+    next_due_date: date | None = None
+    category_id: str | None = None
+    active: bool | None = None
+
+
+# --- Recurring detection (auto-suggested from transaction history) ---
+class RecurringSuggestionResponse(BaseModel):
+    merchant: str
+    amount: float
+    currency: str
+    frequency: str
+    next_due_date: date
+    last_date: date
+    occurrences: int
+
+
 # --- Cash Flow ---
 class CashFlowMonth(BaseModel):
     month: str

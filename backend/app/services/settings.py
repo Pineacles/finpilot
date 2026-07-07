@@ -51,6 +51,10 @@ SETTING_KEYS = {
     "saxo_oauth_state": None,
     "saxo_last_error": None,
     "saxo_needs_reauth": None,  # "1" when refresh failed permanently — UI shows Reconnect banner
+    # Dashboard customization — JSON-encoded, read/written verbatim by the
+    # frontend (this table is a plain string k/v store; no schema needed).
+    "dashboard_layout": None,  # JSON: [{id, visible, order}] widget config
+    "dismissed_recurring_suggestions": None,  # JSON: string[] of normalized merchant keys
 }
 
 # new key -> deprecated key it replaces

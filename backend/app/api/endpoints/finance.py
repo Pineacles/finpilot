@@ -8,16 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
 from app.models.finance import (
-    Budget, SavingsGoal, Milestone, RecurringExpense, Transaction, Category,
+    Budget, SavingsGoal, Milestone, Transaction, Category,
 )
 from app.models.user import User
 from app.schemas.finance import (
     BudgetCreate, BudgetResponse,
     SavingsGoalCreate, SavingsGoalUpdate, SavingsGoalResponse,
     MilestoneCreate, MilestoneResponse,
-    RecurringExpenseCreate, RecurringExpenseResponse,
+    RecurringExpenseCreate, RecurringExpenseResponse, RecurringExpenseUpdate,
+    RecurringSuggestionResponse,
     CashFlowMonth,
 )
+from app.services import recurring_detection, recurring_service
+from app.services.recurring_service import RecurringNotFoundError
 
 router = APIRouter(prefix="/api/dashboard", tags=["finance"])
 
@@ -225,24 +228,29 @@ async def update_milestone(
 
 
 # ─── Recurring Expenses ───────────────────────────────────
+# Note: /recurring/detected must be declared before /recurring/{recurring_id}
+# so FastAPI doesn't swallow it as a path-param match.
+
+@router.get("/recurring/detected", response_model=list[RecurringSuggestionResponse])
+async def get_detected_recurring(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Suggested recurring expenses inferred from transaction history —
+    merchants with >=3 similarly-timed, similarly-priced transactions that
+    aren't already tracked as a RecurringExpense. Accept a suggestion by
+    POSTing it to /recurring; dismissals are tracked client-side via
+    /api/settings (dismissed_recurring_suggestions)."""
+    suggestions = await recurring_detection.detect_recurring_expenses(db, user.id)
+    return [RecurringSuggestionResponse(**vars(s)) for s in suggestions]
+
 
 @router.get("/recurring", response_model=list[RecurringExpenseResponse])
 async def list_recurring(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(RecurringExpense, Category)
-        .outerjoin(Category, RecurringExpense.category_id == Category.id)
-        .where(RecurringExpense.user_id == user.id)
-        .order_by(RecurringExpense.next_due_date)
-    )
-    responses = []
-    for rec, cat in result.all():
-        r = RecurringExpenseResponse.model_validate(rec)
-        r.category_name = cat.name if cat else None
-        responses.append(r)
-    return responses
+    return await recurring_service.list_recurring(db, user.id)
 
 
 @router.post("/recurring", response_model=RecurringExpenseResponse)
@@ -251,11 +259,33 @@ async def create_recurring(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    rec = RecurringExpense(user_id=user.id, **body.model_dump())
-    db.add(rec)
-    await db.commit()
-    await db.refresh(rec)
-    return RecurringExpenseResponse.model_validate(rec)
+    return await recurring_service.create_recurring(db, user.id, body)
+
+
+@router.patch("/recurring/{recurring_id}", response_model=RecurringExpenseResponse)
+async def update_recurring(
+    recurring_id: str,
+    body: RecurringExpenseUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await recurring_service.update_recurring(db, user.id, recurring_id, body)
+    except RecurringNotFoundError:
+        raise HTTPException(status_code=404, detail="Recurring expense not found")
+
+
+@router.delete("/recurring/{recurring_id}")
+async def delete_recurring(
+    recurring_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await recurring_service.delete_recurring(db, user.id, recurring_id)
+    except RecurringNotFoundError:
+        raise HTTPException(status_code=404, detail="Recurring expense not found")
+    return {"status": "deleted", "id": recurring_id}
 
 
 # ─── Cash Flow ─────────────────────────────────────────────

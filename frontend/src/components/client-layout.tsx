@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 
@@ -12,6 +14,7 @@ const PAGE_META: Record<string, { eyebrow: string; subtitle: string }> = {
   "/goals": { eyebrow: "Goals & Milestones", subtitle: "Goals & Milestones" },
   "/stats": { eyebrow: "Financial Insights", subtitle: "Statistics" },
   "/categories": { eyebrow: "Categories", subtitle: "Categories" },
+  "/merchants": { eyebrow: "Auto-categorization", subtitle: "Rules" },
   "/tools": { eyebrow: "Signal Evaluation", subtitle: "Tools" },
   "/settings": { eyebrow: "Settings", subtitle: "Settings" },
 };
@@ -34,13 +37,29 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   const isLogin = pathname === "/login";
   const isPublic = pathname.startsWith("/p/");
 
+  // One QueryClient per mounted app (not per render) — standard Next.js App
+  // Router pattern to avoid sharing state across requests/users.
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30_000,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
+
   if (isLogin) {
     return (
-      <AuthProvider>
-        <main className="flex min-h-screen items-center justify-center">
-          {children}
-        </main>
-      </AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <main className="flex min-h-screen items-center justify-center">
+            {children}
+          </main>
+        </AuthProvider>
+      </QueryClientProvider>
     );
   }
 
@@ -49,14 +68,16 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthProvider>
-      <div className="flex h-screen overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          <Topbar pathname={pathname} />
-          <div className="px-7 py-6">{children}</div>
-        </main>
-      </div>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <div className="flex h-screen overflow-hidden">
+          <Sidebar />
+          <main className="flex-1 overflow-y-auto">
+            <Topbar pathname={pathname} />
+            <div className="px-7 py-6">{children}</div>
+          </main>
+        </div>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

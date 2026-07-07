@@ -91,7 +91,27 @@ export interface CreateGoal { name: string; target_amount: number; current_amoun
 export interface Milestone { id: string; name: string; description: string | null; target_date: string | null; target_net_worth: number | null; target_savings: number | null; achieved: boolean; achieved_at: string | null }
 export interface CreateMilestone { name: string; description?: string; target_date?: string; target_net_worth?: number; target_savings?: number }
 
-export interface MerchantRule { id: string; name: string; patterns: string; default_category_id: string | null; category_name: string | null; is_system: boolean }
+export type RecurringFrequency = "weekly" | "monthly" | "yearly" | "quarterly";
+
+export interface RecurringExpense {
+  id: string; name: string; amount: number; currency: string; frequency: RecurringFrequency | string;
+  next_due_date: string; category_id: string | null; category_name: string | null; active: boolean;
+}
+export interface CreateRecurringExpense {
+  name: string; amount: number; currency?: string; frequency?: RecurringFrequency | string;
+  next_due_date: string; category_id?: string;
+}
+export interface UpdateRecurringExpense {
+  name?: string; amount?: number; currency?: string; frequency?: RecurringFrequency | string;
+  next_due_date?: string; category_id?: string; active?: boolean;
+}
+// Auto-detected from transaction history — not yet a tracked RecurringExpense.
+export interface RecurringSuggestion {
+  merchant: string; amount: number; currency: string; frequency: RecurringFrequency | string;
+  next_due_date: string; last_date: string; occurrences: number;
+}
+
+export interface MerchantRule { id: string; name: string; patterns: string; default_category_id: string | null; category_name: string | null; is_system: boolean; created_at: string | null }
 
 export interface ImportLogEntry { msg: string; detail: string }
 export interface SettlementResult { card_account_id: string; card_account_name: string; settled_amount: number; settlement_date: string; skipped: boolean }

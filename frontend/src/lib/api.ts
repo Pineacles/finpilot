@@ -12,6 +12,7 @@ import type {
   BrokerStatus, BrokerAccount, SaxoSyncResult, SaxoSubPortfolio,
   SymbolClassification, AssetType, WatchlistItem,
   CreditCardAccount, ColumnMapping, CsvPreview, ImportProfile,
+  RecurringExpense, CreateRecurringExpense, UpdateRecurringExpense, RecurringSuggestion,
 } from "@/lib/types";
 
 // Structured 422 detail from a currency mismatch on POST .../trade — see
@@ -137,6 +138,12 @@ export const api = {
     request<TransactionItem>("/api/dashboard/transactions", { method: "POST", body: JSON.stringify(data) }),
   updateTransaction: (id: string, data: Partial<TransactionItem> & { apply_merchant_to_all?: boolean; apply_category_to_all?: boolean; description_filter?: string }) =>
     request<TransactionItem>(`/api/dashboard/transactions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteTransaction: (id: string) =>
+    request<{ status: string; id: string }>(`/api/dashboard/transactions/${id}`, { method: "DELETE" }),
+  bulkDeleteTransactions: (ids: string[]) =>
+    request<{ status: string; deleted: number }>("/api/dashboard/transactions/bulk-delete", {
+      method: "POST", body: JSON.stringify({ transaction_ids: ids }),
+    }),
 
   // Categories
   categories: () => request<Category[]>("/api/dashboard/categories"),
@@ -161,6 +168,16 @@ export const api = {
   milestones: () => request<Milestone[]>("/api/dashboard/milestones"),
   createMilestone: (data: CreateMilestone) =>
     request<Milestone>("/api/dashboard/milestones", { method: "POST", body: JSON.stringify(data) }),
+
+  // Recurring expenses (bills/subscriptions) + auto-detected suggestions
+  recurring: () => request<RecurringExpense[]>("/api/dashboard/recurring"),
+  detectedRecurring: () => request<RecurringSuggestion[]>("/api/dashboard/recurring/detected"),
+  createRecurring: (data: CreateRecurringExpense) =>
+    request<RecurringExpense>("/api/dashboard/recurring", { method: "POST", body: JSON.stringify(data) }),
+  updateRecurring: (id: string, data: UpdateRecurringExpense) =>
+    request<RecurringExpense>(`/api/dashboard/recurring/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteRecurring: (id: string) =>
+    request<{ status: string; id: string }>(`/api/dashboard/recurring/${id}`, { method: "DELETE" }),
 
   // Merchants (categorization rules)
   merchants: () => request<MerchantRule[]>("/api/dashboard/merchants"),

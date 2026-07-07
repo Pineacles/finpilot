@@ -1,4 +1,5 @@
 """Response/request schemas for merchant auto-categorization rules."""
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -9,6 +10,7 @@ class MerchantResponse(BaseModel):
     default_category_id: str | None
     category_name: str | None = None
     is_system: bool
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

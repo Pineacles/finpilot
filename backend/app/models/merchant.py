@@ -17,6 +17,11 @@ class Merchant(Base):
     patterns: Mapped[str] = mapped_column(Text, nullable=False, default="")
     default_category_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("categories.id"), nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Nullable: rows created before this column existed have no value — the
+    # merchants UI shows "—" for those rather than a fake timestamp.
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class CategorizationLog(Base):

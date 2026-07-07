@@ -12,10 +12,15 @@ from app.models.account import Account
 from app.models.finance import Transaction, Budget, Category, RecurringExpense
 from app.models.stock import StockPosition
 from app.models.user import User
-from app.schemas.finance import TransactionCreate
+from app.schemas.finance import (
+    TransactionCreate,
+    RecurringExpenseCreate, RecurringExpenseResponse, RecurringExpenseUpdate,
+    RecurringSuggestionResponse,
+)
 from app.schemas.stats import MonthlyStatsResponse, YearlyStatsResponse
-from app.services import transaction_service, stats_service
+from app.services import transaction_service, stats_service, recurring_detection, recurring_service
 from app.services.transaction_service import TransactionNotFoundError
+from app.services.recurring_service import RecurringNotFoundError
 
 router = APIRouter(tags=["agent"])
 
@@ -365,5 +370,63 @@ async def agent_list_categories(
         }
         for c in cats
     ]
+
+
+# ── Recurring Expenses ───────────────────────────────────────────
+# Mirrors app.api.endpoints.finance's dashboard surface via the shared
+# recurring_service/recurring_detection modules. /recurring/detected must
+# stay registered before /recurring/{recurring_id}.
+
+@router.get("/recurring/detected", response_model=list[RecurringSuggestionResponse])
+async def agent_detected_recurring(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Suggested recurring expenses inferred from transaction history."""
+    suggestions = await recurring_detection.detect_recurring_expenses(db, user.id)
+    return [RecurringSuggestionResponse(**vars(s)) for s in suggestions]
+
+
+@router.get("/recurring", response_model=list[RecurringExpenseResponse])
+async def agent_list_recurring(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    return await recurring_service.list_recurring(db, user.id)
+
+
+@router.post("/recurring", response_model=RecurringExpenseResponse)
+async def agent_create_recurring(
+    body: RecurringExpenseCreate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    return await recurring_service.create_recurring(db, user.id, body)
+
+
+@router.patch("/recurring/{recurring_id}", response_model=RecurringExpenseResponse)
+async def agent_update_recurring(
+    recurring_id: str,
+    body: RecurringExpenseUpdate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await recurring_service.update_recurring(db, user.id, recurring_id, body)
+    except RecurringNotFoundError:
+        raise HTTPException(status_code=404, detail="Recurring expense not found")
+
+
+@router.delete("/recurring/{recurring_id}")
+async def agent_delete_recurring(
+    recurring_id: str,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await recurring_service.delete_recurring(db, user.id, recurring_id)
+    except RecurringNotFoundError:
+        raise HTTPException(status_code=404, detail="Recurring expense not found")
+    return {"status": "deleted", "id": recurring_id}
 
 
