@@ -19,6 +19,7 @@ from app.models import account as _account  # noqa: F401
 from app.models import finance as _finance  # noqa: F401
 from app.models import merchant as _merchant  # noqa: F401
 from app.models import import_profile as _import_profile  # noqa: F401
+from app.models import watchlist as _watchlist  # noqa: F401
 
 
 @pytest_asyncio.fixture

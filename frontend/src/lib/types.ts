@@ -23,6 +23,9 @@ export interface PortfolioSummary {
   net_deposits: number;
   positions_count: number;
   positions: Position[];
+  // Never silent: populated whenever a quote or FX lookup failed this
+  // request (stale price shown, or a position excluded from CHF totals).
+  warnings: string[];
 }
 
 export interface Position {
@@ -33,6 +36,7 @@ export interface Position {
   avg_cost_price: number;
   currency: string;
   last_price: number | null;
+  last_price_at: string | null;
   change: number;
   change_pct: number;
   unrealized_pnl: number;
@@ -42,6 +46,25 @@ export interface Position {
   first_bought: string | null;
   trade_count: number;
   sparkline: number[];
+  // asset_type groups holdings into ETFs vs Stocks on the portfolio page.
+  asset_type: AssetType;
+  // Quote fetch failed this request AND the last known price is >15min old.
+  price_stale: boolean;
+  // No CHF exchange rate is known for this position's currency — market_value
+  // and unrealized_pnl are 0.0 placeholders, not real numbers.
+  fx_unavailable: boolean;
+}
+
+export interface WatchlistItem {
+  id: string;
+  symbol: string;
+  added_at: string | null;
+  price: number | null;
+  change: number | null;
+  change_pct: number | null;
+  currency: string | null;
+  name: string | null;
+  quote_unavailable: boolean;
 }
 
 export interface Trade { id: string; symbol: string; type: string; quantity: number; price: number; fees: number; currency: string; date: string; total: number; total_chf: number; fees_chf: number }
@@ -126,6 +149,7 @@ export interface PublicPortfolio {
   base_currency: string;
   positions_count: number;
   positions: Position[];
+  warnings: string[];
 }
 
 export interface SyncResult { status: string; records_synced: number; message: string }

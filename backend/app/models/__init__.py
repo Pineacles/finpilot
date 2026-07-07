@@ -6,6 +6,7 @@ from app.models.sync import SyncLog
 from app.models.settings import UserSetting
 from app.models.merchant import Merchant, CategorizationLog
 from app.models.import_profile import ImportProfile
+from app.models.watchlist import WatchlistItem
 
 __all__ = [
     "User",
@@ -25,4 +26,5 @@ __all__ = [
     "Merchant",
     "CategorizationLog",
     "ImportProfile",
+    "WatchlistItem",
 ]

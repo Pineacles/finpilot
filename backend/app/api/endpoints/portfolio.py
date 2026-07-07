@@ -23,6 +23,9 @@ from app.services.portfolio_service import (
     InsufficientCashError,
     InsufficientSharesError,
     InvalidTickerError,
+    CurrencyMismatchError,
+    FxRateUnavailableError,
+    suggest_ticker_suffix,
 )
 from app.schemas.portfolio import (
     PortfolioResponse,
@@ -48,6 +51,7 @@ class TradeRequest(BaseModel):
     date: str | None = None  # ISO date, defaults to today
     fees: float = 0
     deduct_from_cash: bool = True  # Automatically adjust cash balance
+    confirm_currency: bool = False  # true = "yes, use the quote's currency" after a 422 currency_mismatch
 
 
 class UpdatePosition(BaseModel):
@@ -81,11 +85,19 @@ async def execute_trade(
             symbol=body.symbol, type=body.type, quantity=body.quantity,
             price=body.price, currency=body.currency, trade_date=body.date,
             fees=body.fees, deduct_from_cash=body.deduct_from_cash,
+            confirm_currency=body.confirm_currency,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except InvalidTickerError as e:
         raise HTTPException(status_code=400, detail=f"Ticker {e.ticker} not found")
+    except CurrencyMismatchError as e:
+        raise HTTPException(status_code=422, detail=_currency_mismatch_detail(e))
+    except FxRateUnavailableError as e:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Exchange rate for {e.from_ccy}→{e.to_ccy} is currently unavailable. Try again shortly.",
+        )
     except InsufficientCashError as e:
         if e.needed is not None:
             raise HTTPException(
@@ -95,6 +107,28 @@ async def execute_trade(
         raise HTTPException(status_code=400, detail=f"Insufficient cash: {e.available:.2f}")
     except InsufficientSharesError as e:
         raise HTTPException(status_code=400, detail=f"Insufficient shares: {e.available}")
+
+
+def _currency_mismatch_detail(e: CurrencyMismatchError) -> dict:
+    """Shape a 422 detail body the trade dialog can render directly: the
+    message, plus structured fields for a 'use {quote_currency} instead'
+    confirm button."""
+    suggested_ticker = suggest_ticker_suffix(e.ticker, e.quote_currency)
+    message = (
+        f"You entered {e.user_currency} for {e.ticker}, but its market quote is denominated "
+        f"in {e.quote_currency}."
+    )
+    if suggested_ticker:
+        message += f" If you meant the {e.quote_currency} listing, the ticker is usually '{suggested_ticker}'."
+    message += f" Confirm to record this trade in {e.quote_currency} instead, or fix the ticker/currency."
+    return {
+        "error": "currency_mismatch",
+        "message": message,
+        "ticker": e.ticker,
+        "user_currency": e.user_currency,
+        "quote_currency": e.quote_currency,
+        "suggested_ticker": suggested_ticker,
+    }
 
 
 # ── Trade history ────────────────────────────────────────────────

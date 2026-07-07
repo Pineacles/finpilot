@@ -13,13 +13,56 @@ from sqlalchemy import select, and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
-from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot
-from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate
+from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot, SymbolClassification
+from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate, get_cached_fx_rate
 from app.services.currency import normalize_currency
 
 logger = logging.getLogger(__name__)
 
 BASE_CCY = "CHF"
+
+# A position is flagged `price_stale` when its live quote fetch failed *this
+# request* AND the last successfully-fetched price is older than this.
+STALE_PRICE_THRESHOLD = timedelta(minutes=15)
+
+
+def _as_aware_utc(dt: datetime | None) -> datetime | None:
+    """Some DB drivers (e.g. SQLite, some asyncpg/timezone setups) hand back
+    naive datetimes for a DateTime(timezone=True) column even though we
+    always write UTC-aware values. Normalize before comparing against
+    datetime.now(timezone.utc) — otherwise a naive/aware subtraction raises
+    TypeError and would take down the whole portfolio response."""
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+# Best-effort hint for "you probably meant the listing on this exchange"
+# when a trade's user-supplied currency doesn't match the ticker's quote
+# currency. Not exhaustive — just a nudge, shown alongside the raw mismatch.
+TICKER_SUFFIX_HINTS: dict[str, str] = {
+    "GBP": ".L",   # London Stock Exchange
+    "EUR": ".DE",  # Frankfurt (common default; actual exchange varies)
+    "CHF": ".SW",  # SIX Swiss Exchange
+    "CAD": ".TO",  # Toronto
+    "AUD": ".AX",  # ASX
+    "HKD": ".HK",  # Hong Kong
+    "JPY": ".T",   # Tokyo
+    "SEK": ".ST",  # Stockholm
+    "NOK": ".OL",  # Oslo
+    "DKK": ".CO",  # Copenhagen
+    "SGD": ".SI",  # Singapore
+    "KRW": ".KS",  # Korea
+}
+
+
+def suggest_ticker_suffix(ticker: str, quote_currency: str) -> str | None:
+    """Best-effort 'you probably meant TICKER.XX' suggestion for a currency
+    mismatch. Returns None if we don't have a hint or the ticker already
+    carries that suffix."""
+    suffix = TICKER_SUFFIX_HINTS.get(quote_currency.upper())
+    if not suffix or ticker.upper().endswith(suffix):
+        return None
+    return f"{ticker}{suffix}"
 
 
 class PositionNotFoundError(Exception):
@@ -51,6 +94,27 @@ class InvalidTickerError(Exception):
     def __init__(self, ticker: str):
         self.ticker = ticker
         super().__init__(f"Ticker not found: {ticker}")
+
+
+class CurrencyMismatchError(Exception):
+    """Raised by execute_trade when the user-supplied currency doesn't match
+    the ticker's live quote currency and the caller hasn't confirmed the
+    override. We never silently overwrite the user's input."""
+    def __init__(self, ticker: str, user_currency: str, quote_currency: str):
+        self.ticker = ticker
+        self.user_currency = user_currency
+        self.quote_currency = quote_currency
+        super().__init__(
+            f"Currency mismatch for {ticker}: entered {user_currency}, "
+            f"quote is in {quote_currency}"
+        )
+
+
+class FxRateUnavailableError(Exception):
+    def __init__(self, from_ccy: str, to_ccy: str):
+        self.from_ccy = from_ccy
+        self.to_ccy = to_ccy
+        super().__init__(f"Exchange rate unavailable for {from_ccy}->{to_ccy}")
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -89,6 +153,207 @@ async def get_cash_position(db: AsyncSession, user_id: str, account_id: str) -> 
 
 # ── Portfolio overview with live prices ──────────────────────────
 
+async def _classification_map(db: AsyncSession, user_id: str, symbols: set[str]) -> dict[str, str]:
+    if not symbols:
+        return {}
+    result = await db.execute(
+        select(SymbolClassification).where(and_(
+            SymbolClassification.user_id == user_id,
+            SymbolClassification.symbol.in_(symbols),
+        ))
+    )
+    return {r.symbol: r.asset_type for r in result.scalars().all()}
+
+
+async def _price_stock_positions(
+    db: AsyncSession, stock_positions: list[StockPosition]
+) -> tuple[dict[str, dict], set[str], list[str]]:
+    """Refresh live quotes onto `stock_positions` (persists last_price /
+    last_price_at / unrealized_pnl for successful fetches only — a failed
+    fetch this request never bumps last_price_at, so staleness stays honest).
+
+    Returns (quotes, failed_symbols, warnings).
+    """
+    quotes: dict[str, dict] = {}
+    failed_symbols: set[str] = set()
+    warnings: list[str] = []
+
+    if stock_positions:
+        tickers = list({p.symbol for p in stock_positions})
+        quotes = await get_quotes_batch(tickers)
+
+        now = datetime.now(timezone.utc)
+        for p in stock_positions:
+            q = quotes.get(p.symbol)
+            if q:
+                p.last_price = q["price"]
+                if not q.get("quote_fetch_failed"):
+                    p.last_price_at = now
+                else:
+                    failed_symbols.add(p.symbol)
+                p.unrealized_pnl = (q["price"] - p.avg_cost_price) * p.quantity
+            else:
+                failed_symbols.add(p.symbol)
+        await db.commit()
+
+    if failed_symbols:
+        warnings.append(
+            f"Live price refresh failed for {', '.join(sorted(failed_symbols))} — "
+            f"showing the last known price instead."
+        )
+
+    return quotes, failed_symbols, warnings
+
+
+async def _fx_rates_for_positions(
+    stock_positions: list[StockPosition],
+) -> tuple[dict[str, float], set[str], list[str]]:
+    """Resolve CHF FX rates for every currency in use. Never silently
+    defaults a missing rate to 1.0: falls back to the last known cached
+    rate (with a warning), or — if we've never known this rate — excludes
+    that currency's positions from CHF totals (with a warning naming them).
+
+    Returns (fx_rates, currencies_excluded_from_totals, warnings).
+    """
+    fx_rates: dict[str, float] = {}
+    excluded_currencies: set[str] = set()
+    warnings: list[str] = []
+
+    currencies_needed = {p.currency for p in stock_positions if p.currency != BASE_CCY}
+    for ccy in currencies_needed:
+        rate = await get_fx_rate(ccy, BASE_CCY)
+        if rate is not None:
+            fx_rates[ccy] = rate
+            continue
+
+        stale_rate = get_cached_fx_rate(ccy, BASE_CCY)
+        if stale_rate is not None:
+            fx_rates[ccy] = stale_rate
+            warnings.append(
+                f"Live {ccy}→{BASE_CCY} exchange rate lookup failed — using the last known rate."
+            )
+        else:
+            excluded_currencies.add(ccy)
+            affected = sorted({p.symbol for p in stock_positions if p.currency == ccy})
+            warnings.append(
+                f"No {ccy}→{BASE_CCY} exchange rate available — "
+                f"{', '.join(affected)} excluded from CHF totals until it's back."
+            )
+
+    return fx_rates, excluded_currencies, warnings
+
+
+async def _build_holdings_payload(db: AsyncSession, user_id: str, positions: list[StockPosition]) -> dict:
+    """Shared valuation core for the private dashboard and the public share
+    view: live prices, CHF conversion, staleness, asset-type, warnings.
+    Does NOT persist a snapshot or compute net_deposits — callers that need
+    those (the private view) add them on top.
+    """
+    cash_pos = next((p for p in positions if p.symbol == "CASH"), None)
+    stock_positions = [p for p in positions if p.symbol != "CASH"]
+    cash_balance = cash_pos.quantity if cash_pos else 0  # Already in CHF
+
+    if not stock_positions:
+        return {
+            "total_value": 0, "total_cost": 0, "total_pnl": 0, "total_pnl_pct": 0,
+            "cash_balance": cash_balance, "fx_rates": {}, "positions": [], "warnings": [],
+        }
+
+    quotes, failed_symbols, price_warnings = await _price_stock_positions(db, stock_positions)
+    fx_rates, excluded_currencies, fx_warnings = await _fx_rates_for_positions(stock_positions)
+    warnings = [*price_warnings, *fx_warnings]
+
+    def to_chf(amount: float, ccy: str) -> float | None:
+        if ccy == BASE_CCY:
+            return amount
+        if ccy in excluded_currencies:
+            return None
+        return amount * fx_rates.get(ccy, 1.0)
+
+    valued = []
+    for p in stock_positions:
+        mv = to_chf((p.last_price or p.avg_cost_price) * p.quantity, p.currency)
+        cost = to_chf(p.avg_cost_price * p.quantity, p.currency)
+        valued.append((p, mv, cost))
+
+    total_value = sum(mv for _, mv, _ in valued if mv is not None)
+    total_cost = sum(cost for _, _, cost in valued if cost is not None)
+    total_pnl = total_value - total_cost
+    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else 0
+
+    # Trade history for "bought on" dates
+    trade_dates: dict[str, dict] = {}
+    trade_result = await db.execute(
+        select(
+            StockTransaction.symbol,
+            func.min(StockTransaction.executed_at).label("first_buy"),
+            func.count(StockTransaction.id).label("trade_count"),
+        )
+        .where(and_(StockTransaction.user_id == user_id, StockTransaction.type == "buy"))
+        .group_by(StockTransaction.symbol)
+    )
+    for r in trade_result.all():
+        trade_dates[r.symbol] = {"first_buy": r.first_buy.isoformat() if r.first_buy else None, "trades": r.trade_count}
+
+    # 7-day sparkline data for each stock
+    sparklines: dict[str, list[float]] = {}
+    for p in stock_positions:
+        hist = await get_history(p.symbol, range="5d", interval="1d")
+        if hist:
+            sparklines[p.symbol] = [h["close"] for h in hist]
+
+    classifications = await _classification_map(db, user_id, {p.symbol for p in stock_positions})
+
+    now = datetime.now(timezone.utc)
+    pos_list = []
+    for p, mv_chf, cost_chf in valued:
+        q_data = quotes.get(p.symbol, {})
+        fx = fx_rates.get(p.currency, 1.0)
+        td = trade_dates.get(p.symbol, {})
+        fx_unavailable = mv_chf is None
+        mv_chf = mv_chf or 0.0
+        pnl_chf = to_chf((p.unrealized_pnl or 0), p.currency) or 0.0
+        last_price_at = _as_aware_utc(p.last_price_at)
+        is_stale = p.symbol in failed_symbols and (
+            last_price_at is None or (now - last_price_at) > STALE_PRICE_THRESHOLD
+        )
+        pos_list.append({
+            "id": p.id,
+            "symbol": p.symbol,
+            "name": q_data.get("name", p.name),
+            "quantity": p.quantity,
+            "avg_cost_price": p.avg_cost_price,
+            "currency": p.currency,
+            "fx_rate": fx if p.currency != BASE_CCY else None,
+            "last_price": p.last_price,
+            "last_price_at": p.last_price_at.isoformat() if p.last_price_at else None,
+            "change": q_data.get("change", 0),
+            "change_pct": q_data.get("change_pct", 0),
+            "market_value": mv_chf,
+            "unrealized_pnl": pnl_chf,
+            "pnl_pct": ((p.last_price or p.avg_cost_price) / p.avg_cost_price - 1) * 100 if p.avg_cost_price else 0,
+            "weight_pct": (mv_chf / total_value * 100) if total_value else 0,
+            "first_bought": td.get("first_buy"),
+            "trade_count": td.get("trades", 0),
+            "earnings_date": p.earnings_date.isoformat() if p.earnings_date else None,
+            "sparkline": sparklines.get(p.symbol, []),
+            "asset_type": classifications.get(p.symbol, "equity"),
+            "price_stale": is_stale,
+            "fx_unavailable": fx_unavailable,
+        })
+
+    return {
+        "total_value": total_value,
+        "total_cost": total_cost,
+        "total_pnl": total_pnl,
+        "total_pnl_pct": total_pnl_pct,
+        "cash_balance": cash_balance,
+        "fx_rates": {k: round(v, 4) for k, v in fx_rates.items()},
+        "positions": sorted(pos_list, key=lambda p: p["market_value"], reverse=True),
+        "warnings": warnings,
+    }
+
+
 async def get_portfolio(db: AsyncSession, user_id: str) -> dict:
     """Positions with live prices, CHF-converted totals. Persists updated
     last_price/unrealized_pnl on positions and a daily PortfolioSnapshot."""
@@ -102,43 +367,10 @@ async def get_portfolio(db: AsyncSession, user_id: str) -> dict:
             "total_value": 0, "total_cost": 0, "total_pnl": 0, "total_pnl_pct": 0,
             "cash_balance": 0, "net_deposits": 0,
             "base_currency": BASE_CCY, "fx_rates": {},
-            "positions_count": 0, "positions": [],
+            "positions_count": 0, "positions": [], "warnings": [],
         }
 
-    # Separate cash from stock positions
-    cash_pos = next((p for p in positions if p.symbol == "CASH"), None)
-    stock_positions = [p for p in positions if p.symbol != "CASH"]
-
-    # Fetch live prices for stocks
-    quotes: dict[str, dict] = {}
-    if stock_positions:
-        tickers = list({p.symbol for p in stock_positions})
-        quotes = await get_quotes_batch(tickers)
-
-        for p in stock_positions:
-            q = quotes.get(p.symbol)
-            if q:
-                p.last_price = q["price"]
-                p.last_price_at = datetime.now(timezone.utc)
-                p.unrealized_pnl = (q["price"] - p.avg_cost_price) * p.quantity
-        await db.commit()
-
-    # Fetch FX rates to convert everything to CHF
-    fx_rates: dict[str, float] = {}
-    currencies_needed = {p.currency for p in stock_positions if p.currency != BASE_CCY}
-    for ccy in currencies_needed:
-        fx_rates[ccy] = await get_fx_rate(ccy, BASE_CCY)
-
-    def to_chf(amount: float, ccy: str) -> float:
-        if ccy == BASE_CCY:
-            return amount
-        return amount * fx_rates.get(ccy, 1.0)
-
-    total_value = sum(to_chf((p.last_price or p.avg_cost_price) * p.quantity, p.currency) for p in stock_positions)
-    total_cost = sum(to_chf(p.avg_cost_price * p.quantity, p.currency) for p in stock_positions)
-    total_pnl = total_value - total_cost
-    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else 0
-    cash_balance = cash_pos.quantity if cash_pos else 0  # Already in CHF
+    payload = await _build_holdings_payload(db, user_id, positions)
 
     # Net deposits (all-time): CASH deposits minus withdrawals. This is the
     # denominator for true all-time P&L — market-value-of-stocks + cash minus
@@ -160,58 +392,6 @@ async def get_portfolio(db: AsyncSession, user_id: str) -> dict:
     )
     net_deposits = float(dep_result.scalar() or 0) - float(wd_result.scalar() or 0)
 
-    # Get trade history for "bought on" dates
-    trade_dates = {}
-    trade_result = await db.execute(
-        select(
-            StockTransaction.symbol,
-            func.min(StockTransaction.executed_at).label("first_buy"),
-            func.count(StockTransaction.id).label("trade_count"),
-        )
-        .where(and_(StockTransaction.user_id == user_id, StockTransaction.type == "buy"))
-        .group_by(StockTransaction.symbol)
-    )
-    for r in trade_result.all():
-        trade_dates[r.symbol] = {"first_buy": r.first_buy.isoformat() if r.first_buy else None, "trades": r.trade_count}
-
-    # Fetch 7-day sparkline data for each stock
-    sparklines: dict[str, list[float]] = {}
-    if stock_positions:
-        for p in stock_positions:
-            hist = await get_history(p.symbol, range="5d", interval="1d")
-            if hist:
-                sparklines[p.symbol] = [h["close"] for h in hist]
-
-    pos_list = []
-    for p in stock_positions:
-        q_data = quotes.get(p.symbol, {}) if stock_positions else {}
-        mv_local = (p.last_price or p.avg_cost_price) * p.quantity
-        mv_chf = to_chf(mv_local, p.currency)
-        pnl_local = (p.unrealized_pnl or 0)
-        pnl_chf = to_chf(pnl_local, p.currency)
-        fx = fx_rates.get(p.currency, 1.0)
-        td = trade_dates.get(p.symbol, {})
-        pos_list.append({
-            "id": p.id,
-            "symbol": p.symbol,
-            "name": q_data.get("name", p.name),
-            "quantity": p.quantity,
-            "avg_cost_price": p.avg_cost_price,
-            "currency": p.currency,
-            "fx_rate": fx if p.currency != BASE_CCY else None,
-            "last_price": p.last_price,
-            "change": q_data.get("change", 0),
-            "change_pct": q_data.get("change_pct", 0),
-            "market_value": mv_chf,
-            "unrealized_pnl": pnl_chf,
-            "pnl_pct": ((p.last_price or p.avg_cost_price) / p.avg_cost_price - 1) * 100 if p.avg_cost_price else 0,
-            "weight_pct": (mv_chf / total_value * 100) if total_value else 0,
-            "first_bought": td.get("first_buy"),
-            "trade_count": td.get("trades", 0),
-            "earnings_date": p.earnings_date.isoformat() if p.earnings_date else None,
-            "sparkline": sparklines.get(p.symbol, []),
-        })
-
     # Save daily snapshot
     today = date.today()
     snap_result = await db.execute(
@@ -222,28 +402,45 @@ async def get_portfolio(db: AsyncSession, user_id: str) -> dict:
     )
     snap = snap_result.scalar_one_or_none()
     if snap:
-        snap.total_value = total_value + cash_balance
-        snap.total_cost = total_cost
-        snap.total_pnl = total_pnl
+        snap.total_value = payload["total_value"] + payload["cash_balance"]
+        snap.total_cost = payload["total_cost"]
+        snap.total_pnl = payload["total_pnl"]
     else:
         db.add(PortfolioSnapshot(
-            user_id=user_id, total_value=total_value + cash_balance,
-            total_cost=total_cost, total_pnl=total_pnl,
+            user_id=user_id, total_value=payload["total_value"] + payload["cash_balance"],
+            total_cost=payload["total_cost"], total_pnl=payload["total_pnl"],
             snapshot_date=today,
         ))
     await db.commit()
 
     return {
-        "total_value": total_value,
-        "total_cost": total_cost,
-        "total_pnl": total_pnl,
-        "total_pnl_pct": total_pnl_pct,
-        "cash_balance": cash_balance,
+        **payload,
         "net_deposits": net_deposits,
         "base_currency": BASE_CCY,
-        "fx_rates": {k: round(v, 4) for k, v in fx_rates.items()},
-        "positions_count": len(pos_list),
-        "positions": sorted(pos_list, key=lambda p: p["market_value"], reverse=True),
+        "positions_count": len(payload["positions"]),
+    }
+
+
+async def get_public_portfolio(db: AsyncSession, user_id: str) -> dict:
+    """Same valuation core as get_portfolio, shaped for the unauthenticated
+    public share view (no net_deposits, no snapshot persistence)."""
+    result = await db.execute(
+        select(StockPosition).where(StockPosition.user_id == user_id)
+    )
+    positions = result.scalars().all()
+
+    if not positions:
+        return {
+            "total_value": 0, "total_cost": 0, "total_pnl": 0, "total_pnl_pct": 0,
+            "cash_balance": 0, "base_currency": BASE_CCY,
+            "positions_count": 0, "positions": [], "warnings": [],
+        }
+
+    payload = await _build_holdings_payload(db, user_id, positions)
+    return {
+        **payload,
+        "base_currency": BASE_CCY,
+        "positions_count": len(payload["positions"]),
     }
 
 
@@ -261,6 +458,7 @@ async def execute_trade(
     trade_date: str | None = None,
     fees: float = 0,
     deduct_from_cash: bool = True,
+    confirm_currency: bool = False,
 ) -> dict:
     """Record a trade. Supports buy, sell, deposit (cash), withdraw (cash)."""
     account = await get_or_create_brokerage(db, user_id)
@@ -305,20 +503,30 @@ async def execute_trade(
     trade_price = price or quote["price"]
     total_cost = trade_price * quantity + fees
 
-    # Auto-correct currency from yfinance (quote already returns normalized major currency)
+    # Currency check — we never silently overwrite what the user typed.
+    # If the quote disagrees, the caller must explicitly confirm the
+    # override (confirm_currency=true) before we proceed with the quote's
+    # currency; otherwise we reject with enough detail to fix the input.
     yf_ccy = quote.get("currency", "").upper()
     CASH_CCY = "CHF"
     trade_ccy = currency.upper() if currency else ""
     # Normalize user-supplied currency in case it's a subunit code
     trade_ccy, _ = normalize_currency(trade_ccy) if trade_ccy else ("", 1.0)
-    if yf_ccy and trade_ccy != yf_ccy:
+    if yf_ccy and trade_ccy and trade_ccy != yf_ccy:
+        if not confirm_currency:
+            raise CurrencyMismatchError(ticker=ticker, user_currency=trade_ccy, quote_currency=yf_ccy)
         logger.info(
-            f"execute_trade: auto-correcting currency for {ticker}: "
-            f"user-supplied '{currency}' -> yfinance '{yf_ccy}'"
+            f"execute_trade: user confirmed currency override for {ticker}: "
+            f"'{trade_ccy}' -> quote currency '{yf_ccy}'"
         )
         trade_ccy = yf_ccy
+    elif not trade_ccy:
+        trade_ccy = yf_ccy or "USD"
+
     if trade_ccy != CASH_CCY:
         fx = await get_fx_rate(trade_ccy, CASH_CCY)
+        if fx is None:
+            raise FxRateUnavailableError(trade_ccy, CASH_CCY)
     else:
         fx = 1.0
     total_cost_chf = total_cost * fx
@@ -401,11 +609,22 @@ async def list_stock_transactions(
 
 
 async def get_fx_rates_for_trades(trades: list[StockTransaction], base: str = "CHF") -> dict[str, float]:
-    """Prefetch FX rates (to `base`) for every distinct trade currency."""
+    """Prefetch FX rates (to `base`) for every distinct trade currency.
+
+    Falls back to a stale cached rate if the live lookup fails; a currency
+    genuinely missing from the dict (never known) is left out, and callers
+    fall back to displaying 1x for that historical row rather than crashing
+    — this is a secondary, backwards-looking display total, not the primary
+    CHF totals guarded by get_portfolio()'s warnings contract.
+    """
     currencies = {t.currency for t in trades if t.currency != base}
     fx: dict[str, float] = {}
     for ccy in currencies:
-        fx[ccy] = await get_fx_rate(ccy, base)
+        rate = await get_fx_rate(ccy, base)
+        if rate is None:
+            rate = get_cached_fx_rate(ccy, base)
+        if rate is not None:
+            fx[ccy] = rate
     return fx
 
 
@@ -533,9 +752,16 @@ async def build_value_timeline(db: AsyncSession, user_id: str) -> list[dict]:
             symbol_currency[t.symbol] = t.currency.upper()
     fx_rates: dict[str, float] = {}
     for ccy in trade_currencies:
-        fx_rates[ccy] = await get_fx_rate(ccy, "CHF")
+        rate = await get_fx_rate(ccy, "CHF")
+        if rate is None:
+            rate = get_cached_fx_rate(ccy, "CHF")
+        if rate is not None:
+            fx_rates[ccy] = rate
 
     def _to_chf(amount: float, ccy: str) -> float:
+        # This is a historical timeline reconstruction, not the live totals
+        # guarded by get_portfolio()'s warnings contract; a 1x fallback here
+        # only bites if we've *never* known this currency's rate at all.
         return amount * fx_rates.get(ccy.upper(), 1.0)
 
     # Collect all unique dates from price history

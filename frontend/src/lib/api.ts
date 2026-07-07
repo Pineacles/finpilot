@@ -10,9 +10,34 @@ import type {
   Milestone, CreateMilestone, MerchantRule, ImportResult, MonthlyStats,
   YearlyStats, SyncStatus, BrokerList,
   BrokerStatus, BrokerAccount, SaxoSyncResult, SaxoSubPortfolio,
-  SymbolClassification, AssetType,
+  SymbolClassification, AssetType, WatchlistItem,
   CreditCardAccount, ColumnMapping, CsvPreview, ImportProfile,
 } from "@/lib/types";
+
+// Structured 422 detail from a currency mismatch on POST .../trade — see
+// backend/app/services/portfolio_service.py CurrencyMismatchError.
+export interface CurrencyMismatchDetail {
+  error: "currency_mismatch";
+  message: string;
+  ticker: string;
+  user_currency: string;
+  quote_currency: string;
+  suggested_ticker: string | null;
+}
+
+// Thrown by request() on any non-2xx response. `detail` preserves the raw
+// (possibly structured) FastAPI error body — plain string errors just have
+// message === detail, but callers that need to render a "use X instead"
+// confirm button (currency mismatch) inspect `.detail` directly instead of
+// re-parsing `.message`.
+export class ApiError extends Error {
+  detail: unknown;
+  constructor(message: string, detail: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.detail = detail;
+  }
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -40,7 +65,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || res.statusText);
+    const detail = body.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail && typeof detail === "object" && "message" in detail
+        ? String((detail as { message: unknown }).message)
+        : res.statusText;
+    throw new ApiError(message, detail);
   }
 
   return res.json();
@@ -64,8 +96,8 @@ export const api = {
     }),
   portfolioHistory: (days = 90) => request<PortfolioSnapshot[]>(`/api/dashboard/portfolio/history?days=${days}`),
   portfolioValueTimeline: () => request<ValueTimelinePoint[]>("/api/dashboard/portfolio/value-timeline"),
-  trade: (data: { symbol: string; type: string; quantity: number; price?: number; currency?: string; date?: string; fees?: number; deduct_from_cash?: boolean }) =>
-    request<{ status: string }>("/api/dashboard/portfolio/trade", { method: "POST", body: JSON.stringify(data) }),
+  trade: (data: { symbol: string; type: string; quantity: number; price?: number; currency?: string; date?: string; fees?: number; deduct_from_cash?: boolean; confirm_currency?: boolean }) =>
+    request<{ status: string; cash_balance?: number; symbol?: string; type?: string; quantity?: number; price?: number; currency?: string }>("/api/dashboard/portfolio/trade", { method: "POST", body: JSON.stringify(data) }),
   trades: (symbol?: string) =>
     request<Trade[]>(`/api/dashboard/portfolio/trades${symbol ? `?symbol=${symbol}` : ""}`),
   updatePosition: (id: string, data: { quantity?: number; avg_cost_price?: number }) =>
@@ -262,6 +294,13 @@ export const api = {
     }),
   backfillClassifications: () =>
     request<{ created: number; skipped: number; total_symbols: number }>("/api/dashboard/portfolio/classifications/backfill", { method: "POST" }),
+
+  // Watchlist — tracking only, no analysis/recommendations
+  watchlist: () => request<WatchlistItem[]>("/api/dashboard/watchlist"),
+  addWatchlistItem: (symbol: string) =>
+    request<WatchlistItem>("/api/dashboard/watchlist", { method: "POST", body: JSON.stringify({ symbol }) }),
+  removeWatchlistItem: (symbol: string) =>
+    request<{ status: string }>(`/api/dashboard/watchlist/${encodeURIComponent(symbol)}`, { method: "DELETE" }),
 };
 
 // Re-export all types so existing imports from '@/lib/api' continue to work.
