@@ -6,7 +6,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from app.api.endpoints import auth, health, dashboard, portfolio, portfolio_sharing, sync, transactions, finance, agent, analysis, user_settings, stats, csv_import, categorize, merchants, docs, journal, tools, brokers, trading, trading_agent
+from app.api.endpoints import auth, health, dashboard, portfolio, portfolio_sharing, sync, transactions, finance, agent, user_settings, stats, csv_import, categorize, merchants, docs, brokers
 from app.core.config import settings
 from app.services.gmail_scheduler import start_scheduler as start_gmail_scheduler, stop_scheduler as stop_gmail_scheduler
 from app.services.saxo_scheduler import start_scheduler as start_saxo_scheduler, stop_scheduler as stop_saxo_scheduler
@@ -70,7 +70,6 @@ app.include_router(sync.router)
 app.include_router(transactions.router)
 app.include_router(finance.router)
 app.include_router(agent.router)
-app.include_router(analysis.router)
 app.include_router(user_settings.router)
 app.include_router(stats.router)
 app.include_router(csv_import.router)
@@ -78,8 +77,4 @@ app.include_router(categorize.router)
 app.include_router(merchants.router)
 app.include_router(docs.router)
 app.include_router(portfolio_sharing.public_router)
-app.include_router(journal.router)
-app.include_router(tools.router)
 app.include_router(brokers.router)
-app.include_router(trading.router)
-app.include_router(trading_agent.router)

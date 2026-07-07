@@ -26,7 +26,6 @@ services:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3010}
-      GUARDRAIL_ADMIN_NAME: ${GUARDRAIL_ADMIN_NAME:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANALYSIS_MODEL: ${ANALYSIS_MODEL:-claude-sonnet-4-20250514}
       SAXO_APP_KEY: ${SAXO_APP_KEY:-}
@@ -48,7 +47,6 @@ services:
     restart: unless-stopped
     environment:
       API_URL: http://api:8000
-      NEXT_PUBLIC_ADMIN_NAME: ${NEXT_PUBLIC_ADMIN_NAME:-admin}
     ports:
       - "${WEB_PORT:-3010}:3000"
     depends_on:

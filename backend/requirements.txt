@@ -11,12 +11,10 @@ bcrypt==4.2.1
 python-multipart==0.0.20
 httpx==0.28.1
 python-dateutil==2.9.0
-yfinance==0.2.54
 anthropic==0.52.0
 thefuzz==0.22.1
 scikit-learn==1.6.1
 joblib==1.4.2
-numpy>=1.26.0
 slowapi>=0.1.9
 
 # Dev / test

@@ -82,6 +82,26 @@ The schemas are identical except one known, pre-existing difference:
   first sighting), so migrated databases are stricter than `create_all` ones.
   If you add the index to the model, delete this bullet.
 
+## Archiving AI-analysis data before `f3a8c91b5d2e`
+
+Revision `f3a8c91b5d2e` drops the AI stock-analysis / AI-trading tables
+(`market_analyses`, `post_mortems`, `buy_assessments`, `pending_orders`,
+`signal_history`, `tool_weights`, `tool_weight_proposals`) — that feature was
+tried and removed from the product (see the root README). If you have a live
+database with data in these tables and want to keep a copy before upgrading,
+export it first:
+
+```bash
+cd backend
+python scripts/export_ai_archive.py my_ai_archive.json
+alembic upgrade head
+```
+
+The script connects with the same `DATABASE_URL` the app uses and dumps every
+row from the seven tables to a single JSON file; it makes no changes to the
+database. `downgrade()` on this revision recreates the empty tables (schema
+only) — the export is the only way to get the data back.
+
 ## Caveats
 
 - The migration chain is Postgres-only from `b2c3d4e5f6a7` (pending_orders)

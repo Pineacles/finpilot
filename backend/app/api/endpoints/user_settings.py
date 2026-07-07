@@ -39,7 +39,7 @@ async def get_settings(
         "settings": all_settings,
         "groups": {
             "analysis": {
-                "label": "AI Analysis",
+                "label": "AI categorization",
                 "keys": ["anthropic_api_key", "analysis_model", "analysis_endpoint", "analysis_auth_header"],
             },
             "agent": {

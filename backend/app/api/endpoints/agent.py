@@ -5,16 +5,13 @@ The agent can do everything a user can do through these endpoints.
 
 This module is a thin aggregator. The actual route implementations live in:
   - agent_finance_router.py   : summaries, stats, transactions, categorize
-  - agent_portfolio_router.py : trades, import, analysis, gmail, goals, milestones, journal
-  - agent_signals_router.py   : signal history, tool weights, proposals, classifications, benchmark
+  - agent_portfolio_router.py : trades, import, gmail, goals, milestones
 """
 from fastapi import APIRouter
 
 from app.api.endpoints.agent_finance_router import router as _finance_router
 from app.api.endpoints.agent_portfolio_router import router as _portfolio_router
-from app.api.endpoints.agent_signals_router import router as _signals_router
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 router.include_router(_finance_router)
 router.include_router(_portfolio_router)
-router.include_router(_signals_router)

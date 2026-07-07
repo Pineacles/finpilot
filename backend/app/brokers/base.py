@@ -8,7 +8,6 @@ from __future__ import annotations
 import enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,10 +59,6 @@ class ConnectionStatus:
     last_error: str | None = None
 
 
-class TradingDisabledError(RuntimeError):
-    """Raised when order endpoints are invoked while trading is not enabled."""
-
-
 class BrokerAdapter(ABC):
     """Abstract broker integration.
 
@@ -100,15 +95,6 @@ class BrokerAdapter(ABC):
 
     @abstractmethod
     async def get_positions(self, db: AsyncSession, user_id: str, account_key: str) -> list[BrokerPosition]: ...
-
-    async def place_order(self, db: AsyncSession, user_id: str, **kwargs: Any) -> None:
-        raise TradingDisabledError("Order placement is not enabled in this release.")
-
-    async def cancel_order(self, db: AsyncSession, user_id: str, order_id: str) -> None:
-        raise TradingDisabledError("Order cancellation is not enabled in this release.")
-
-    async def modify_order(self, db: AsyncSession, user_id: str, order_id: str, **kwargs: Any) -> None:
-        raise TradingDisabledError("Order modification is not enabled in this release.")
 
 
 @dataclass

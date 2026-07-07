@@ -12,7 +12,6 @@ import {
   Save, CheckCircle2, RefreshCw, Brain, Bot, Mail, Clock, XCircle,
   Key, ClipboardCheck, Copy, AlertTriangle, User, Building2, Plug, PlugZap, Link2Off,
 } from "lucide-react";
-import { AiTradingCard } from "@/components/ai-trading-card";
 
 const LABELS: Record<string, string> = {
   anthropic_api_key: "Anthropic API Key", analysis_model: "Analysis Model",
@@ -276,9 +275,6 @@ export default function SettingsPage() {
         />
       </Suspense>
 
-      {/* AI Trading — shared card, also mounted on /portfolio for quick access */}
-      <AiTradingCard />
-
       {/* Danger zone */}
       <GlassCard delay={0.32} className="border-l-4 border-l-red-500/70">
         <div className="flex items-center gap-2 mb-1">
@@ -433,25 +429,6 @@ function BrokersSection({ settings, edits, onChange, onSaveThenAction }: Brokers
               <span className="text-[13px]">{enabled ? "Enabled" : "Disabled"}</span>
               <span className={`h-5 w-9 rounded-full p-0.5 transition-colors ${enabled ? "bg-emerald-500" : "bg-muted-foreground/30"}`}>
                 <span className={`block h-4 w-4 rounded-full bg-white transition-transform ${enabled ? "translate-x-4" : ""}`} />
-              </span>
-            </button>
-          </div>
-
-          {/* Trading toggle — separate flag, both must be true for orders to fire */}
-          <div>
-            <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
-              Trading
-            </label>
-            <button
-              type="button"
-              disabled={!enabled}
-              onClick={() => onChange("saxo_trading_enabled", value("saxo_trading_enabled") === "1" ? "0" : "1")}
-              className={`h-11 w-full rounded-xl border border-border px-3 flex items-center justify-between transition-colors ${!enabled ? "opacity-50 cursor-not-allowed" : ""} ${value("saxo_trading_enabled") === "1" ? "bg-amber-500/10" : "bg-accent"}`}
-              title={!enabled ? "Enable Saxo first" : ""}
-            >
-              <span className="text-[13px]">{value("saxo_trading_enabled") === "1" ? "Orders allowed" : "Read-only"}</span>
-              <span className={`h-5 w-9 rounded-full p-0.5 transition-colors ${value("saxo_trading_enabled") === "1" ? "bg-amber-500" : "bg-muted-foreground/30"}`}>
-                <span className={`block h-4 w-4 rounded-full bg-white transition-transform ${value("saxo_trading_enabled") === "1" ? "translate-x-4" : ""}`} />
               </span>
             </button>
           </div>

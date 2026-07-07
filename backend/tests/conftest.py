@@ -16,7 +16,6 @@ from app.models import sync as _sync  # noqa: F401
 from app.models import user as _user  # noqa: F401
 from app.models import stock as _stock  # noqa: F401
 from app.models import account as _account  # noqa: F401
-from app.models import signal as _signal  # noqa: F401 — pull in for pending_orders FK chain
 
 
 @pytest_asyncio.fixture

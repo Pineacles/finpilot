@@ -14,11 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.brokers import get_adapter, list_adapters
-from app.brokers.base import AuthState, TradingDisabledError
+from app.brokers.base import AuthState
 from app.brokers.saxo import config as saxo_config
 from app.brokers.saxo import sync as saxo_sync
 from app.brokers.saxo.client import SaxoHTTPError
-from app.brokers.saxo.instruments import InstrumentNotFound
 from app.core.database import get_db
 from app.models.user import User
 
@@ -177,183 +176,13 @@ async def saxo_positions(
     return {"positions": [_position_dict(p) for p in positions]}
 
 
-# ── Orders ──────────────────────────────────────────────────────────────
-
-class OrderBase(BaseModel):
-    account_key: str
-    symbol: str
-    buy_sell: str  # "Buy" | "Sell"
-    amount: float
-    order_type: str = "Market"  # "Market" | "Limit" | "Stop" | "StopLimit"
-    duration: str = "DayOrder"
-    limit_price: float | None = None
-    stop_price: float | None = None
-    asset_type: str = "Stock"
-
-
-class OrderPlace(OrderBase):
-    pass
-
-
-class OrderModify(BaseModel):
-    order_id: str
-    account_key: str
-    amount: float | None = None
-    limit_price: float | None = None
-    stop_price: float | None = None
-    duration: str | None = None
-
-
 def _handle_saxo_errors(exc: Exception) -> HTTPException | None:
-    if isinstance(exc, TradingDisabledError):
-        return HTTPException(status_code=409, detail=str(exc))
-    if isinstance(exc, InstrumentNotFound):
-        return HTTPException(status_code=404, detail=f"Instrument not found: {exc.symbol}")
     if isinstance(exc, SaxoHTTPError):
         status = exc.status or 502
         return HTTPException(status_code=status, detail=exc.detail)
     if isinstance(exc, RuntimeError) and str(exc) == "needs_auth":
         return HTTPException(status_code=409, detail="Saxo needs re-authentication.")
     return None
-
-
-@router.post("/saxo/orders/precheck")
-async def saxo_orders_precheck(
-    body: OrderBase,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    adapter = get_adapter("saxo")
-    try:
-        result = await adapter.precheck_order(
-            db, user.id,
-            account_key=body.account_key,
-            symbol=body.symbol,
-            buy_sell=body.buy_sell,
-            amount=body.amount,
-            order_type=body.order_type,
-            duration=body.duration,
-            limit_price=body.limit_price,
-            stop_price=body.stop_price,
-            asset_type=body.asset_type,
-        )
-    except Exception as exc:
-        mapped = _handle_saxo_errors(exc)
-        if mapped:
-            raise mapped
-        raise
-    return {
-        "ok": result.ok,
-        "estimated_cash_required": result.estimated_cash_required,
-        "estimated_fees": result.estimated_fees,
-        "currency": result.currency,
-        "warnings": result.warnings,
-        "error_message": result.error_message,
-    }
-
-
-@router.post("/saxo/orders")
-async def saxo_orders_place(
-    body: OrderPlace,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    adapter = get_adapter("saxo")
-    try:
-        ack = await adapter.place_order(
-            db, user.id,
-            account_key=body.account_key,
-            symbol=body.symbol,
-            buy_sell=body.buy_sell,
-            amount=body.amount,
-            order_type=body.order_type,
-            duration=body.duration,
-            limit_price=body.limit_price,
-            stop_price=body.stop_price,
-            asset_type=body.asset_type,
-        )
-    except Exception as exc:
-        mapped = _handle_saxo_errors(exc)
-        if mapped:
-            raise mapped
-        raise
-    # Best-effort post-trade sync so the UI picks up the new position
-    # immediately. Failures here don't roll back the order.
-    try:
-        await _run_sync(db, user.id)
-    except Exception:
-        pass
-    return {"order_id": ack.order_id}
-
-
-@router.delete("/saxo/orders/{order_id}")
-async def saxo_orders_cancel(
-    order_id: str,
-    account_key: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    adapter = get_adapter("saxo")
-    try:
-        await adapter.cancel_order(db, user.id, order_id=order_id, account_key=account_key)
-    except Exception as exc:
-        mapped = _handle_saxo_errors(exc)
-        if mapped:
-            raise mapped
-        raise
-    return {"status": "ok"}
-
-
-@router.patch("/saxo/orders")
-async def saxo_orders_modify(
-    body: OrderModify,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    adapter = get_adapter("saxo")
-    try:
-        await adapter.modify_order(
-            db, user.id,
-            order_id=body.order_id,
-            account_key=body.account_key,
-            amount=body.amount,
-            limit_price=body.limit_price,
-            stop_price=body.stop_price,
-            duration=body.duration,
-        )
-    except Exception as exc:
-        mapped = _handle_saxo_errors(exc)
-        if mapped:
-            raise mapped
-        raise
-    return {"status": "ok"}
-
-
-@router.get("/saxo/orders")
-async def saxo_orders_list(
-    account_key: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    adapter = get_adapter("saxo")
-    try:
-        orders = await adapter.get_orders(db, user.id, account_key)
-    except Exception as exc:
-        mapped = _handle_saxo_errors(exc)
-        if mapped:
-            raise mapped
-        raise
-    return {
-        "orders": [
-            {
-                "order_id": o.order_id, "symbol": o.symbol, "uic": o.uic,
-                "asset_type": o.asset_type, "buy_sell": o.buy_sell,
-                "amount": o.amount, "order_type": o.order_type,
-                "status": o.status, "price": o.price,
-            }
-            for o in orders
-        ]
-    }
 
 
 # ── Portfolio sync ──────────────────────────────────────────────────────

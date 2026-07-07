@@ -1,23 +1,19 @@
 "use client";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { motion } from "motion/react";
-import { api, PortfolioSummary, PortfolioAnalysis, StockAnalysisEntry, Trade, ValueTimelinePoint, PostMortem, BuyAssessment, PostMortemInput, BuyAssessmentInput } from "@/lib/api";
-import { formatCurrency, formatPct } from "@/lib/format";
+import { api, PortfolioSummary, Trade, ValueTimelinePoint } from "@/lib/api";
+import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, ReferenceLine, ComposedChart, Line, Bar } from "recharts";
-import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Brain, Zap, AlertTriangle, ArrowUpRight, Globe, Link2, ClipboardCheck, History, LineChart, ChevronDown, ChevronRight, Archive, BookOpen, Target, Building2 } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, RefreshCw, BarChart3, Globe, Link2, ClipboardCheck, History, LineChart } from "lucide-react";
 import { GlassCard } from "@/components/glass-card";
 import { AnimatedNumber } from "@/components/animated-number";
 import { LivePill } from "@/components/live-pill";
 import { Sparkline as SparklineChart } from "@/components/sparkline";
 import { RangeSwitcher } from "@/components/range-switcher";
-import { ActionBadge } from "@/components/action-badge";
-import { ConvictionDots } from "@/components/conviction-dots";
 import { SaxoSection } from "@/components/saxo-section";
-import { BenchmarkCard } from "@/components/benchmark-card";
-import { PendingOrdersCard } from "@/components/pending-orders-card";
 import { SaxoReconnectBanner } from "@/components/saxo-reconnect-banner";
 
 const COLORS = ["#3b82f6","#f97316","#ef4444","#a855f7","#14b8a6","#f59e0b","#ec4899","#22c55e","#06b6d4","#8b5cf6","#e11d48","#84cc16","#6366f1","#d946ef","#0ea5e9","#fb923c"];
@@ -27,139 +23,6 @@ const TIMELINE_RANGES = ["1W","1M","3M","6M","1Y","ALL"] as const;
 function PnlBadge({value,pct}:{value:number;pct?:number}){
   const pos=value>=0;
   return <span className={`text-[13px] px-2.5 py-1 rounded-xl font-medium inline-flex items-center gap-1 ${pos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{pos?"+":""}{formatCurrency(value)}{pct!==undefined&&<span className="opacity-70">({pos?"+":""}{pct.toFixed(1)}%)</span>}</span>;
-}
-function SentimentBadge({sentiment,size="md"}:{sentiment:string;size?:"sm"|"md"}){
-  const cls=sentiment==="bullish"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":sentiment==="bearish"?"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400":"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400";
-  const px=size==="sm"?"px-2 py-0.5 text-[11px]":"px-3 py-1.5 text-[13px]";
-  return <span className={`${px} rounded-xl font-semibold capitalize ${cls}`}>{sentiment}</span>;
-}
-function StockAnalysisDetail({s}:{s:StockAnalysisEntry["stock"]}){
-  return(
-    <>
-      <p className="text-[14px] sm:text-[15px] leading-[1.85] text-foreground/80">{s.rationale}</p>
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-        {s.key_risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Risks</p><ul className="space-y-1.5">{s.key_risks.map((r,i)=><li key={i} className="text-[13px] sm:text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
-        {s.key_catalysts.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Catalysts</p><ul className="space-y-1.5">{s.key_catalysts.map((c,i)=><li key={i} className="text-[13px] sm:text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{c}</li>)}</ul></div>}
-      </div>
-    </>
-  );
-}
-function EconomyDetail({c}:{c:PortfolioAnalysis["content"]}){
-  return(
-    <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <SentimentBadge sentiment={c.market_sentiment}/>
-      </div>
-      <div className="p-5 rounded-2xl bg-muted/60">
-        <p className="text-[15px] leading-[1.85] text-foreground/90">{c.market_summary}</p>
-      </div>
-      {c.key_indicators&&c.key_indicators.length>0&&(
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-          {c.key_indicators.map((ind,i)=>(
-            <div key={i} className="p-4 rounded-2xl bg-muted/60 text-center">
-              <p className="text-[13px] text-muted-foreground mb-1">{ind.name}</p>
-              <p className="font-mono tabular-nums text-[20px] font-bold">{ind.value}</p>
-              <p className={`text-[12px] font-medium mt-1 ${ind.trend==="up"?"text-gain":ind.trend==="down"?"text-loss":"text-muted-foreground"}`}>
-                {ind.trend==="up"?"Trending up":ind.trend==="down"?"Trending down":"Stable"}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-      {c.outlook&&(
-        <div className="p-5 rounded-2xl border border-border">
-          <p className="text-[14px] font-semibold mb-2">Outlook</p>
-          <p className="text-[15px] leading-[1.85] text-foreground/80">{c.outlook}</p>
-        </div>
-      )}
-      {(c.risks?.length||c.opportunities?.length)&&(
-        <div className="grid gap-5 md:grid-cols-2">
-          {c.risks&&c.risks.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-loss flex items-center gap-1.5"><AlertTriangle className="h-4 w-4"/>Key Risks</p><ul className="space-y-1.5">{c.risks.map((r,i)=><li key={i} className="text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-loss/40">{r}</li>)}</ul></div>}
-          {c.opportunities&&c.opportunities.length>0&&<div className="space-y-2"><p className="text-[14px] font-semibold text-gain flex items-center gap-1.5"><Zap className="h-4 w-4"/>Opportunities</p><ul className="space-y-1.5">{c.opportunities.map((o,i)=><li key={i} className="text-[14px] text-foreground/70 leading-[1.7] pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-gain/40">{o}</li>)}</ul></div>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function useScrollableDeck<T extends HTMLElement>(){
-  const [el,setEl]=useState<T|null>(null);
-  const refCb=useCallback((node:T|null)=>{setEl(node);},[]);
-  const [atStart,setAtStart]=useState(true);
-  const [atEnd,setAtEnd]=useState(true);
-  const updateEdges=useCallback(()=>{
-    if(!el)return;
-    const start=el.scrollLeft<=1;
-    const end=el.scrollLeft+el.clientWidth>=el.scrollWidth-1;
-    // Direct DOM update for instant mask change (no React render lag)
-    el.classList.toggle("deck-at-start",start);
-    el.classList.toggle("deck-at-end",end);
-    setAtStart(start);
-    setAtEnd(end);
-  },[el]);
-  useEffect(()=>{
-    if(!el)return;
-    updateEdges();
-    const onScroll=()=>updateEdges();
-    el.addEventListener("scroll",onScroll,{passive:true});
-    window.addEventListener("resize",updateEdges);
-    // Wheel → horizontal scroll (release to page scroll at edges)
-    const onWheel=(e:WheelEvent)=>{
-      if(Math.abs(e.deltaY)>Math.abs(e.deltaX)&&Math.abs(e.deltaY)>0){
-        const atStartNow=el.scrollLeft<=0;
-        const atEndNow=el.scrollLeft+el.clientWidth>=el.scrollWidth-1;
-        if((e.deltaY>0&&atEndNow)||(e.deltaY<0&&atStartNow))return;
-        e.preventDefault();
-        el.scrollLeft+=e.deltaY;
-      }
-    };
-    el.addEventListener("wheel",onWheel,{passive:false});
-    // Drag-to-scroll
-    let isDragging=false;
-    let startX=0;
-    let startScroll=0;
-    let moved=false;
-    const onMouseDown=(e:MouseEvent)=>{
-      const target=e.target as HTMLElement;
-      if(target.closest("button")||target.closest("a")||target.closest("input"))return;
-      isDragging=true;
-      moved=false;
-      startX=e.pageX;
-      startScroll=el.scrollLeft;
-      el.style.cursor="grabbing";
-      e.preventDefault();
-    };
-    const onMouseMove=(e:MouseEvent)=>{
-      if(!isDragging)return;
-      const dx=e.pageX-startX;
-      if(Math.abs(dx)>3)moved=true;
-      el.scrollLeft=startScroll-dx;
-    };
-    const onMouseUp=()=>{
-      if(!isDragging)return;
-      isDragging=false;
-      el.style.cursor="";
-      if(moved){
-        const stopClick=(ev:MouseEvent)=>{ev.stopPropagation();ev.preventDefault();window.removeEventListener("click",stopClick,true);};
-        window.addEventListener("click",stopClick,true);
-      }
-    };
-    el.addEventListener("mousedown",onMouseDown);
-    window.addEventListener("mousemove",onMouseMove);
-    window.addEventListener("mouseup",onMouseUp);
-    return()=>{
-      el.removeEventListener("scroll",onScroll);
-      window.removeEventListener("resize",updateEdges);
-      el.removeEventListener("wheel",onWheel);
-      el.removeEventListener("mousedown",onMouseDown);
-      window.removeEventListener("mousemove",onMouseMove);
-      window.removeEventListener("mouseup",onMouseUp);
-    };
-  },[el,updateEdges]);
-  const scrollByAmount=useCallback((amount:number)=>{
-    el?.scrollBy({left:amount,behavior:"smooth"});
-  },[el]);
-  return{ref:refCb,atStart,atEnd,updateEdges,scrollByAmount,el};
 }
 
 export default function PortfolioPage(){
@@ -176,18 +39,6 @@ export default function PortfolioPage(){
   const [chartData,setChartData]=useState<{date:string;close:number}[]>([]);
   const [chartLoading,setChartLoading]=useState(false);
   const [historyData,setHistoryData]=useState<{date:string;value:number}[]>([]);
-  const [stockAnalyses,setStockAnalyses]=useState<Record<string,StockAnalysisEntry>>({});
-  const [pastStockAnalyses,setPastStockAnalyses]=useState<Record<string,StockAnalysisEntry>>({});
-  const [showPastStocks,setShowPastStocks]=useState(false);
-  const [expandedStockCard,setExpandedStockCard]=useState<string|null>(null);
-  const [latestEconomy,setLE]=useState<PortfolioAnalysis|null>(null);
-  const [economyHistory,setEconomyHistory]=useState<PortfolioAnalysis[]>([]);
-  const [showOlderEconomy,setShowOlderEconomy]=useState(false);
-  const [expandedEconomyId,setExpandedEconomyId]=useState<string|null>(null);
-  const [olderSymbol,setOlderSymbol]=useState<string|null>(null);
-  const [olderAnalyses,setOlderAnalyses]=useState<StockAnalysisEntry[]>([]);
-  const [olderLoading,setOlderLoading]=useState(false);
-  const [expandedOlderId,setExpandedOlderId]=useState<string|null>(null);
   const [publicEnabled,setPublicEnabled]=useState(false);
   const [publicToken,setPublicToken]=useState<string|null>(null);
   const [publicToggling,setPublicToggling]=useState(false);
@@ -197,8 +48,6 @@ export default function PortfolioPage(){
   const [livePrices,setLivePrices]=useState<Record<string,{price:number;change:number;change_pct:number}>>({});
   const [flashes,setFlashes]=useState<Record<string,"up"|"down">>({});
   const prevPricesRef=useRef<Record<string,number>>({});
-  const stockDeck=useScrollableDeck<HTMLDivElement>();
-  const pastDeck=useScrollableDeck<HTMLDivElement>();
   const [timeline,setTimeline]=useState<ValueTimelinePoint[]>([]);
   const [tradeChartSymbol,setTradeChartSymbol]=useState<string|null>(null);
   const [tradeChartData,setTradeChartData]=useState<{date:string;close:number}[]>([]);
@@ -206,50 +55,19 @@ export default function PortfolioPage(){
   const [tradeChartLoading,setTradeChartLoading]=useState(false);
   const [timelineRange,setTimelineRange]=useState<"1W"|"1M"|"3M"|"6M"|"1Y"|"ALL">("3M");
 
-  // Journal state
-  const [postMortems,setPostMortems]=useState<PostMortem[]>([]);
-  const [buyAssessments,setBuyAssessments]=useState<BuyAssessment[]>([]);
-  const [showPMModal,setShowPMModal]=useState(false);
-  const [showBAModal,setShowBAModal]=useState(false);
-  const [editingPM,setEditingPM]=useState<PostMortem|null>(null);
-  const [editingBA,setEditingBA]=useState<BuyAssessment|null>(null);
-  const [pmForm,setPMForm]=useState({symbol:"",entry_price:"",exit_price:"",notes:""});
-  const [baForm,setBAForm]=useState({symbol:"",recommendation:"buy" as BuyAssessmentInput["recommendation"],target_price:"",stop_loss:"",thesis:"",risk_factors:"",conviction:"3",time_horizon:"" as BuyAssessmentInput["time_horizon"]|""});
-  const [pmSubmitting,setPMSubmitting]=useState(false);
-  const [baSubmitting,setBASubmitting]=useState(false);
-  const [pmError,setPMError]=useState("");
-  const [baError,setBAError]=useState("");
-  const [expandedPMId,setExpandedPMId]=useState<string|null>(null);
-  const [expandedBAId,setExpandedBAId]=useState<string|null>(null);
-  const [deletingPMId,setDeletingPMId]=useState<string|null>(null);
-  const [deletingBAId,setDeletingBAId]=useState<string|null>(null);
-
   const load=useCallback(()=>{
     setLoading(true);
-    Promise.all([api.portfolio(),api.portfolioHistory(365),api.analysesByStock(),api.analysisLatest("economy"),api.trades(),api.portfolioValueTimeline(),api.economyHistory(20)]).then(([port,h,sa,ae,tr,tl,eh])=>{
+    Promise.all([api.portfolio(),api.portfolioHistory(365),api.trades(),api.portfolioValueTimeline()]).then(([port,h,tr,tl])=>{
       setP(port);setHistoryData(h);
-      if(sa&&typeof sa==="object"){
-        setStockAnalyses(sa.current||{});
-        setPastStockAnalyses(sa.past||{});
-      }
-      if(ae&&!("status" in ae&&(ae as any).status==="none"))setLE(ae);
       setTrades(tr);
       setTimeline(tl);
-      if(Array.isArray(eh))setEconomyHistory(eh);
     }).finally(()=>setLoading(false));
   },[]);
   useEffect(()=>{
     load();
     api.publicPortfolioStatus().then(s=>{setPublicEnabled(s.enabled);setPublicToken(s.token);}).catch(()=>{});
-    api.postMortems().then(setPostMortems).catch(()=>{});
-    api.buyAssessments().then(setBuyAssessments).catch(()=>{});
   },[load]);
   useEffect(()=>{const i=setInterval(load,120000);return()=>clearInterval(i);},[load]);
-  useEffect(()=>{
-    // Recompute edge states when content changes
-    const t=setTimeout(()=>{stockDeck.updateEdges();pastDeck.updateEdges();},50);
-    return()=>clearTimeout(t);
-  },[stockAnalyses,pastStockAnalyses,stockDeck,pastDeck]);
 
   // Live ticker polling — fetch fresh prices every 5 seconds and animate changes
   useEffect(()=>{
@@ -295,7 +113,6 @@ export default function PortfolioPage(){
   };
   const handleUpdate=async(id:string)=>{await api.updatePosition(id,{quantity:editForm.quantity?parseFloat(editForm.quantity):undefined,avg_cost_price:editForm.avg_cost_price?parseFloat(editForm.avg_cost_price):undefined});setEditingId(null);load();};
   const handleDelete=async(id:string)=>{await api.deletePosition(id);load();};
-  const openOlderAnalyses=async(sym:string)=>{setOlderSymbol(sym);setOlderLoading(true);setExpandedOlderId(null);api.stockAnalyses(sym).then(setOlderAnalyses).finally(()=>setOlderLoading(false));};
   const openTradeChart=async(sym:string,range=tradeChartRange)=>{
     setTradeChartSymbol(sym);setTradeChartRange(range);setTradeChartLoading(true);
     try{const r=await api.priceChart(sym,range);setTradeChartData(r.data);}catch{setTradeChartData([]);}
@@ -347,17 +164,10 @@ export default function PortfolioPage(){
       <style>{`
   .recharts-brush text { fill: var(--foreground); font-weight: 500; font-size: 11px; }
   .recharts-brush-traveller { fill: var(--accent); }
-  .stock-deck::-webkit-scrollbar { height: 8px; }
-  .stock-deck::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-  .stock-deck::-webkit-scrollbar-track { background: transparent; }
   @keyframes flash-up { 0% { background-color: rgba(34,197,94,0.25); } 100% { background-color: transparent; } }
   @keyframes flash-down { 0% { background-color: rgba(239,68,68,0.25); } 100% { background-color: transparent; } }
   .flash-up { animation: flash-up 1.5s ease-out; }
   .flash-down { animation: flash-down 1.5s ease-out; }
-  .stock-deck { -webkit-mask-image: linear-gradient(to right, transparent 0%, black 4%, black 92%, transparent 100%); mask-image: linear-gradient(to right, transparent 0%, black 4%, black 92%, transparent 100%); cursor: grab; user-select: none; }
-  .stock-deck.deck-at-start { -webkit-mask-image: linear-gradient(to right, black 0%, black 92%, transparent 100%); mask-image: linear-gradient(to right, black 0%, black 92%, transparent 100%); }
-  .stock-deck.deck-at-end { -webkit-mask-image: linear-gradient(to right, transparent 0%, black 8%, black 100%); mask-image: linear-gradient(to right, transparent 0%, black 8%, black 100%); }
-  .stock-deck.deck-at-start.deck-at-end { -webkit-mask-image: none; mask-image: none; cursor: default; }
 `}</style>
       {/* Header */}
       <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -495,163 +305,6 @@ export default function PortfolioPage(){
         </GlassCard>
       </div>
 
-      {/* Per-Stock Analysis (currently held) */}
-      <div>
-        <div className="flex items-center gap-3 mb-5">
-          <div className="h-10 w-10 rounded-2xl bg-orange-100 dark:bg-orange-500/15 flex items-center justify-center"><Brain className="h-5 w-5 text-orange-600 dark:text-orange-400" strokeWidth={1.8}/></div>
-          <h2 className="text-[16px] font-semibold">Stock Analyses</h2>
-          <span className="text-[13px] text-muted-foreground">{Object.keys(stockAnalyses).length} held</span>
-        </div>
-        {Object.keys(stockAnalyses).length===0?<GlassCard delay={0.35}><p className="text-muted-foreground py-6 text-center">No stock analyses yet. Your agent will store reports here.</p></GlassCard>:(
-          <div className="relative">
-            <div ref={stockDeck.ref} className={`flex gap-5 overflow-x-auto pb-3 -mx-4 px-4 stock-deck ${stockDeck.atStart?"deck-at-start":""} ${stockDeck.atEnd?"deck-at-end":""}`}>
-              {Object.values(stockAnalyses).map(entry=>{const s=entry.stock;return(
-              <GlassCard key={entry.analysis_id} delay={0.35} className="space-y-3 min-w-[400px] max-w-[440px] shrink-0">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[16px] font-bold">{s.symbol}</span>
-                    <ActionBadge action={s.action}/>
-                  </div>
-                  <div className="text-left sm:text-right">
-                    <span className="text-[13px] sm:text-[14px] text-muted-foreground">Entry {s.entry_price.toFixed(2)} / Now {s.current_price.toFixed(2)}</span>
-                    <span className={`ml-2 sm:ml-3 text-[14px] sm:text-[15px] font-bold ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
-                  </div>
-                </div>
-                <StockAnalysisDetail s={s}/>
-                <div className="flex items-center justify-between pt-2 border-t border-border">
-                  <span className="text-[12px] text-muted-foreground">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</span>
-                  <button onClick={()=>openOlderAnalyses(s.symbol)} className="text-[13px] font-medium text-primary hover:underline cursor-pointer flex items-center gap-1"><History className="h-3.5 w-3.5"/>View older</button>
-                </div>
-              </GlassCard>
-            );})}
-            </div>
-            {!stockDeck.atEnd&&Object.values(stockAnalyses).length>2&&<button onClick={()=>stockDeck.scrollByAmount(440)} className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-muted/80 text-muted-foreground border border-border hidden md:flex items-center justify-center cursor-pointer z-10 backdrop-blur-sm" aria-label="Scroll right"><ChevronRight className="h-4 w-4"/></button>}
-          </div>
-        )}
-      </div>
-
-      {/* Past Stocks (sold positions) */}
-      {Object.keys(pastStockAnalyses).length>0&&(
-        <div>
-          <button onClick={()=>setShowPastStocks(!showPastStocks)} className="flex items-center gap-3 mb-5 cursor-pointer group">
-            <div className="h-10 w-10 rounded-2xl bg-slate-100 dark:bg-slate-500/15 flex items-center justify-center"><Archive className="h-5 w-5 text-slate-600 dark:text-slate-400" strokeWidth={1.8}/></div>
-            <h2 className="text-[16px] font-semibold group-hover:text-primary transition-colors">Past Stocks</h2>
-            <span className="text-[13px] text-muted-foreground">{Object.keys(pastStockAnalyses).length} sold</span>
-            {showPastStocks?<ChevronDown className="h-5 w-5 text-muted-foreground"/>:<ChevronRight className="h-5 w-5 text-muted-foreground"/>}
-          </button>
-          {showPastStocks&&(
-            <div className="relative">
-              <div ref={pastDeck.ref} className={`flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 stock-deck ${pastDeck.atStart?"deck-at-start":""} ${pastDeck.atEnd?"deck-at-end":""}`}>
-                {Object.values(pastStockAnalyses).map(entry=>{
-                const s=entry.stock;
-                const isOpen=expandedStockCard===entry.analysis_id;
-                return(
-                  <div key={entry.analysis_id} className="glass bg-card rounded-2xl p-4 space-y-2 min-w-[340px] max-w-[380px] shrink-0">
-                    <button onClick={()=>setExpandedStockCard(isOpen?null:entry.analysis_id)} className="w-full flex items-center justify-between gap-3 cursor-pointer text-left">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        {isOpen?<ChevronDown className="h-4 w-4 text-muted-foreground shrink-0"/>:<ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/>}
-                        <span className="text-[15px] font-bold">{s.symbol}</span>
-                        <ActionBadge action={s.action} className="text-[10px] px-2 py-0.5"/>
-                        <span className={`text-[12px] font-semibold tabular-nums ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
-                      </div>
-                      <span className="text-[11px] text-muted-foreground shrink-0">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</span>
-                    </button>
-                    {!isOpen&&<p className="text-[12px] text-muted-foreground line-clamp-2 pl-6">{s.rationale}</p>}
-                    {isOpen&&(
-                      <div className="space-y-3 pt-2 border-t border-border">
-                        <p className="text-[12px] text-muted-foreground">Entry {s.entry_price.toFixed(2)} / Last {s.current_price.toFixed(2)}</p>
-                        <StockAnalysisDetail s={s}/>
-                        <button onClick={(e)=>{e.stopPropagation();openOlderAnalyses(s.symbol);}} className="text-[12px] font-medium text-primary hover:underline cursor-pointer flex items-center gap-1"><History className="h-3.5 w-3.5"/>View all analyses for {s.symbol}</button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              </div>
-              {!pastDeck.atEnd&&Object.values(pastStockAnalyses).length>2&&<button onClick={()=>pastDeck.scrollByAmount(380)} className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-muted/80 text-muted-foreground border border-border hidden md:flex items-center justify-center cursor-pointer z-10 backdrop-blur-sm" aria-label="Scroll right"><ChevronRight className="h-4 w-4"/></button>}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Older Analyses Dialog — collapsed summaries that expand on click */}
-      <Dialog open={olderSymbol!==null} onOpenChange={open=>{if(!open){setOlderSymbol(null);setExpandedOlderId(null);}}}>
-        <DialogContent className="rounded-3xl max-w-4xl max-h-[85vh] overflow-hidden p-0 flex flex-col">
-          <DialogHeader className="px-6 pt-6 pb-2 shrink-0"><DialogTitle>Analysis History — {olderSymbol}</DialogTitle></DialogHeader>
-          <div className="overflow-y-auto px-6 pb-6 flex-1">
-            {olderLoading?<div className="py-8 text-center text-muted-foreground">Loading...</div>:olderAnalyses.length===0?<p className="py-8 text-center text-muted-foreground">No analyses found.</p>:(
-              <div className="space-y-2">
-                {olderAnalyses.map(entry=>{
-                  const s=entry.stock;
-                  const isOpen=expandedOlderId===entry.analysis_id;
-                  return(
-                    <div key={entry.analysis_id} className="rounded-2xl border border-border overflow-hidden">
-                      <button onClick={()=>setExpandedOlderId(isOpen?null:entry.analysis_id)} className="w-full flex items-center justify-between gap-3 p-3 hover:bg-accent/50 cursor-pointer text-left">
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          {isOpen?<ChevronDown className="h-4 w-4 text-muted-foreground shrink-0"/>:<ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/>}
-                          <ActionBadge action={s.action} className="text-[10px] px-2 py-0.5"/>
-                          <span className={`text-[13px] font-semibold tabular-nums ${s.unrealized_pnl_pct>=0?"text-gain":"text-loss"}`}>{s.unrealized_pnl_pct>=0?"+":""}{s.unrealized_pnl_pct.toFixed(1)}%</span>
-                          <span className="text-[12px] text-muted-foreground truncate">{s.rationale.split(".")[0]}</span>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground shrink-0">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</span>
-                      </button>
-                      {isOpen&&(
-                        <div className="p-4 pt-3 border-t border-border bg-accent/20 space-y-3">
-                          <p className="text-[12px] text-muted-foreground">Entry {s.entry_price.toFixed(2)} / Now {s.current_price.toFixed(2)}</p>
-                          <StockAnalysisDetail s={s}/>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Economy Analysis */}
-      <GlassCard delay={0.4}>
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-blue-100 dark:bg-blue-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" strokeWidth={1.8}/></div>
-            <h2 className="text-[16px] font-semibold">Economy & Market</h2>
-          </div>
-          {latestEconomy && <span className="text-[13px] text-muted-foreground">{new Date(latestEconomy.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</span>}
-        </div>
-        {!latestEconomy?<p className="text-muted-foreground py-6 text-center">No economy analysis yet.</p>:<EconomyDetail c={latestEconomy.content}/>}
-        {/* Older economy analyses — collapsed summaries */}
-        {economyHistory.length>1&&(
-          <div className="mt-6 pt-5 border-t border-border">
-            <button onClick={()=>setShowOlderEconomy(!showOlderEconomy)} className="flex items-center gap-2 text-[13px] font-medium text-primary hover:underline cursor-pointer">
-              {showOlderEconomy?<ChevronDown className="h-4 w-4"/>:<ChevronRight className="h-4 w-4"/>}
-              <History className="h-4 w-4"/>
-              {showOlderEconomy?"Hide":"View"} {economyHistory.length-1} older analyses
-            </button>
-            {showOlderEconomy&&(
-              <div className="mt-3 space-y-2">
-                {economyHistory.slice(1).map(entry=>{
-                  const isOpen=expandedEconomyId===entry.id;
-                  return(
-                    <div key={entry.id} className="rounded-2xl border border-border overflow-hidden">
-                      <button onClick={()=>setExpandedEconomyId(isOpen?null:entry.id)} className="w-full flex items-center justify-between gap-3 p-3 hover:bg-accent/50 cursor-pointer text-left">
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          {isOpen?<ChevronDown className="h-4 w-4 text-muted-foreground shrink-0"/>:<ChevronRight className="h-4 w-4 text-muted-foreground shrink-0"/>}
-                          <SentimentBadge sentiment={entry.content.market_sentiment} size="sm"/>
-                          <span className="text-[12px] text-muted-foreground truncate">{entry.content.market_summary?.split(".")[0]}</span>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground shrink-0">{new Date(entry.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"2-digit"})}</span>
-                      </button>
-                      {isOpen&&<div className="p-4 pt-3 border-t border-border bg-accent/20"><EconomyDetail c={entry.content}/></div>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-      </GlassCard>
-
       {/* Portfolio Timeline — unified chart with range presets, P&L bars, and all transaction markers */}
       {timeline.length>0&&(()=>{
         const allChartData=timeline.map((pt,i)=>{
@@ -744,110 +397,6 @@ export default function PortfolioPage(){
         </div>);
       })()}
 
-      {/* Buy Assessments */}
-      <div>
-        <div className="flex items-center gap-3 mb-5">
-          <div className="h-10 w-10 rounded-2xl bg-emerald-100 dark:bg-emerald-500/15 flex items-center justify-center"><Target className="h-5 w-5 text-emerald-600 dark:text-emerald-400" strokeWidth={1.8}/></div>
-          <h2 className="text-[16px] font-semibold">Buy Assessments</h2>
-          <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{buyAssessments.length}</span>
-          <button onClick={()=>{setEditingBA(null);setBAForm({symbol:"",recommendation:"buy",target_price:"",stop_loss:"",thesis:"",risk_factors:"",conviction:"3",time_horizon:""});setBAError("");setShowBAModal(true);}} className="ml-auto p-2 rounded-xl bg-accent hover:bg-accent/80 transition-colors cursor-pointer"><Plus className="h-4 w-4"/></button>
-        </div>
-        {buyAssessments.length===0?(
-          <GlassCard delay={0.43}><p className="text-muted-foreground py-6 text-center text-[14px]">No buy assessments yet — the agent will write these for you.</p></GlassCard>
-        ):(
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {buyAssessments.map(ba=>{
-              const recColor=ba.recommendation==="buy"?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":ba.recommendation==="hold"?"bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400":ba.recommendation==="watch"?"bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400";
-              const isExpanded=expandedBAId===ba.id;
-              return(
-                <GlassCard key={ba.id} delay={0} className="relative group !p-4 flex flex-col gap-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[16px] font-bold">{ba.symbol}</span>
-                      <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold capitalize ${recColor}`}>{ba.recommendation}</span>
-                      {ba.time_horizon&&<span className="text-[11px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground capitalize">{ba.time_horizon}</span>}
-                    </div>
-                    <div className="hidden group-hover:flex items-center gap-1 shrink-0">
-                      <button onClick={()=>{setEditingBA(ba);setBAForm({symbol:ba.symbol,recommendation:ba.recommendation,target_price:ba.target_price?.toString()||"",stop_loss:ba.stop_loss?.toString()||"",thesis:ba.thesis,risk_factors:ba.risk_factors||"",conviction:String(ba.conviction),time_horizon:ba.time_horizon||""});setBAError("");setShowBAModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                      {deletingBAId===ba.id?(
-                        <button onClick={async()=>{await api.deleteBuyAssessment(ba.id);setBuyAssessments(p=>p.filter(x=>x.id!==ba.id));setDeletingBAId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
-                      ):(
-                        <button onClick={()=>setDeletingBAId(ba.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                      )}
-                    </div>
-                  </div>
-                  {(ba.target_price||ba.stop_loss)&&(
-                    <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
-                      {ba.target_price&&<span>Target: <span className="text-foreground font-medium">{ba.target_price.toFixed(2)}</span></span>}
-                      {ba.stop_loss&&<span>Stop: <span className="text-foreground font-medium">{ba.stop_loss.toFixed(2)}</span></span>}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1.5">
-                    <ConvictionDots level={ba.conviction}/>
-                    <span className="text-[11px] text-muted-foreground">conviction</span>
-                  </div>
-                  <div>
-                    <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-3"}`}>{ba.thesis}</p>
-                    {ba.thesis.length>120&&<button onClick={()=>setExpandedBAId(isExpanded?null:ba.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-auto">{new Date(ba.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
-                </GlassCard>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Post-Mortems */}
-      <div>
-        <div className="flex items-center gap-3 mb-5">
-          <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center"><BookOpen className="h-5 w-5 text-rose-600 dark:text-rose-400" strokeWidth={1.8}/></div>
-          <h2 className="text-[16px] font-semibold">Post-Mortems</h2>
-          <span className="text-[12px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground font-medium">{postMortems.length}</span>
-          <button onClick={()=>{setEditingPM(null);setPMForm({symbol:"",entry_price:"",exit_price:"",notes:""});setPMError("");setShowPMModal(true);}} className="ml-auto p-2 rounded-xl bg-accent hover:bg-accent/80 transition-colors cursor-pointer"><Plus className="h-4 w-4"/></button>
-        </div>
-        {postMortems.length===0?(
-          <GlassCard delay={0.44}><p className="text-muted-foreground py-6 text-center text-[14px]">No post-mortems yet — the agent writes these when a position is closed.</p></GlassCard>
-        ):(
-          <div className="space-y-3">
-            {postMortems.map(pm=>{
-              const isPos=pm.pnl_pct>=0;
-              const isExpanded=expandedPMId===pm.id;
-              return(
-                <GlassCard key={pm.id} delay={0} className="relative group !p-4 flex flex-col gap-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[15px] font-bold">{pm.symbol}</span>
-                      <span className={`text-[12px] px-2.5 py-0.5 rounded-full font-semibold ${isPos?"bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400":"bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"}`}>{isPos?"+":""}{pm.pnl_pct.toFixed(2)}%</span>
-                    </div>
-                    <div className="hidden group-hover:flex items-center gap-1 shrink-0">
-                      <button onClick={()=>{setEditingPM(pm);setPMForm({symbol:pm.symbol,entry_price:String(pm.entry_price),exit_price:String(pm.exit_price),notes:pm.notes||""});setPMError("");setShowPMModal(true);}} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Pencil className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                      {deletingPMId===pm.id?(
-                        <button onClick={async()=>{await api.deletePostMortem(pm.id);setPostMortems(p=>p.filter(x=>x.id!==pm.id));setDeletingPMId(null);}} className="px-2 py-1 text-[11px] rounded-lg bg-rose-500 text-white font-medium cursor-pointer">Confirm</button>
-                      ):(
-                        <button onClick={()=>setDeletingPMId(pm.id)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"><Trash2 className="h-3.5 w-3.5 text-muted-foreground"/></button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-                    <span>Entry: <span className="text-foreground font-medium">{pm.entry_price.toFixed(2)}</span></span>
-                    <ArrowUpRight className="h-3.5 w-3.5"/>
-                    <span>Exit: <span className="text-foreground font-medium">{pm.exit_price.toFixed(2)}</span></span>
-                  </div>
-                  {pm.notes&&(
-                    <div>
-                      <p className={`text-[13px] text-foreground/80 leading-[1.7] ${isExpanded?"":"line-clamp-4"}`}>{pm.notes}</p>
-                      {pm.notes.length>160&&<button onClick={()=>setExpandedPMId(isExpanded?null:pm.id)} className="text-[12px] text-primary hover:underline cursor-pointer mt-0.5">{isExpanded?"Show less":"Show more"}</button>}
-                    </div>
-                  )}
-                  <p className="text-[11px] text-muted-foreground">{new Date(pm.created_at).toLocaleDateString("en-CH",{day:"numeric",month:"short",year:"numeric"})}</p>
-                </GlassCard>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
       {/* Transaction History */}
       <div>
         <div className="flex items-center gap-3 mb-5">
@@ -893,16 +442,8 @@ export default function PortfolioPage(){
         {/* Reconnect banner first — self-hides when not needed. */}
         <SaxoReconnectBanner />
 
-        {/* Benchmark vs S&P 500 */}
-        <div>
-          <BenchmarkCard />
-        </div>
-
         {/* Saxo brokerage — section header + card live inside SaxoSection, self-hides when not connected. */}
         <SaxoSection />
-
-        {/* AI pending orders — section header + card live inside PendingOrdersCard, self-hides when no orders. */}
-        <PendingOrdersCard />
       </div>
 
       {/* Trade Chart Dialog */}
@@ -914,71 +455,6 @@ export default function PortfolioPage(){
             {tradeChartLoading?<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>:tradeChartData.length===0?<p className="text-[13px] text-muted-foreground text-center py-8">No data available</p>:(
               <ResponsiveContainer width="100%" height="100%"><AreaChart data={tradeChartData}><defs><linearGradient id="sg-trade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--border)"/><XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={d=>d.slice(5)} stroke="var(--muted-foreground)"/><YAxis tick={{fontSize:10}} domain={["auto","auto"]} stroke="var(--muted-foreground)"/><Tooltip formatter={(v:any)=>Number(v).toFixed(2)}/><Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#sg-trade)"/></AreaChart></ResponsiveContainer>
             )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Buy Assessment Modal */}
-      <Dialog open={showBAModal} onOpenChange={open=>{if(!open){setShowBAModal(false);setEditingBA(null);}}}>
-        <DialogContent className="rounded-3xl max-w-lg">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Target className="h-5 w-5 text-emerald-500"/>{editingBA?"Edit Buy Assessment":"New Buy Assessment"}</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Symbol *</label><Input placeholder="NVDA" value={baForm.symbol} onChange={e=>setBAForm({...baForm,symbol:e.target.value.toUpperCase()})} className="rounded-xl h-11"/></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Recommendation *</label><select className="w-full h-11 rounded-xl bg-muted px-3 text-[14px] border-0" value={baForm.recommendation} onChange={e=>setBAForm({...baForm,recommendation:e.target.value as BuyAssessmentInput["recommendation"]})}>{["buy","hold","watch","avoid"].map(r=><option key={r} value={r} className="capitalize">{r}</option>)}</select></div>
-              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Time Horizon</label><select className="w-full h-11 rounded-xl bg-muted px-3 text-[14px] border-0" value={baForm.time_horizon} onChange={e=>setBAForm({...baForm,time_horizon:e.target.value as BuyAssessmentInput["time_horizon"]|""})}><option value="">—</option>{["short","medium","long"].map(h=><option key={h} value={h} className="capitalize">{h}</option>)}</select></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Target Price</label><Input type="number" placeholder="0.00" value={baForm.target_price} onChange={e=>setBAForm({...baForm,target_price:e.target.value})} className="rounded-xl h-11"/></div>
-              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Stop Loss</label><Input type="number" placeholder="0.00" value={baForm.stop_loss} onChange={e=>setBAForm({...baForm,stop_loss:e.target.value})} className="rounded-xl h-11"/></div>
-            </div>
-            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Conviction (1–5) *</label><div className="flex items-center gap-2">{[1,2,3,4,5].map(n=><button key={n} type="button" onClick={()=>setBAForm({...baForm,conviction:String(n)})} className={`h-9 w-9 rounded-xl text-[14px] font-semibold transition-all cursor-pointer ${Number(baForm.conviction)>=n?"bg-primary text-primary-foreground":"bg-accent text-muted-foreground"}`}>{n}</button>)}</div></div>
-            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Thesis *</label><textarea rows={4} placeholder="Why this asset is worth buying..." value={baForm.thesis} onChange={e=>setBAForm({...baForm,thesis:e.target.value})} className="w-full rounded-xl bg-accent px-3 py-2.5 text-[14px] resize-none border-0 outline-none focus:ring-2 focus:ring-primary/30"/></div>
-            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Risk Factors</label><textarea rows={2} placeholder="Key risks to the thesis..." value={baForm.risk_factors} onChange={e=>setBAForm({...baForm,risk_factors:e.target.value})} className="w-full rounded-xl bg-accent px-3 py-2.5 text-[14px] resize-none border-0 outline-none focus:ring-2 focus:ring-primary/30"/></div>
-            {baError&&<p className="text-[13px] text-loss">{baError}</p>}
-            <button disabled={baSubmitting} onClick={async()=>{
-              if(!baForm.symbol.trim()){setBAError("Symbol is required");return;}
-              if(!baForm.thesis.trim()){setBAError("Thesis is required");return;}
-              setBAError("");setBASubmitting(true);
-              try{
-                const payload:BuyAssessmentInput={symbol:baForm.symbol,recommendation:baForm.recommendation,thesis:baForm.thesis,conviction:Number(baForm.conviction),...(baForm.target_price?{target_price:Number(baForm.target_price)}:{}),...(baForm.stop_loss?{stop_loss:Number(baForm.stop_loss)}:{}),...(baForm.risk_factors?{risk_factors:baForm.risk_factors}:{}),...(baForm.time_horizon?{time_horizon:baForm.time_horizon as BuyAssessmentInput["time_horizon"]}:{})};
-                if(editingBA){const updated=await api.updateBuyAssessment(editingBA.id,payload);setBuyAssessments(p=>p.map(x=>x.id===editingBA.id?updated:x));}
-                else{const created=await api.createBuyAssessment(payload);setBuyAssessments(p=>[created,...p]);}
-                setShowBAModal(false);setEditingBA(null);
-              }catch(e:any){setBAError(e.message||"Failed to save");}
-              finally{setBASubmitting(false);}
-            }} className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-[15px] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50">{baSubmitting?"Saving...":(editingBA?"Update":"Create")}</button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Post-Mortem Modal */}
-      <Dialog open={showPMModal} onOpenChange={open=>{if(!open){setShowPMModal(false);setEditingPM(null);}}}>
-        <DialogContent className="rounded-3xl max-w-lg">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><BookOpen className="h-5 w-5 text-rose-500"/>{editingPM?"Edit Post-Mortem":"New Post-Mortem"}</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Symbol *</label><Input placeholder="NVDA" value={pmForm.symbol} onChange={e=>setPMForm({...pmForm,symbol:e.target.value.toUpperCase()})} className="rounded-xl h-11" disabled={!!editingPM}/></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Entry Price *</label><Input type="number" placeholder="0.00" value={pmForm.entry_price} onChange={e=>setPMForm({...pmForm,entry_price:e.target.value})} className="rounded-xl h-11"/></div>
-              <div><label className="text-[13px] text-muted-foreground block mb-1.5">Exit Price *</label><Input type="number" placeholder="0.00" value={pmForm.exit_price} onChange={e=>setPMForm({...pmForm,exit_price:e.target.value})} className="rounded-xl h-11"/></div>
-            </div>
-            {pmForm.entry_price&&pmForm.exit_price&&Number(pmForm.entry_price)>0&&(
-              <div className="p-3 rounded-xl bg-accent text-[13px]">P&L: <span className={`font-semibold ${((Number(pmForm.exit_price)-Number(pmForm.entry_price))/Number(pmForm.entry_price)*100)>=0?"text-gain":"text-loss"}`}>{((Number(pmForm.exit_price)-Number(pmForm.entry_price))/Number(pmForm.entry_price)*100).toFixed(2)}%</span></div>
-            )}
-            <div><label className="text-[13px] text-muted-foreground block mb-1.5">Notes (lessons learned)</label><textarea rows={4} placeholder="What went wrong, what you'd do differently..." value={pmForm.notes} onChange={e=>setPMForm({...pmForm,notes:e.target.value})} className="w-full rounded-xl bg-accent px-3 py-2.5 text-[14px] resize-none border-0 outline-none focus:ring-2 focus:ring-primary/30"/></div>
-            {pmError&&<p className="text-[13px] text-loss">{pmError}</p>}
-            <button disabled={pmSubmitting} onClick={async()=>{
-              if(!pmForm.symbol.trim()){setPMError("Symbol is required");return;}
-              if(!pmForm.entry_price||!pmForm.exit_price){setPMError("Entry and exit prices are required");return;}
-              setPMError("");setPMSubmitting(true);
-              try{
-                const payload:PostMortemInput={symbol:pmForm.symbol,entry_price:Number(pmForm.entry_price),exit_price:Number(pmForm.exit_price),...(pmForm.notes?{notes:pmForm.notes}:{})};
-                if(editingPM){const updated=await api.updatePostMortem(editingPM.id,payload);setPostMortems(p=>p.map(x=>x.id===editingPM.id?updated:x));}
-                else{const created=await api.createPostMortem(payload);setPostMortems(p=>[created,...p]);}
-                setShowPMModal(false);setEditingPM(null);
-              }catch(e:any){setPMError(e.message||"Failed to save");}
-              finally{setPMSubmitting(false);}
-            }} className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-[15px] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50">{pmSubmitting?"Saving...":(editingPM?"Update":"Create")}</button>
           </div>
         </DialogContent>
       </Dialog>

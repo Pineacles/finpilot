@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
 from app.models.account import Account
-from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot, MarketAnalysis, PostMortem, BuyAssessment
+from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot
 from app.models.user import User
 from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate
 from app.services.currency import normalize_currency
@@ -356,18 +356,6 @@ async def execute_trade(
         executed_at=trade_date,
     ))
 
-    # Auto-clear buy assessments when a buy is executed for this symbol
-    if trade_type == "buy":
-        from app.models.stock import BuyAssessment
-        ba_result = await db.execute(
-            select(BuyAssessment).where(and_(
-                BuyAssessment.user_id == user.id,
-                BuyAssessment.symbol == ticker,
-            ))
-        )
-        for ba in ba_result.scalars().all():
-            await db.delete(ba)
-
     await db.commit()
     return {
         "status": "ok", "symbol": ticker, "type": trade_type,
@@ -625,37 +613,8 @@ async def _build_value_timeline(db: AsyncSession, user_id: str):
     return timeline
 
 
-# ── Benchmark comparison (individual stocks TWR vs. S&P 500) ──
-
 class ClassifyRequest(BaseModel):
     asset_type: str  # equity|etf|index|crypto|bond|commodity|cash
-
-
-@router.get("/benchmark-comparison")
-async def get_benchmark_comparison(
-    range: str = "1M",
-    benchmark: str = "SPY",
-    start: str | None = None,
-    end: str | None = None,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """TWR of individual-stock holdings vs. benchmark (default SPY).
-
-    Only symbols classified as 'equity' count. ETFs/indexes/crypto are listed
-    under `excluded_symbols`. Saxo-synced positions without StockTransaction
-    history are called out as caveats.
-    """
-    from app.services.benchmark import compute_benchmark_comparison
-    try:
-        result = await compute_benchmark_comparison(
-            db, user.id,
-            range_key=range, benchmark_symbol=benchmark,
-            custom_start=start, custom_end=end,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return result.__dict__
 
 
 @router.get("/classifications")
@@ -796,80 +755,6 @@ async def get_portfolio_history(
         .order_by(PortfolioSnapshot.snapshot_date)
     )
     return [{"date": s.snapshot_date.isoformat(), "value": s.total_value, "pnl": s.total_pnl} for s in result.scalars().all()]
-
-
-# ── Per-stock analyses ──────────────────────────────────────────
-
-@router.get("/analyses/by-stock")
-async def get_analyses_by_stock(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get the latest analysis for each stock symbol, split into current (held) and past (sold)."""
-    # Get all portfolio analyses
-    result = await db.execute(
-        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "portfolio"))
-        .order_by(desc(MarketAnalysis.created_at))
-    )
-
-    # Get currently held symbols
-    pos_result = await db.execute(
-        select(StockPosition.symbol).where(and_(
-            StockPosition.user_id == user.id,
-            StockPosition.symbol != "CASH",
-            StockPosition.quantity > 0,
-        ))
-    )
-    held_symbols = {row[0] for row in pos_result.all()}
-
-    current: dict[str, dict] = {}
-    past: dict[str, dict] = {}
-    for a in result.scalars().all():
-        for s in a.content.get("stocks", []):
-            sym = s.get("symbol")
-            if not sym:
-                continue
-            entry = {
-                "analysis_id": a.id,
-                "stock": s,
-                "market_summary": a.content.get("market_summary", ""),
-                "market_sentiment": a.content.get("market_sentiment", ""),
-                "created_at": a.created_at.isoformat(),
-            }
-            if sym in held_symbols:
-                if sym not in current:
-                    current[sym] = entry
-            else:
-                if sym not in past:
-                    past[sym] = entry
-
-    return {"current": current, "past": past}
-
-
-@router.get("/analyses/{symbol}")
-async def get_stock_analyses(
-    symbol: str,
-    limit: int = 20,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get older analyses for a specific stock."""
-    result = await db.execute(
-        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "portfolio"))
-        .order_by(desc(MarketAnalysis.created_at)).limit(limit)
-    )
-    out = []
-    for a in result.scalars().all():
-        for s in a.content.get("stocks", []):
-            if s.get("symbol") == symbol.upper():
-                out.append({
-                    "analysis_id": a.id,
-                    "stock": s,
-                    "market_summary": a.content.get("market_summary", ""),
-                    "market_sentiment": a.content.get("market_sentiment", ""),
-                    "created_at": a.created_at.isoformat(),
-                })
-    return out
 
 
 # ── Public sharing ──────────────────────────────────────────────

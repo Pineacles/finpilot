@@ -12,7 +12,6 @@ from app.brokers.base import (
     BrokerBalance,
     BrokerPosition,
     ConnectionStatus,
-    TradingDisabledError,
 )
 from app.brokers.registry import get_adapter, list_adapters
 
@@ -23,7 +22,6 @@ __all__ = [
     "BrokerBalance",
     "BrokerPosition",
     "ConnectionStatus",
-    "TradingDisabledError",
     "get_adapter",
     "list_adapters",
 ]

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.account import Account
-from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot, MarketAnalysis, PostMortem, BuyAssessment
+from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot
 from app.models.user import User
 from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate
 from app.services.currency import normalize_currency
@@ -111,47 +111,6 @@ async def get_public_portfolio(token: str, db: AsyncSession = Depends(get_db)):
             "sparkline": sparklines.get(p.symbol, []),
         })
 
-    # Fetch latest analysis per stock symbol
-    def _fmt_analysis(a):
-        if not a:
-            return None
-        return {"id": a.id, "analysis_type": a.analysis_type, "content": a.content, "created_at": a.created_at.isoformat()}
-
-    # Get ALL portfolio analyses, then pick the latest per symbol
-    all_pa_result = await db.execute(
-        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "portfolio"))
-        .order_by(desc(MarketAnalysis.created_at))
-    )
-    all_analyses = all_pa_result.scalars().all()
-
-    held_symbols = {p.symbol for p in stock_positions if p.quantity > 0}
-    current_analyses: dict[str, dict] = {}
-    past_analyses: dict[str, dict] = {}
-    for a in all_analyses:
-        stocks = a.content.get("stocks", [])
-        for s in stocks:
-            sym = s.get("symbol")
-            if not sym:
-                continue
-            entry = {
-                "analysis_id": a.id,
-                "stock": s,
-                "market_summary": a.content.get("market_summary", ""),
-                "market_sentiment": a.content.get("market_sentiment", ""),
-                "created_at": a.created_at.isoformat(),
-            }
-            if sym in held_symbols:
-                if sym not in current_analyses:
-                    current_analyses[sym] = entry
-            else:
-                if sym not in past_analyses:
-                    past_analyses[sym] = entry
-
-    ea_result = await db.execute(
-        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "economy"))
-        .order_by(desc(MarketAnalysis.created_at)).limit(1)
-    )
-
     return {
         "display_name": user.display_name,
         "total_value": total_value,
@@ -162,9 +121,6 @@ async def get_public_portfolio(token: str, db: AsyncSession = Depends(get_db)):
         "base_currency": BASE_CCY,
         "positions_count": len(pos_list),
         "positions": sorted(pos_list, key=lambda p: p["market_value"], reverse=True),
-        "stock_analyses": current_analyses,
-        "past_stock_analyses": past_analyses,
-        "economy_analysis": _fmt_analysis(ea_result.scalar_one_or_none()),
     }
 
 
@@ -225,26 +181,6 @@ async def get_public_trades(token: str, symbol: str | None = None, limit: int = 
             "fees_chf": round(t.fees * fx.get(t.currency, 1.0), 2),
         }
         for t in trades
-    ]
-
-
-@public_router.get("/portfolio/{token}/economy-history")
-async def get_public_economy_history(token: str, limit: int = 20, db: AsyncSession = Depends(get_db)):
-    """Public economy analysis history."""
-    result = await db.execute(
-        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
-    )
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="Portfolio not found")
-
-    result = await db.execute(
-        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "economy"))
-        .order_by(desc(MarketAnalysis.created_at)).limit(limit)
-    )
-    return [
-        {"id": a.id, "analysis_type": a.analysis_type, "content": a.content, "created_at": a.created_at.isoformat()}
-        for a in result.scalars().all()
     ]
 
 
@@ -313,80 +249,3 @@ async def get_public_portfolio_history(token: str, days: int = 365, db: AsyncSes
     return [{"date": s.snapshot_date.isoformat(), "value": s.total_value, "pnl": s.total_pnl} for s in result.scalars().all()]
 
 
-@public_router.get("/portfolio/{token}/analyses/{symbol}")
-async def get_public_stock_analyses(token: str, symbol: str, limit: int = 20, db: AsyncSession = Depends(get_db)):
-    """Get older analyses for a specific stock."""
-    result = await db.execute(
-        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
-    )
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="Portfolio not found")
-
-    result = await db.execute(
-        select(MarketAnalysis).where(and_(MarketAnalysis.user_id == user.id, MarketAnalysis.analysis_type == "portfolio"))
-        .order_by(desc(MarketAnalysis.created_at)).limit(limit)
-    )
-    out = []
-    for a in result.scalars().all():
-        for s in a.content.get("stocks", []):
-            if s.get("symbol") == symbol.upper():
-                out.append({
-                    "analysis_id": a.id,
-                    "stock": s,
-                    "market_summary": a.content.get("market_summary", ""),
-                    "market_sentiment": a.content.get("market_sentiment", ""),
-                    "created_at": a.created_at.isoformat(),
-                })
-    return out
-
-
-@public_router.get("/portfolio/{token}/journal")
-async def get_public_journal(token: str, db: AsyncSession = Depends(get_db)):
-    """Public read-only journal — post-mortems and buy assessments for a shared portfolio."""
-    result = await db.execute(
-        select(User).where(and_(User.public_share_token == token, User.public_portfolio == True))
-    )
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="Portfolio not found")
-
-    pm_result = await db.execute(
-        select(PostMortem).where(PostMortem.user_id == user.id)
-        .order_by(desc(PostMortem.created_at)).limit(50)
-    )
-    post_mortems = [
-        {
-            "id": pm.id,
-            "symbol": pm.symbol,
-            "entry_price": pm.entry_price,
-            "exit_price": pm.exit_price,
-            "pnl_pct": pm.pnl_pct,
-            "notes": pm.notes,
-            "created_at": pm.created_at.isoformat(),
-        }
-        for pm in pm_result.scalars().all()
-    ]
-
-    ba_result = await db.execute(
-        select(BuyAssessment).where(BuyAssessment.user_id == user.id)
-        .order_by(desc(BuyAssessment.created_at)).limit(50)
-    )
-    buy_assessments = [
-        {
-            "id": ba.id,
-            "symbol": ba.symbol,
-            "recommendation": ba.recommendation,
-            "target_price": ba.target_price,
-            "stop_loss": ba.stop_loss,
-            "thesis": ba.thesis,
-            "risk_factors": ba.risk_factors,
-            "conviction": ba.conviction,
-            "time_horizon": ba.time_horizon,
-            "assessed_at": ba.assessed_at.isoformat(),
-            "created_at": ba.created_at.isoformat(),
-        }
-        for ba in ba_result.scalars().all()
-    ]
-
-    return {"post_mortems": post_mortems, "buy_assessments": buy_assessments}

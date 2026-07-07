@@ -15,7 +15,6 @@ import {
   Moon,
   PiggyBank,
   Target,
-  Activity,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -27,7 +26,6 @@ const nav = [
   { href: "/budgets", label: "Budgets", icon: PiggyBank },
   { href: "/goals", label: "Goals", icon: Target },
   { href: "/categories", label: "Categories", icon: Tag },
-  { href: "/tools", label: "Tools", icon: Activity },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
