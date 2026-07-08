@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import select, desc, and_
+from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
@@ -9,7 +8,11 @@ from app.models.account import Account
 from app.models.finance import Transaction, Category, Budget
 from app.models.stock import StockPosition
 from app.models.user import User
-from app.schemas.dashboard import OverviewResponse, AccountBalance, RecentTransaction
+from app.schemas.dashboard import (
+    OverviewResponse, AccountBalance, RecentTransaction,
+    AccountOut, SetBalanceRequest, SetBalanceResponse,
+    CreditCardAccountResponse, SettlementPatternsRequest,
+)
 from app.services import account_service
 from app.services.account_service import AccountNotFoundError
 
@@ -100,10 +103,17 @@ async def get_overview(
     )
 
 
-class SetBalanceRequest(BaseModel):
-    balance: float
+@router.get("/accounts", response_model=list[AccountOut])
+async def list_accounts(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Every account (bank/credit_card/brokerage) with its computed
+    (anchor-aware) balance."""
+    return await account_service.list_accounts_with_balances(db, user.id)
 
-@router.post("/accounts/{account_id}/set-balance")
+
+@router.post("/accounts/{account_id}/set-balance", response_model=SetBalanceResponse)
 async def set_account_balance(
     account_id: str,
     body: SetBalanceRequest,
@@ -111,18 +121,10 @@ async def set_account_balance(
     db: AsyncSession = Depends(get_db),
 ):
     """Set the actual balance for an account. Stores directly — no fake transactions."""
-    result = await db.execute(
-        select(Account).where(and_(Account.id == account_id, Account.user_id == user.id))
-    )
-    account = result.scalar_one_or_none()
-    if not account:
+    try:
+        previous, account = await account_service.set_account_balance(db, user.id, account_id, body.balance)
+    except AccountNotFoundError:
         raise HTTPException(status_code=404, detail="Account not found")
-
-    from datetime import datetime, timezone
-    previous = account.balance
-    account.balance = body.balance
-    account.balance_date = datetime.now(timezone.utc)
-    await db.commit()
 
     return {
         "status": "ok",
@@ -130,15 +132,6 @@ async def set_account_balance(
         "new_balance": body.balance,
         "balance_date": account.balance_date.isoformat(),
     }
-
-
-class CreditCardAccountResponse(BaseModel):
-    id: str
-    name: str
-    currency: str
-    settlement_patterns: list[str] | None = None
-
-    model_config = {"from_attributes": True}
 
 
 @router.get("/accounts/credit-cards", response_model=list[CreditCardAccountResponse])
@@ -150,10 +143,6 @@ async def list_credit_card_accounts(
     (for the Settings > Accounts UI). Empty/None patterns means the account
     falls back to services.settlement.DEFAULT_SETTLEMENT_PATTERNS."""
     return await account_service.get_credit_card_accounts(db, user.id)
-
-
-class SettlementPatternsRequest(BaseModel):
-    patterns: list[str] | None = None
 
 
 @router.patch("/accounts/{account_id}/settlement-patterns", response_model=CreditCardAccountResponse)

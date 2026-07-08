@@ -1,4 +1,5 @@
 """Agent sub-router — API key auth for AI assistant integration."""
+import json
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -12,6 +13,8 @@ from app.models.account import Account
 from app.models.finance import Transaction, Budget, Category, SavingsGoal, Milestone
 from app.models.stock import StockPosition
 from app.models.user import User
+from app.schemas.import_profile import ColumnMappingSchema, CsvPreviewResponse, ImportProfileResponse
+from app.schemas.portfolio import PortfolioResponse
 from app.services import portfolio_service
 from app.services.portfolio_service import (
     TradeNotFoundError,
@@ -22,10 +25,35 @@ from app.services.portfolio_service import (
     FxRateUnavailableError,
     suggest_ticker_suffix,
 )
-from app.services import watchlist_service
+from app.services import watchlist_service, import_profile_service, mapped_import
+from app.services.watchlist_service import (
+    WatchlistDuplicateError,
+    WatchlistInvalidSymbolError,
+    WatchlistItemNotFoundError,
+)
 from app.schemas.watchlist import WatchlistItemOut
 
 router = APIRouter(tags=["agent"])
+
+
+class WatchlistAddRequest(BaseModel):
+    symbol: str
+
+
+# ── Portfolio holdings (full parity with the dashboard) ───────────
+
+@router.get("/portfolio", response_model=PortfolioResponse, summary="Portfolio holdings with live prices, asset type, and staleness/FX warnings")
+async def agent_portfolio(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Full portfolio view — same computation as the dashboard's
+    GET /api/dashboard/portfolio: live prices, CHF conversion, per-position
+    asset_type (equity/etf/index/crypto/bond/commodity/cash), staleness
+    flags, and a `warnings` list for any failed price/FX lookups (never
+    silent — see PortfolioResponse.warnings).
+    For a smaller human-readable digest, see GET /summary/portfolio."""
+    return await portfolio_service.get_portfolio(db, user.id)
 
 
 # ── Portfolio Trades ─────────────────────────────────────────────
@@ -200,6 +228,89 @@ async def agent_import_file(
     await seed_merchants(db, user.id)
     result = await import_transactions(db, user.id, account.id, content, use_ai=use_ai)
     return result
+
+
+# ── Generic CSV column-mapper import ──────────────────────────────
+# For formats detect_format() doesn't recognize (e.g. a Cumulus/Cembra card
+# export) — preview the columns, then import with an explicit mapping.
+# Same pipeline as /api/import/csv/preview + /api/import/csv/mapped
+# (dashboard surface) via app.services.mapped_import.
+
+@router.post("/import/preview", response_model=CsvPreviewResponse, summary="Preview an unrecognized CSV's columns for mapping")
+async def agent_preview_csv(
+    file: UploadFile = File(...),
+    user: User = Depends(get_user_by_api_key),
+):
+    """Sniff delimiter/encoding and return the header + first ~10 rows so a
+    column mapping can be constructed for /import/mapped."""
+    raw = await file.read()
+    try:
+        return mapped_import.preview_csv(raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/import/mapped", summary="Import a CSV using an explicit column mapping")
+async def agent_import_mapped_csv(
+    file: UploadFile = File(...),
+    account_id: str = Form(...),
+    mapping: str = Form(..., description="JSON-encoded ColumnMappingSchema"),
+    use_ai: bool = Form(default=True),
+    save_as_profile_name: str | None = Form(default=None),
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import a CSV using a user-supplied column mapping — for any format
+    detect_format() doesn't recognize (e.g. Cumulus/Cembra card exports).
+    Optionally save the mapping as a reusable named profile."""
+    try:
+        mapping_dict = json.loads(mapping)
+        column_mapping = ColumnMappingSchema(**mapping_dict)
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid mapping: {e}")
+
+    acct_result = await db.execute(
+        select(Account).where(and_(Account.id == account_id, Account.user_id == user.id))
+    )
+    if not acct_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    raw = await file.read()
+    try:
+        internal_mapping = mapped_import.ColumnMapping(**column_mapping.model_dump())
+        raw_transactions = mapped_import.parse_mapped_csv(raw, internal_mapping)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not raw_transactions:
+        raise HTTPException(status_code=400, detail="No rows matched the given mapping")
+
+    from app.services.csv_import import import_transactions
+    from app.services.seed_merchants import seed_merchants
+
+    await seed_merchants(db, user.id)
+    result = await import_transactions(
+        db, user.id, account_id, "",
+        use_ai=use_ai, pre_parsed=raw_transactions, source_format="mapped_csv",
+    )
+
+    if save_as_profile_name:
+        await import_profile_service.create_profile(
+            db, user.id, save_as_profile_name, account_id, column_mapping.model_dump()
+        )
+        result["saved_profile"] = save_as_profile_name
+
+    return result
+
+
+@router.get("/import/profiles", response_model=list[ImportProfileResponse], summary="List saved CSV column-mapping profiles")
+async def agent_list_import_profiles(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """List saved column-mapping profiles (reusable per account for
+    non-standard CSV imports)."""
+    return await import_profile_service.list_profiles(db, user.id)
 
 
 # ── Gmail Poll ───────────────────────────────────────────────────
@@ -541,6 +652,35 @@ async def agent_watchlist(
     Tracking only; this deliberately does not return any analysis or buy/sell
     recommendations (that stack was removed — see redesign decisions)."""
     return await watchlist_service.list_watchlist(db, user.id)
+
+
+@router.post("/watchlist", response_model=WatchlistItemOut, summary="Add a symbol to the watchlist")
+async def agent_add_to_watchlist(
+    body: WatchlistAddRequest,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add a symbol to the watchlist (tracking only — no recommendations)."""
+    try:
+        return await watchlist_service.add_watchlist_item(db, user.id, body.symbol)
+    except WatchlistDuplicateError as e:
+        raise HTTPException(status_code=409, detail=f"{e.symbol} is already on your watchlist")
+    except WatchlistInvalidSymbolError as e:
+        raise HTTPException(status_code=400, detail=f"No live quote found for {e.symbol} — check the ticker")
+
+
+@router.delete("/watchlist/{symbol}", summary="Remove a symbol from the watchlist")
+async def agent_remove_from_watchlist(
+    symbol: str,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove a symbol from the watchlist."""
+    try:
+        await watchlist_service.remove_watchlist_item(db, user.id, symbol)
+    except WatchlistItemNotFoundError:
+        raise HTTPException(status_code=404, detail=f"{symbol} is not on your watchlist")
+    return {"status": "ok"}
 
 
 # ── Currency Resync ──────────────────────────────────────────────

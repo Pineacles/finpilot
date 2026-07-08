@@ -10,6 +10,7 @@ from app.models.finance import Transaction
 from app.models.user import User
 from app.schemas.categorize import ManualCategorizeResponse, BulkCategorizeResponse, AICategorizeResponse
 from app.services.categorize import batch_categorize_with_ai
+from app.services import transaction_service
 from app.services.transaction_service import upsert_merchant_rule
 from app.services import classifier
 
@@ -99,19 +100,11 @@ async def bulk_manual_categorize(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    count = 0
-    for tid in body.transaction_ids:
-        result = await db.execute(
-            select(Transaction).where(
-                and_(Transaction.id == tid, Transaction.user_id == user.id)
-            )
-        )
-        txn = result.scalar_one_or_none()
-        if txn:
-            txn.category_id = body.category_id
-            count += 1
-    await db.commit()
-    await classifier.train_classifier(db, user.id)
+    # Shared with the agent surface (POST /api/agent/categorize/bulk) via
+    # transaction_service.bulk_categorize — includes classifier retraining.
+    count = await transaction_service.bulk_categorize(
+        db, user.id, body.transaction_ids, body.category_id
+    )
     return {"status": "ok", "updated": count}
 
 

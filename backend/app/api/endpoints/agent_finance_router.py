@@ -12,13 +12,25 @@ from app.models.account import Account
 from app.models.finance import Transaction, Budget, Category, RecurringExpense
 from app.models.stock import StockPosition
 from app.models.user import User
+from app.schemas.dashboard import (
+    AccountOut, SetBalanceRequest, SetBalanceResponse,
+    CreditCardAccountResponse, SettlementPatternsRequest,
+)
 from app.schemas.finance import (
-    TransactionCreate,
+    TransactionCreate, TransactionResponse, TransactionUpdate,
+    BudgetCreate, BudgetResponse,
     RecurringExpenseCreate, RecurringExpenseResponse, RecurringExpenseUpdate,
     RecurringSuggestionResponse,
 )
+from app.schemas.merchants import MerchantCreate, MerchantResponse, MerchantUpdate
 from app.schemas.stats import MonthlyStatsResponse, YearlyStatsResponse
-from app.services import transaction_service, stats_service, recurring_detection, recurring_service
+from app.services import (
+    account_service, budget_service, merchant_service,
+    transaction_service, stats_service, recurring_detection, recurring_service,
+)
+from app.services.account_service import AccountNotFoundError
+from app.services.budget_service import BudgetNotFoundError
+from app.services.merchant_service import MerchantNotFoundError
 from app.services.transaction_service import TransactionNotFoundError
 from app.services.recurring_service import RecurringNotFoundError
 
@@ -198,6 +210,7 @@ async def agent_list_transactions(
 
 
 @router.post("/transaction")
+@router.post("/transactions")
 async def log_transaction(
     body: TransactionCreate,
     user: User = Depends(get_user_by_api_key),
@@ -206,6 +219,24 @@ async def log_transaction(
     """Create a transaction."""
     txn = await transaction_service.create_transaction(db, user.id, body)
     return {"status": "ok", "id": txn.id}
+
+
+@router.patch("/transactions/{transaction_id}", response_model=TransactionResponse, summary="Update a transaction (with optional bulk-apply)")
+async def agent_update_transaction(
+    transaction_id: str,
+    body: TransactionUpdate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a transaction's merchant/category/notes. By default the
+    merchant rename and category change also apply to all other transactions
+    with the same merchant (apply_merchant_to_all / apply_category_to_all,
+    optionally narrowed by description_filter) — the primary "fix a data
+    mistake everywhere at once" tool. Same behavior as the dashboard PATCH."""
+    try:
+        return await transaction_service.update_transaction(db, user.id, transaction_id, body)
+    except TransactionNotFoundError:
+        raise HTTPException(status_code=404, detail="Transaction not found")
 
 
 @router.delete("/transactions/{transaction_id}")
@@ -351,6 +382,32 @@ async def agent_categorize(
     return response
 
 
+class AgentBulkCategorizeRequest(BaseModel):
+    transaction_ids: list[str]
+    category_name: str
+
+
+@router.post("/categorize/bulk", summary="Bulk categorize transactions by id")
+async def agent_bulk_categorize(
+    body: AgentBulkCategorizeRequest,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set one category on many transactions by id in a single call.
+    IDs that don't exist (or belong to another user) are silently skipped;
+    returns how many were actually updated. Same shared logic as the
+    dashboard's /categorize/bulk-manual (incl. classifier retraining)."""
+    cat_result = await db.execute(
+        select(Category).where(and_(Category.user_id == user.id, Category.name == body.category_name))
+    )
+    cat = cat_result.scalar_one_or_none()
+    if not cat:
+        raise HTTPException(status_code=404, detail=f"Category '{body.category_name}' not found")
+
+    updated = await transaction_service.bulk_categorize(db, user.id, body.transaction_ids, cat.id)
+    return {"status": "ok", "updated": updated, "category": body.category_name}
+
+
 @router.get("/categories")
 async def agent_list_categories(
     user: User = Depends(get_user_by_api_key),
@@ -387,46 +444,207 @@ async def agent_detected_recurring(
     return [RecurringSuggestionResponse(**vars(s)) for s in suggestions]
 
 
-@router.get("/recurring", response_model=list[RecurringExpenseResponse])
+@router.get("/recurring", response_model=list[RecurringExpenseResponse], summary="List tracked recurring expenses")
 async def agent_list_recurring(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
+    """List all recurring expenses (bills/subscriptions) the user tracks."""
     return await recurring_service.list_recurring(db, user.id)
 
 
-@router.post("/recurring", response_model=RecurringExpenseResponse)
+@router.post("/recurring", response_model=RecurringExpenseResponse, summary="Track a new recurring expense")
 async def agent_create_recurring(
     body: RecurringExpenseCreate,
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
+    """Create a recurring expense — accept a /recurring/detected suggestion
+    (POST the suggested fields) or add one manually."""
     return await recurring_service.create_recurring(db, user.id, body)
 
 
-@router.patch("/recurring/{recurring_id}", response_model=RecurringExpenseResponse)
+@router.patch("/recurring/{recurring_id}", response_model=RecurringExpenseResponse, summary="Update a recurring expense")
 async def agent_update_recurring(
     recurring_id: str,
     body: RecurringExpenseUpdate,
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
+    """Update a recurring expense (e.g. amount changed, new due date)."""
     try:
         return await recurring_service.update_recurring(db, user.id, recurring_id, body)
     except RecurringNotFoundError:
         raise HTTPException(status_code=404, detail="Recurring expense not found")
 
 
-@router.delete("/recurring/{recurring_id}")
+@router.delete("/recurring/{recurring_id}", summary="Stop tracking a recurring expense")
 async def agent_delete_recurring(
     recurring_id: str,
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
+    """Delete/dismiss a recurring expense."""
     try:
         await recurring_service.delete_recurring(db, user.id, recurring_id)
     except RecurringNotFoundError:
         raise HTTPException(status_code=404, detail="Recurring expense not found")
     return {"status": "deleted", "id": recurring_id}
+
+
+# ── Budgets ──────────────────────────────────────────────────────
+# Mirrors app.api.endpoints.finance's dashboard surface via the shared
+# budget_service module (spent/remaining/pct_used computed identically).
+
+@router.get("/budgets", response_model=list[BudgetResponse], summary="List budgets with spend status")
+async def agent_list_budgets(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """List budgets with current-period spent/remaining/pct_used."""
+    return await budget_service.list_budgets(db, user.id)
+
+
+@router.post("/budgets", response_model=BudgetResponse, summary="Create a budget")
+async def agent_create_budget(
+    body: BudgetCreate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a budget (spending cap for a category over a period)."""
+    return await budget_service.create_budget(db, user.id, body)
+
+
+@router.delete("/budgets/{budget_id}", summary="Delete a budget")
+async def agent_delete_budget(
+    budget_id: str,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a budget."""
+    try:
+        await budget_service.delete_budget(db, user.id, budget_id)
+    except BudgetNotFoundError:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    return {"status": "deleted"}
+
+
+# ── Merchant rules ───────────────────────────────────────────────
+# Direct CRUD on the auto-categorization rule table (distinct from
+# /categorize's rename+recategorize workflow, which upserts these same
+# rows as a side effect). Shared via app.services.merchant_service.
+
+@router.get("/merchants", response_model=list[MerchantResponse], summary="List merchant categorization rules")
+async def agent_list_merchants(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """List merchant auto-categorization rules (pattern -> default category)."""
+    return await merchant_service.list_merchants(db, user.id)
+
+
+@router.post("/merchants", response_model=MerchantResponse, summary="Create a merchant categorization rule")
+async def agent_create_merchant(
+    body: MerchantCreate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a merchant rule so future imports auto-categorize matching
+    transactions without manual intervention."""
+    return await merchant_service.create_merchant(db, user.id, body)
+
+
+@router.patch("/merchants/{merchant_id}", response_model=MerchantResponse, summary="Update a merchant categorization rule")
+async def agent_update_merchant(
+    merchant_id: str,
+    body: MerchantUpdate,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a merchant rule's name, match patterns, or default category."""
+    try:
+        return await merchant_service.update_merchant(db, user.id, merchant_id, body)
+    except MerchantNotFoundError:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+
+
+@router.delete("/merchants/{merchant_id}", summary="Delete a merchant categorization rule")
+async def agent_delete_merchant(
+    merchant_id: str,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a merchant rule."""
+    try:
+        await merchant_service.delete_merchant(db, user.id, merchant_id)
+    except MerchantNotFoundError:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+    return {"status": "deleted"}
+
+
+# ── Accounts ─────────────────────────────────────────────────────
+# Read the account list/balances and fix data mistakes (wrong anchor
+# balance, wrong settlement-match keywords for card-payoff detection).
+# Deliberately NOT here: creating/deleting accounts, connecting brokers
+# (see app.api.endpoints.docs — excluded-from-agent rationale).
+
+@router.get("/accounts", response_model=list[AccountOut], summary="List accounts with computed balances")
+async def agent_list_accounts(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """List every account (bank/credit_card/brokerage) with its computed
+    (anchor-aware) balance."""
+    return await account_service.list_accounts_with_balances(db, user.id)
+
+
+@router.get("/accounts/credit-cards", response_model=list[CreditCardAccountResponse], summary="List credit-card accounts and their settlement patterns")
+async def agent_list_credit_card_accounts(
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Credit-card accounts with their configured settlement-match patterns.
+    Empty/None means the account falls back to
+    services.settlement.DEFAULT_SETTLEMENT_PATTERNS."""
+    return await account_service.get_credit_card_accounts(db, user.id)
+
+
+@router.post("/accounts/{account_id}/set-balance", response_model=SetBalanceResponse, summary="Correct an account's balance")
+async def agent_set_account_balance(
+    account_id: str,
+    body: SetBalanceRequest,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fix an account's balance anchor to match the real bank/card statement.
+    Stores directly — no fake transactions created."""
+    try:
+        previous, account = await account_service.set_account_balance(db, user.id, account_id, body.balance)
+    except AccountNotFoundError:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return {
+        "status": "ok",
+        "previous_balance": previous,
+        "new_balance": body.balance,
+        "balance_date": account.balance_date.isoformat(),
+    }
+
+
+@router.patch("/accounts/{account_id}/settlement-patterns", response_model=CreditCardAccountResponse, summary="Configure a card's settlement-match keywords")
+async def agent_update_settlement_patterns(
+    account_id: str,
+    body: SettlementPatternsRequest,
+    user: User = Depends(get_user_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Configure the issuer-match keywords used to detect this credit card's
+    settlement payment on bank import (services/settlement.py) — fixes a
+    card that isn't auto-resetting to zero after the statement is paid."""
+    try:
+        return await account_service.update_settlement_patterns(db, user.id, account_id, body.patterns)
+    except AccountNotFoundError:
+        raise HTTPException(status_code=404, detail="Account not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
