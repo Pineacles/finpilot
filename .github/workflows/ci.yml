@@ -76,5 +76,3 @@ jobs:
 
       - name: Build
         run: npm run build
-        env:
-          NEXT_PUBLIC_ADMIN_NAME: ci

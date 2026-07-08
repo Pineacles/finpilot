@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { BarChart3 } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid, ComposedChart, Line, Bar } from "recharts";
+import { Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid, ComposedChart, Line, Bar } from "recharts";
 import { GlassCard } from "@/components/glass-card";
 import { RangeSwitcher } from "@/components/range-switcher";
 import { formatCurrency } from "@/lib/format";

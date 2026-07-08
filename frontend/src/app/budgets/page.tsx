@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { api, Budget, Category } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { GlassCard } from "@/components/glass-card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2, X } from "lucide-react";

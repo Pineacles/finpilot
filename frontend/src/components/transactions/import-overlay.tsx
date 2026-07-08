@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { api, ImportResult, ImportLogEntry } from "@/lib/api";
+import { api, ImportResult } from "@/lib/api";
 import { cn } from "@/lib/format";
-import { GlassCard } from "@/components/glass-card";
 import { CsvMapperModal } from "@/components/csv-mapper-modal";
 import {
-  Upload, X, FileText, AlertCircle, CheckCircle2, Loader2, Tag,
+  Upload, X, FileText, AlertCircle, CheckCircle2, Loader2,
 } from "lucide-react";
 
 const ACCEPTED_EXTENSIONS = ".csv,.xml,.tsv,.pdf";
@@ -18,10 +17,10 @@ interface ImportOverlayProps {
 }
 
 /** "Import" trigger button + full-screen drag & drop overlay (bulk import
- * with per-file progress) + the collapsible import console + the generic
- * CSV column-mapper fallback for unrecognized formats. Self-contained: owns
- * all of its own show/hide state, the caller only needs to react to
- * `onImported` to refresh its transaction list. */
+ * with per-file progress) + the generic CSV column-mapper fallback for
+ * unrecognized formats. Self-contained: owns all of its own show/hide
+ * state, the caller only needs to react to `onImported` to refresh its
+ * transaction list. */
 export function ImportOverlay({ onImported }: ImportOverlayProps) {
   const [showImportPage, setShowImportPage] = useState(false);
   const [importFiles, setImportFiles] = useState<File[]>([]);
@@ -30,26 +29,8 @@ export function ImportOverlay({ onImported }: ImportOverlayProps) {
   const [bulkImporting, setBulkImporting] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
 
-  // Single-file import console — only reachable via the CSV mapper fallback
-  // below, which is why `importing`/`importProgress`/`importError`/
-  // `lastImportFile` have no setter here (nothing single-file drives them).
-  const [importing] = useState(false);
-  const [importProgress] = useState(0);
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
-  const [importLogs, setImportLogs] = useState<ImportLogEntry[]>([]);
-  const [importError] = useState<string | null>(null);
-  const [showConsole, setShowConsole] = useState(false);
-  const [lastImportFile] = useState<File | null>(null);
-  const consoleRef = useRef<HTMLDivElement>(null);
-
   // Generic CSV column-mapper (fallback for unrecognized formats)
   const [mapperFile, setMapperFile] = useState<File | null>(null);
-
-  useEffect(() => {
-    if (consoleRef.current) {
-      consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
-    }
-  }, [importLogs, importError, importResult]);
 
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -98,11 +79,6 @@ export function ImportOverlay({ onImported }: ImportOverlayProps) {
     const importedFile = mapperFile;
     setMapperFile(null);
     setImportResults((prev) => prev.map((r) => (r.fileObj === importedFile ? { ...r, status: "done" as const, result } : r)));
-    if (importedFile === lastImportFile) {
-      setImportResult(result);
-      if (result.log) setImportLogs(result.log);
-      setShowConsole(true);
-    }
     await onImported();
   };
 
@@ -274,100 +250,6 @@ export function ImportOverlay({ onImported }: ImportOverlayProps) {
                 )}
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ---- Import Console ---------------------------------------- */}
-      <AnimatePresence>
-        {showConsole && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <GlassCard className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                  <h3 className="text-[15px] font-semibold">Import Console</h3>
-                </div>
-                <button
-                  onClick={() => setShowConsole(false)}
-                  className="rounded-xl p-1.5 hover:bg-accent active:scale-[0.98] cursor-pointer transition-all"
-                >
-                  <X className="h-4 w-4 text-muted-foreground" />
-                </button>
-              </div>
-
-              {importing && (
-                <div className="space-y-2">
-                  <div className="h-2 rounded-full bg-accent overflow-hidden">
-                    <motion.div
-                      className="h-full bg-primary rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${importProgress}%` }}
-                      transition={{ ease: "easeOut" }}
-                    />
-                  </div>
-                  <p className="text-[13px] text-muted-foreground">Processing... {importProgress}%</p>
-                </div>
-              )}
-
-              {importResult && (
-                <div className="flex items-center gap-4 text-[13px]">
-                  <span className="flex items-center gap-1 text-gain">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    {importResult.imported} imported
-                  </span>
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <Tag className="h-3.5 w-3.5" />
-                    {importResult.categorized} categorized
-                  </span>
-                  {importResult.skipped > 0 && (
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <AlertCircle className="h-3.5 w-3.5" />
-                      {importResult.skipped} skipped
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {importError && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-[13px] text-loss">
-                    <AlertCircle className="h-3.5 w-3.5" />
-                    {importError}
-                  </div>
-                  {lastImportFile && (
-                    <button
-                      onClick={() => setMapperFile(lastImportFile)}
-                      className="text-[13px] font-medium text-primary hover:underline cursor-pointer"
-                    >
-                      Map columns manually →
-                    </button>
-                  )}
-                </div>
-              )}
-
-              <div
-                ref={consoleRef}
-                className="bg-card rounded-2xl p-4 max-h-48 overflow-y-auto font-mono text-[13px] space-y-1"
-              >
-                {importLogs.length === 0 && !importError && (
-                  <p className="text-muted-foreground">
-                    {importing ? "Waiting for server response..." : "No log entries."}
-                  </p>
-                )}
-                {importLogs.map((entry, i) => (
-                  <div key={i} className="text-muted-foreground">
-                    <span className="text-foreground">{entry.msg}</span>
-                    {entry.detail && <span className="ml-2 opacity-60">{entry.detail}</span>}
-                  </div>
-                ))}
-              </div>
-            </GlassCard>
           </motion.div>
         )}
       </AnimatePresence>

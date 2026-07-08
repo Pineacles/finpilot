@@ -32,7 +32,7 @@ function SaxoCallbackInner() {
           const reason = result.last_error || result.state;
           router.replace(`/settings?saxo=error&reason=${encodeURIComponent(reason)}`);
         }
-      } catch (e) {
+      } catch {
         if (cancelled) return;
         setMessage("Connection failed — redirecting.");
         router.replace("/settings?saxo=error&reason=callback_failed");

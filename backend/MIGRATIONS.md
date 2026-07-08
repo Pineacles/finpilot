@@ -102,6 +102,17 @@ row from the seven tables to a single JSON file; it makes no changes to the
 database. `downgrade()` on this revision recreates the empty tables (schema
 only) — the export is the only way to get the data back.
 
+## Settlement feature migration
+
+Revision `d1e2f3a4b5c6_add_settlement_patterns_to_accounts.py` adds the
+nullable `accounts.settlement_patterns` JSON column used by
+`services/settlement.py` to auto-reset a credit-card account's balance when a
+matching bank-side settlement payment (e.g. the monthly Migros Cumulus /
+Cembra bill) is imported. Unset (`NULL`) means the account falls back to
+`settlement.DEFAULT_SETTLEMENT_PATTERNS`; it only needs a value when a card's
+issuer-match keywords differ from the defaults (e.g. a non-Cembra/Viseca
+card). No data migration involved — existing accounts simply start at `NULL`.
+
 ## Caveats
 
 - The migration chain is Postgres-only from `b2c3d4e5f6a7` (pending_orders)

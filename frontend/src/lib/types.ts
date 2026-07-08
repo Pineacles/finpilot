@@ -172,7 +172,6 @@ export interface PublicPortfolio {
   warnings: string[];
 }
 
-export interface SyncResult { status: string; records_synced: number; message: string }
 export interface SyncStatus { source: string; status: string; records_synced: number; synced_at: string | null; error_message: string | null }
 
 export interface BrokerDescriptor {

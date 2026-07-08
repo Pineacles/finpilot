@@ -3,10 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { api, type ColumnMapping, type CsvPreview, type ImportProfile, type ImportResult, type Overview } from "@/lib/api";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/format";
-import { X, Table2, Loader2, AlertCircle, CheckCircle2, Save } from "lucide-react";
+import { X, Table2, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 
 const DATE_FORMATS = [
   { value: "%d.%m.%Y", label: "DD.MM.YYYY (31.12.2026)" },
