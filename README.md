@@ -18,19 +18,7 @@ It runs my own household's finances daily. If you're here to read code, start
 with [Architecture](#architecture) and the import pipeline under
 [Features](#features).
 
-## Screenshots
-
 ![Dashboard overview with net worth, portfolio value, accounts, and upcoming payments](docs/screenshots/dashboard.png)
-Dashboard: net worth, live portfolio value, accounts, and upcoming payments.
-
-![Transactions table with categorized merchants and amounts](docs/screenshots/transactions.png)
-Transactions: imported and categorized Swiss bank and card activity.
-
-![Portfolio holdings with live prices and a one year VWRL chart](docs/screenshots/portfolio.png)
-Portfolio: stock and ETF holdings with live prices and performance.
-
-![Statistics page with monthly income, expenses, and category breakdown](docs/screenshots/stats.png)
-Statistics: monthly income, expenses, and spending by category.
 
 ## Features
 
@@ -61,6 +49,28 @@ Statistics: monthly income, expenses, and spending by category.
   personal AI agent can read financial state and fix data mistakes (merchant
   renames, recategorization, corrections) without touching the database
   directly.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/transactions.png" alt="Transactions table with categorized merchants and amounts">
+      <p align="center">Imported and categorized bank and card activity</p>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/portfolio.png" alt="Portfolio holdings with live prices and a one year chart">
+      <p align="center">Holdings with live prices and performance</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/stats.png" alt="Statistics page with monthly income, expenses, and category breakdown">
+      <p align="center">Monthly income, expenses, and category breakdown</p>
+    </td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
 ## Architecture
 
