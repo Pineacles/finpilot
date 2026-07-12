@@ -13,9 +13,13 @@ const ETF_TYPES = new Set(["etf", "index"]);
 
 // Shared grid template for every holdings row (both sections), so shares /
 // price / value columns line up on the same vertical axes no matter which
-// row is missing sparkline data or hits the FX-unavailable branch. The
-// sparkline track only exists at lg+, where the column is shown.
-const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_64px_92px_150px] lg:grid-cols-[minmax(0,1fr)_92px_64px_92px_150px] gap-x-3";
+// row is missing sparkline data or hits the FX-unavailable branch.
+// Columns switch on CONTAINER width (the card body is a @container), not
+// the viewport: this table renders in panels of very different widths
+// (portfolio page vs the narrower public share page). Tiers: below @sm the
+// value text is hidden so its track is auto (hover actions only); @sm+ uses
+// the fixed 150px value column; @xl+ adds the 92px sparkline column.
+const ROW_GRID = "grid grid-cols-[minmax(0,1fr)_64px_92px_auto] @sm:grid-cols-[minmax(0,1fr)_64px_92px_150px] @xl:grid-cols-[minmax(0,1fr)_92px_64px_92px_150px] gap-x-3";
 
 interface LivePrice { price: number; change: number; change_pct: number }
 
@@ -93,7 +97,7 @@ export function HoldingsTable({
           </div>
           <p className="text-[11px] text-muted-foreground truncate">{pos.name}</p>
         </div>
-        <div className="hidden lg:flex items-center justify-center">
+        <div className="hidden @xl:flex items-center justify-center">
           {hasSparkline ? (
             <Sparkline data={pos.sparkline} color={livePnlPct >= 0 ? "#3b82f6" : "#ff3b30"} width={80} height={32} />
           ) : (
@@ -111,7 +115,7 @@ export function HoldingsTable({
           <p className="font-mono tabular-nums text-[11px] text-muted-foreground">cost {pos.avg_cost_price.toFixed(2)}</p>
         </div>
         <div className="flex items-center justify-end gap-2">
-          <div className="text-right hidden sm:block">
+          <div className="text-right hidden @sm:block">
             {pos.fx_unavailable ? (
               <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">FX N/A</p>
             ) : (
@@ -136,7 +140,7 @@ export function HoldingsTable({
 
   return (
     <GlassCard delay={0.25} className="md:col-span-1 lg:col-span-2 !p-4">
-      <div className="space-y-4 max-h-[460px] overflow-y-auto pr-1" style={{ scrollbarGutter: "stable" }}>
+      <div className="@container space-y-4 max-h-[460px] overflow-y-auto pr-1" style={{ scrollbarGutter: "stable" }}>
         <section>
           <p className="text-[13px] font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Stocks {stocks.length > 0 && `(${stocks.length})`}</p>
           {stocks.length === 0 ? (

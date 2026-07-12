@@ -99,7 +99,10 @@ export function PortfolioTimelineCard({ timeline }: PortfolioTimelineCardProps) 
       if (d.cost > max) max = d.cost;
     }
     const span = max - min || Math.abs(max) || 1;
-    return [min - span * 0.04, max + span * 0.04];
+    // Never pad below zero when the data itself never goes negative: an
+    // all-positive chart must not grow a negative axis label.
+    const paddedMin = min - span * 0.04;
+    return [min >= 0 ? Math.max(0, paddedMin) : paddedMin, max + span * 0.04];
   }, [chartData]);
 
   if (timeline.length === 0) {
