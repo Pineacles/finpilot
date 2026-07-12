@@ -10,8 +10,14 @@ from __future__ import annotations
 
 from datetime import date
 
+import httpx
 import pytest
 from sqlalchemy import select, and_
+
+# Captured before any test monkeypatches categorize.httpx.AsyncClient (which
+# is the same module-level attribute this test file's `httpx` import sees):
+# the mock-transport factories below need the *real* class, not themselves.
+_RealAsyncClient = httpx.AsyncClient
 
 from app.models.account import Account
 from app.models.finance import Category, Transaction
@@ -352,3 +358,109 @@ def test_build_prompt_includes_custom_rules_with_priority():
     assert "priority" in prompt
     # Without custom rules the block is absent entirely
     assert "User rules" not in categorize._build_prompt("Groceries (Supermarket)", chunk)
+
+
+def test_build_prompt_instructs_subcategory_over_parent_unambiguously():
+    """A parent-only category name (e.g. "Finance", "Dining") must only be
+    valid when that parent has no subcategories at all; models that default
+    to the parent name despite subcategories being listed need this spelled
+    out explicitly, not just "prefer subcategory"."""
+    chunk = [{"id": "x", "merchant": "Migros", "amount": -20.0}]
+    prompt = categorize._build_prompt("Groceries (Supermarket)", chunk)
+
+    assert "SUBCATEGORY name whenever the parent has subcategories" in prompt
+    assert "a parent name is only valid when it has no subcategories listed" in prompt
+
+
+# ── _build_prompt: merchant context from web search ──────────────────────
+
+def test_build_prompt_includes_merchant_context_when_provided():
+    chunk = [{"id": "x", "merchant": "Some Cafe", "amount": -12.0}]
+    context = {"Some Cafe": "Some Cafe official: a cozy coffee shop in Zurich"}
+
+    prompt = categorize._build_prompt("Groceries (Supermarket)", chunk, merchant_context=context)
+
+    assert "Merchant context from web search" in prompt
+    assert "- Some Cafe: Some Cafe official: a cozy coffee shop in Zurich" in prompt
+
+
+def test_build_prompt_omits_merchant_context_section_when_empty():
+    chunk = [{"id": "x", "merchant": "Some Cafe", "amount": -12.0}]
+
+    assert "Merchant context" not in categorize._build_prompt("Groceries (Supermarket)", chunk)
+    assert "Merchant context" not in categorize._build_prompt(
+        "Groceries (Supermarket)", chunk, merchant_context={}
+    )
+
+
+# ── _search_merchant_context: SearXNG enrichment, best-effort only ───────
+
+def _client_with_transport(transport: httpx.MockTransport):
+    def _factory(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _RealAsyncClient(*args, **kwargs)
+    return _factory
+
+
+async def test_search_merchant_context_happy_path(monkeypatch):
+    def handler(request):
+        merchant = request.url.params.get("q")
+        return httpx.Response(200, json={
+            "results": [
+                {"title": f"{merchant} Official Site", "content": "Coffee shop chain in Zurich"},
+                {"title": f"{merchant} Reviews", "content": "Great coffee, friendly staff"},
+                {"title": "Unrelated third result", "content": "Should be ignored"},
+            ]
+        })
+
+    monkeypatch.setattr(
+        categorize.httpx, "AsyncClient", _client_with_transport(httpx.MockTransport(handler))
+    )
+
+    result = await categorize._search_merchant_context(
+        "http://searxng.local:8080", ["Starbucks", "Starbucks"]
+    )
+
+    assert list(result.keys()) == ["Starbucks"]  # de-duped
+    assert "Starbucks Official Site: Coffee shop chain in Zurich" in result["Starbucks"]
+    assert "Starbucks Reviews: Great coffee, friendly staff" in result["Starbucks"]
+    assert "Unrelated third result" not in result["Starbucks"]  # only top 2
+
+
+async def test_search_merchant_context_failure_yields_no_entry(monkeypatch):
+    def handler(request):
+        return httpx.Response(500)
+
+    monkeypatch.setattr(
+        categorize.httpx, "AsyncClient", _client_with_transport(httpx.MockTransport(handler))
+    )
+
+    result = await categorize._search_merchant_context("http://searxng.local:8080", ["Unknown Merchant"])
+
+    assert result == {}
+
+
+async def test_search_merchant_context_empty_results_yields_no_entry(monkeypatch):
+    def handler(request):
+        return httpx.Response(200, json={"results": []})
+
+    monkeypatch.setattr(
+        categorize.httpx, "AsyncClient", _client_with_transport(httpx.MockTransport(handler))
+    )
+
+    result = await categorize._search_merchant_context("http://searxng.local:8080", ["Nobody Knows This"])
+
+    assert result == {}
+
+
+async def test_search_merchant_context_no_merchants_returns_empty_without_request(monkeypatch):
+    def handler(request):
+        raise AssertionError("should not be called")
+
+    monkeypatch.setattr(
+        categorize.httpx, "AsyncClient", _client_with_transport(httpx.MockTransport(handler))
+    )
+
+    result = await categorize._search_merchant_context("http://searxng.local:8080", [])
+
+    assert result == {}

@@ -99,6 +99,8 @@ async def update_settings(
         _validate_url_setting(valid["ai_base_url"], "ai_base_url")
     if "ai_endpoint" in valid:
         _validate_url_setting(valid["ai_endpoint"], "ai_endpoint")
+    if "ai_search_url" in valid:
+        _validate_url_setting(valid["ai_search_url"], "ai_search_url")
     await set_many(db, user.id, valid)
     return {"status": "ok", "updated": list(valid.keys())}
 

@@ -745,6 +745,21 @@ function AiSection({ settings, edits, onChange, onSaveThenAction }: AiSectionPro
         )}
       </div>
 
+      <div className={`mt-4 ${fieldsCls}`}>
+        <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+          Merchant search URL
+        </label>
+        <Input
+          value={value("ai_search_url")}
+          onChange={e => onChange("ai_search_url", e.target.value)}
+          placeholder="http://172.17.0.1:8082 (SearXNG, optional)"
+          className="rounded-xl h-11"
+        />
+        <p className="text-[11px] text-muted-foreground mt-1">
+          Unknown merchants are looked up here to give the model context before categorizing.
+        </p>
+      </div>
+
       <div className={fieldsCls}>
         <p className="text-[12px] text-muted-foreground mt-4">
           Transactions that keyword rules, merchant rules, history and the ML classifier cannot

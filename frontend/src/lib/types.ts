@@ -53,6 +53,9 @@ export interface Position {
   // No CHF exchange rate is known for this position's currency: market_value
   // and unrealized_pnl are 0.0 placeholders, not real numbers.
   fx_unavailable: boolean;
+  // asset_type is "private" (no public listing, e.g. pre-IPO shares): the
+  // price is never live-refreshed, so last_price is a manually-entered value.
+  manual_price: boolean;
 }
 
 export interface WatchlistItem {

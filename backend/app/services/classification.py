@@ -22,7 +22,7 @@ from app.models.stock import SymbolClassification
 
 logger = logging.getLogger(__name__)
 
-VALID_ASSET_TYPES = {"equity", "etf", "index", "crypto", "bond", "commodity", "cash"}
+VALID_ASSET_TYPES = {"equity", "etf", "index", "crypto", "bond", "commodity", "cash", "private"}
 DEFAULT_ASSET_TYPE = "equity"
 
 # Fallback list when yfinance lookup fails: well-known S&P / world / region indexes

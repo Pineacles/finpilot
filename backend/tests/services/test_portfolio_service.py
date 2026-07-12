@@ -17,7 +17,7 @@ import pytest
 
 from app.models.account import Account
 from app.models.stock import StockPosition
-from app.services import portfolio_service
+from app.services import classification, portfolio_service
 from app.services.portfolio_service import CurrencyMismatchError, FxRateUnavailableError
 
 
@@ -130,6 +130,51 @@ async def test_fx_failure_with_no_cache_excludes_position_from_totals(db, user_i
     assert result["total_value"] == 0.0
 
 
+# ── "private" positions: permanently unpriceable, never warn ─────────────
+
+async def test_private_position_never_fetches_quote_or_warns(db, user_id):
+    acct = await _make_brokerage(db, user_id)
+    await _make_position(db, user_id, acct.id, symbol="SPACEX", currency="USD", quantity=1, last_price=50.0)
+    await db.commit()
+    await classification.set_classification(db, user_id, "SPACEX", "private", "user")
+
+    async def _spy_quotes_batch(tickers):
+        raise AssertionError(f"should not be called, got tickers={tickers}")
+
+    with patch("app.services.portfolio_service.get_quotes_batch", _spy_quotes_batch), \
+         patch("app.services.portfolio_service.get_fx_rate", return_value=1.0):
+        result = await portfolio_service.get_portfolio(db, user_id)
+
+    assert result["warnings"] == []
+    pos = result["positions"][0]
+    assert pos["symbol"] == "SPACEX"
+    assert pos["manual_price"] is True
+    assert pos["market_value"] == pytest.approx(50.0)  # last_price * quantity(1), unchanged
+
+
+async def test_private_position_excluded_from_failed_symbols_alongside_normal_position(db, user_id):
+    acct = await _make_brokerage(db, user_id)
+    await _make_position(db, user_id, acct.id, symbol="AAPL")
+    await _make_position(db, user_id, acct.id, symbol="SPACEX", currency="USD", last_price=50.0)
+    await db.commit()
+    await classification.set_classification(db, user_id, "SPACEX", "private", "user")
+
+    with patch("app.services.portfolio_service.get_quotes_batch", return_value={}) as mock_batch, \
+         patch("app.services.portfolio_service.get_fx_rate", return_value=1.0):
+        result = await portfolio_service.get_portfolio(db, user_id)
+
+    called_tickers = mock_batch.call_args[0][0]
+    assert "SPACEX" not in called_tickers
+    assert "AAPL" in called_tickers
+
+    assert any("AAPL" in w for w in result["warnings"])
+    assert all("SPACEX" not in w for w in result["warnings"])
+
+    by_symbol = {p["symbol"]: p for p in result["positions"]}
+    assert by_symbol["SPACEX"]["manual_price"] is True
+    assert by_symbol["AAPL"]["manual_price"] is False
+
+
 # ── execute_trade: currency mismatch never silently overwritten ──────────
 
 async def test_execute_trade_rejects_currency_mismatch_without_confirm(db, user_id):
@@ -165,6 +210,65 @@ async def test_execute_trade_raises_when_fx_unavailable(db, user_id):
                 db, user_id, symbol="TEST", type="buy", quantity=1,
                 currency="USD", deduct_from_cash=False,
             )
+
+
+# ── execute_trade: new positions get classified, without ever failing ────
+
+async def test_execute_trade_buy_new_position_classifies_ticker(db, user_id, monkeypatch):
+    quote = {"price": 10.0, "currency": "USD", "name": "Test Co"}
+    called = {}
+
+    async def _fake_ensure_classified(db_arg, user_id_arg, symbol):
+        called["symbol"] = symbol
+
+    monkeypatch.setattr(classification, "ensure_classified", _fake_ensure_classified)
+
+    with patch("app.services.portfolio_service.get_quote", return_value=quote), \
+         patch("app.services.portfolio_service.get_fx_rate", return_value=1.0):
+        await portfolio_service.execute_trade(
+            db, user_id, symbol="TEST", type="buy", quantity=1,
+            currency="USD", deduct_from_cash=False,
+        )
+
+    assert called["symbol"] == "TEST"
+
+
+async def test_execute_trade_buy_existing_position_does_not_reclassify(db, user_id, monkeypatch):
+    quote = {"price": 10.0, "currency": "USD", "name": "Test Co"}
+
+    async def _must_not_be_called(*args, **kwargs):
+        raise AssertionError("should not be called for an existing position")
+
+    with patch("app.services.portfolio_service.get_quote", return_value=quote), \
+         patch("app.services.portfolio_service.get_fx_rate", return_value=1.0):
+        await portfolio_service.execute_trade(
+            db, user_id, symbol="TEST", type="buy", quantity=1,
+            currency="USD", deduct_from_cash=False,
+        )
+
+        monkeypatch.setattr(classification, "ensure_classified", _must_not_be_called)
+        await portfolio_service.execute_trade(
+            db, user_id, symbol="TEST", type="buy", quantity=1,
+            currency="USD", deduct_from_cash=False,
+        )
+
+
+async def test_execute_trade_buy_classification_failure_does_not_fail_trade(db, user_id, monkeypatch):
+    quote = {"price": 10.0, "currency": "USD", "name": "Test Co"}
+
+    async def _raise(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(classification, "ensure_classified", _raise)
+
+    with patch("app.services.portfolio_service.get_quote", return_value=quote), \
+         patch("app.services.portfolio_service.get_fx_rate", return_value=1.0):
+        result = await portfolio_service.execute_trade(
+            db, user_id, symbol="TEST", type="buy", quantity=1,
+            currency="USD", deduct_from_cash=False,
+        )
+
+    assert result["status"] == "ok"
 
 
 # ── compute_total_wealth: positions + cash + bank balance ────────────────

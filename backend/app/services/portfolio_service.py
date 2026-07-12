@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.account import Account
 from app.models.finance import Transaction
 from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot, SymbolClassification
+from app.services import classification
 from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate, get_cached_fx_rate
 from app.services.currency import normalize_currency
 
@@ -204,11 +205,17 @@ async def _classification_map(db: AsyncSession, user_id: str, symbols: set[str])
 
 
 async def _price_stock_positions(
-    db: AsyncSession, stock_positions: list[StockPosition]
+    db: AsyncSession, stock_positions: list[StockPosition], classifications: dict[str, str]
 ) -> tuple[dict[str, dict], set[str], list[str]]:
     """Refresh live quotes onto `stock_positions` (persists last_price /
     last_price_at / unrealized_pnl for successful fetches only: a failed
     fetch this request never bumps last_price_at, so staleness stays honest).
+
+    Positions classified "private" (no public listing, e.g. pre-IPO shares)
+    are permanently unpriceable: they're skipped from the quote batch
+    entirely and never contribute to failed_symbols, so they don't trigger
+    a "Live price refresh failed" warning on every load. Their market value
+    keeps using last_price/avg_cost_price as-is.
 
     Returns (quotes, failed_symbols, warnings).
     """
@@ -216,12 +223,14 @@ async def _price_stock_positions(
     failed_symbols: set[str] = set()
     warnings: list[str] = []
 
-    if stock_positions:
-        tickers = list({p.symbol for p in stock_positions})
+    priceable = [p for p in stock_positions if classifications.get(p.symbol) != "private"]
+
+    if priceable:
+        tickers = list({p.symbol for p in priceable})
         quotes = await get_quotes_batch(tickers)
 
         now = datetime.now(timezone.utc)
-        for p in stock_positions:
+        for p in priceable:
             q = quotes.get(p.symbol)
             if q:
                 p.last_price = q["price"]
@@ -297,7 +306,12 @@ async def _build_holdings_payload(db: AsyncSession, user_id: str, positions: lis
             "cash_balance": cash_balance, "fx_rates": {}, "positions": [], "warnings": [],
         }
 
-    quotes, failed_symbols, price_warnings = await _price_stock_positions(db, stock_positions)
+    # Classifications are loaded up front (not after pricing) so
+    # _price_stock_positions can skip the quote fetch for "private" positions
+    # entirely, instead of fetching and then discarding a failed result.
+    classifications = await _classification_map(db, user_id, {p.symbol for p in stock_positions})
+
+    quotes, failed_symbols, price_warnings = await _price_stock_positions(db, stock_positions, classifications)
     fx_rates, excluded_currencies, fx_warnings = await _fx_rates_for_positions(stock_positions)
     warnings = [*price_warnings, *fx_warnings]
 
@@ -340,8 +354,6 @@ async def _build_holdings_payload(db: AsyncSession, user_id: str, positions: lis
         if hist:
             sparklines[p.symbol] = [h["close"] for h in hist]
 
-    classifications = await _classification_map(db, user_id, {p.symbol for p in stock_positions})
-
     now = datetime.now(timezone.utc)
     pos_list = []
     for p, mv_chf, cost_chf in valued:
@@ -378,6 +390,7 @@ async def _build_holdings_payload(db: AsyncSession, user_id: str, positions: lis
             "asset_type": classifications.get(p.symbol, "equity"),
             "price_stale": is_stale,
             "fx_unavailable": fx_unavailable,
+            "manual_price": classifications.get(p.symbol) == "private",
         })
 
     return {
@@ -577,6 +590,7 @@ async def execute_trade(
         ))
     )
     position = result.scalar_one_or_none()
+    is_new_position = trade_type == "buy" and position is None
 
     if trade_type == "buy":
         # Deduct from cash if enabled (cash is CHF-denominated, convert trade amount)
@@ -626,6 +640,16 @@ async def execute_trade(
     ))
 
     await db.commit()
+
+    if is_new_position:
+        # Best-effort: a new position created through a trade should get an
+        # asset-type classification, but a classification failure (e.g. the
+        # yfinance lookup being down) must never fail the trade itself.
+        try:
+            await classification.ensure_classified(db, user_id, ticker)
+        except Exception as e:
+            logger.warning(f"ensure_classified failed for new position {ticker}: {e}")
+
     return {
         "status": "ok", "symbol": ticker, "type": trade_type,
         "quantity": quantity, "price": trade_price,

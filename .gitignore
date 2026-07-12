@@ -61,3 +61,4 @@ skills-lock.json
 screenshots/
 !docs/screenshots/
 !docs/screenshots/**
+docker-compose.override.yml

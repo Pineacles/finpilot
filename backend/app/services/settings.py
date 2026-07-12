@@ -31,6 +31,7 @@ SETTING_KEYS = {
     "ai_provider": None,
     "ai_api_key": "ANTHROPIC_API_KEY",
     "ai_base_url": None,  # OpenAI-compatible base URL, e.g. http://localhost:11434/v1
+    "ai_search_url": None,  # SearXNG base URL, e.g. http://172.17.0.1:8082 (no env fallback)
     # Deprecated aliases, kept so old reads/writes (and any external agent
     # still using the old names) keep working. New code should use the
     # ai_* keys above. See LEGACY_ALIASES / migrate_legacy_settings().

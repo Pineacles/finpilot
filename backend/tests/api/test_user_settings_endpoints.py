@@ -48,6 +48,20 @@ async def test_update_settings_rejects_non_http_ai_endpoint(db, user_id):
     assert exc_info.value.status_code == 400
 
 
+async def test_update_settings_rejects_non_http_ai_search_url(db, user_id):
+    body = SettingsUpdate(settings={"ai_search_url": "not-a-url"})
+    with pytest.raises(HTTPException) as exc_info:
+        await update_settings(body, user=FakeUser(user_id), db=db)
+    assert exc_info.value.status_code == 400
+
+
+async def test_update_settings_accepts_valid_ai_search_url(db, user_id):
+    body = SettingsUpdate(settings={"ai_search_url": "http://172.17.0.1:8082"})
+    result = await update_settings(body, user=FakeUser(user_id), db=db)
+    assert result["status"] == "ok"
+    assert "ai_search_url" in result["updated"]
+
+
 async def test_update_settings_accepts_valid_ai_settings(db, user_id):
     body = SettingsUpdate(settings={
         "ai_provider": "openai", "ai_enabled": "1",

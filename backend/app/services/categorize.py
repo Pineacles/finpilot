@@ -10,6 +10,7 @@ Layered approach (priority order):
 """
 import re
 import json
+import asyncio
 import logging
 from dataclasses import dataclass
 
@@ -255,6 +256,9 @@ class AiConfig:
     endpoint: str  # custom provider only
     auth_header: str  # custom provider only
     base_url: str  # openai provider only
+    # Optional SearXNG instance used to enrich unknown merchants with a web
+    # search snippet. Doesn't affect enabled/usability: purely additive.
+    search_url: str = ""
 
 
 async def load_ai_config(db: AsyncSession, user_id: str) -> AiConfig:
@@ -272,6 +276,7 @@ async def load_ai_config(db: AsyncSession, user_id: str) -> AiConfig:
     endpoint = await get_setting(db, user_id, "ai_endpoint")
     auth_header = await get_setting(db, user_id, "ai_auth_header")
     base_url = await get_setting(db, user_id, "ai_base_url")
+    search_url = await get_setting(db, user_id, "ai_search_url")
 
     if not provider:
         provider = "custom" if endpoint else "anthropic"
@@ -288,6 +293,7 @@ async def load_ai_config(db: AsyncSession, user_id: str) -> AiConfig:
     return AiConfig(
         enabled=enabled, provider=provider, api_key=api_key, model=model,
         endpoint=endpoint, auth_header=auth_header, base_url=base_url,
+        search_url=search_url,
     )
 
 
@@ -321,7 +327,51 @@ async def _build_category_tree_prompt(db: AsyncSession, user_id: str) -> tuple[s
     return "\n".join(lines), cat_map
 
 
-def _build_prompt(cat_tree_prompt: str, chunk: list[dict], custom_rules: str | None = None) -> str:
+async def _search_merchant_context(search_url: str, merchants: list[str]) -> dict[str, str]:
+    """Look up unknown merchants against a local SearXNG instance so a small
+    model has real context instead of guessing from the name alone.
+
+    One GET {search_url}/search per unique merchant, run concurrently on a
+    shared client. Best-effort: any failure for a merchant (network,
+    non-200, bad JSON, empty results) simply omits that merchant from the
+    result, never raises, and logs at most one warning per failing call.
+    """
+    unique_merchants = list(dict.fromkeys(merchants))  # de-dup, keep order
+    if not unique_merchants:
+        return {}
+
+    base = search_url.rstrip("/")
+    contexts: dict[str, str] = {}
+
+    async def _lookup(client: httpx.AsyncClient, merchant: str) -> None:
+        try:
+            resp = await client.get(
+                f"{base}/search", params={"q": merchant, "format": "json"},
+            )
+            if resp.status_code != 200:
+                return
+            data = resp.json()
+            results = data.get("results") or []
+            if not results:
+                return
+            lines = [
+                f"{(r.get('title') or '')[:160]}: {(r.get('content') or '')[:160]}"
+                for r in results[:2]
+            ]
+            contexts[merchant] = " | ".join(lines)
+        except Exception as e:
+            logger.warning(f"SearXNG lookup failed for merchant '{merchant}': {e}")
+
+    async with httpx.AsyncClient(timeout=5) as client:
+        await asyncio.gather(*(_lookup(client, m) for m in unique_merchants))
+
+    return contexts
+
+
+def _build_prompt(
+    cat_tree_prompt: str, chunk: list[dict], custom_rules: str | None = None,
+    merchant_context: dict[str, str] | None = None,
+) -> str:
     """Build the categorization prompt for one chunk of transactions.
 
     Shared by batch_categorize_with_ai and the settings "test AI" endpoint
@@ -340,6 +390,16 @@ def _build_prompt(cat_tree_prompt: str, chunk: list[dict], custom_rules: str | N
         if custom_rules else ""
     )
 
+    context_lines = [
+        f"- {t['merchant']}: {merchant_context[t['merchant']]}"
+        for t in chunk
+        if merchant_context and merchant_context.get(t["merchant"])
+    ]
+    context_block = (
+        f"\nMerchant context from web search:\n{chr(10).join(context_lines)}\n"
+        if context_lines else ""
+    )
+
     return f"""Categorize these Swiss bank transactions. Use the MOST SPECIFIC subcategory.
 {custom_block}
 
@@ -348,13 +408,13 @@ Category hierarchy (Parent > Subcategories):
 
 Transactions:
 {txn_lines}
-
+{context_block}
 Return ONLY a JSON array, one object per transaction in order:
 [{{"m":"merchant","c":"SUBCATEGORY name","s":0.9}}]
 
 Rules:
-- c MUST exactly match a category name from above (prefer subcategory over parent)
-- s = confidence 0.0-1.0
+- c MUST be a SUBCATEGORY name whenever the parent has subcategories (the names in parentheses above); a parent name is only valid when it has no subcategories listed
+- s = confidence 0.0-1.0: use LOW confidence when you're guessing from the merchant name alone, and HIGH confidence only when you're certain or the web search context above confirms the category
 - Person names (first+last name only) = Transfer
 - Food delivery apps = Delivery
 - Restaurants / cafes = Restaurants or Cafe & Snacks
@@ -430,7 +490,13 @@ async def batch_categorize_with_ai(
         total_chunks = (len(transactions) + CHUNK_SIZE - 1) // CHUNK_SIZE
         logger.info(f"AI categorize chunk {chunk_num}/{total_chunks} ({len(chunk)} merchants)")
 
-        prompt = _build_prompt(cat_tree_prompt, chunk, custom_rules)
+        merchant_context = None
+        if config.search_url:
+            merchant_context = await _search_merchant_context(
+                config.search_url, [t["merchant"] for t in chunk]
+            )
+
+        prompt = _build_prompt(cat_tree_prompt, chunk, custom_rules, merchant_context)
         chunk_results, error = await _call_ai(config, prompt, chunk)
         if error:
             errors.append(error)

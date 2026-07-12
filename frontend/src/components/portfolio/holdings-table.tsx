@@ -72,7 +72,11 @@ export function HoldingsTable({
         <div className="min-w-[70px] shrink-0">
           <div className="flex items-center gap-1">
             <p className="font-bold text-[14px]">{pos.symbol}</p>
-            {pos.price_stale && <AlertTriangle className="h-3 w-3 text-amber-500" />}
+            {pos.manual_price ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-medium shrink-0">manual price</span>
+            ) : (
+              pos.price_stale && <AlertTriangle className="h-3 w-3 text-amber-500" />
+            )}
           </div>
           <p className="text-[11px] text-muted-foreground truncate max-w-[80px]">{pos.name}</p>
         </div>
