@@ -4,11 +4,13 @@ Naming note: the AI-categorization settings used to be named
 `analysis_model`/`analysis_endpoint`/`analysis_auth_header`, a name that
 predates this app dropping AI *stock* analysis and reads confusingly next to
 "analysis" of transactions/stats. They're renamed to `ai_model`/`ai_endpoint`/
-`ai_auth_header`. The old keys are kept in SETTING_KEYS (so old writes still
-validate) and LEGACY_ALIASES maps new -> old so reads transparently fall back
-to a value stored under the old name, and `get_all_settings` migrates it to
-the new key on first read (a plain key/value table needs no schema migration
-for a rename like this).
+`ai_auth_header`. Likewise `anthropic_api_key` (Anthropic-only) is renamed to
+`ai_api_key` (provider-agnostic: Anthropic, OpenAI-compatible, or custom).
+The old keys are kept in SETTING_KEYS (so old writes still validate) and
+LEGACY_ALIASES maps new -> old so reads transparently fall back to a value
+stored under the old name, and `get_all_settings` migrates it to the new key
+on first read (a plain key/value table needs no schema migration for a
+rename like this).
 """
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +25,12 @@ SETTING_KEYS = {
     "ai_model": "ANALYSIS_MODEL",
     "ai_endpoint": None,
     "ai_auth_header": None,
+    # Provider-agnostic AI categorization settings: bring-your-own-AI.
+    # ai_provider: "" (infer from ai_endpoint/ai_api_key), "anthropic", "openai", "custom"
+    "ai_enabled": None,  # "" or "1" = enabled, "0" = disabled
+    "ai_provider": None,
+    "ai_api_key": "ANTHROPIC_API_KEY",
+    "ai_base_url": None,  # OpenAI-compatible base URL, e.g. http://localhost:11434/v1
     # Deprecated aliases, kept so old reads/writes (and any external agent
     # still using the old names) keep working. New code should use the
     # ai_* keys above. See LEGACY_ALIASES / migrate_legacy_settings().
@@ -62,6 +70,7 @@ LEGACY_ALIASES = {
     "ai_model": "analysis_model",
     "ai_endpoint": "analysis_endpoint",
     "ai_auth_header": "analysis_auth_header",
+    "ai_api_key": "anthropic_api_key",
 }
 
 # Keys that are never shown as their own group/field in the settings UI:
@@ -72,6 +81,7 @@ DEPRECATED_KEYS = set(LEGACY_ALIASES.values())
 # Keys that should be masked in API responses
 SENSITIVE_KEYS = {
     "anthropic_api_key",
+    "ai_api_key",
     "ai_auth_header",
     "analysis_auth_header",
     "agent_auth_header",

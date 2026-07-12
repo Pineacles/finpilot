@@ -109,8 +109,8 @@ async def test_history_fallback_reuses_prior_categorization(db, user_id):
 
 
 async def test_batch_categorize_with_ai_short_circuits_without_backend(db, user_id, monkeypatch):
-    """No ai_endpoint / anthropic_api_key configured -> early return [] before
-    any network call. Proves the function never reaches _call_ai when no AI
+    """No ai_endpoint / ai_api_key configured -> early return before any
+    network call. Proves the function never reaches _call_ai when no AI
     backend is configured, regardless of the real environment's settings."""
 
     async def _no_setting(db_arg, user_id_arg, key):
@@ -122,9 +122,200 @@ async def test_batch_categorize_with_ai_short_circuits_without_backend(db, user_
     monkeypatch.setattr(categorize, "get_setting", _no_setting)
     monkeypatch.setattr(categorize, "_call_ai", _must_not_be_called)
 
-    result = await batch_categorize_with_ai(
+    results, errors = await batch_categorize_with_ai(
         db, user_id,
         [{"id": "x", "merchant": "Some Unknown Shop", "description": "Some Unknown Shop", "amount": -10.0}],
     )
 
-    assert result == []
+    assert results == []
+    assert errors == ["AI categorization disabled or not configured"]
+
+
+async def test_batch_categorize_with_ai_short_circuits_when_disabled(db, user_id, monkeypatch):
+    """ai_enabled="0" disables the AI fallback even if a provider is otherwise
+    fully configured, and never reaches _call_ai."""
+
+    async def _fake_setting(db_arg, user_id_arg, key):
+        return {"ai_enabled": "0", "ai_api_key": "sk-test"}.get(key, "")
+
+    async def _must_not_be_called(*args, **kwargs):
+        raise AssertionError("should not be called")
+
+    monkeypatch.setattr(categorize, "get_setting", _fake_setting)
+    monkeypatch.setattr(categorize, "_call_ai", _must_not_be_called)
+
+    results, errors = await batch_categorize_with_ai(
+        db, user_id,
+        [{"id": "x", "merchant": "Some Unknown Shop", "description": "Some Unknown Shop", "amount": -10.0}],
+    )
+
+    assert results == []
+    assert errors == ["AI categorization disabled or not configured"]
+
+
+# ── load_ai_config: provider inference and usability ────────────────────
+
+async def test_load_ai_config_infers_anthropic_when_api_key_set(db, user_id, monkeypatch):
+    async def _fake_setting(db_arg, user_id_arg, key):
+        return {"ai_api_key": "sk-test"}.get(key, "")
+
+    monkeypatch.setattr(categorize, "get_setting", _fake_setting)
+
+    config = await categorize.load_ai_config(db, user_id)
+    assert config.provider == "anthropic"
+    assert config.enabled is True
+
+
+async def test_load_ai_config_infers_custom_when_endpoint_set(db, user_id, monkeypatch):
+    async def _fake_setting(db_arg, user_id_arg, key):
+        return {"ai_endpoint": "https://agent.example.com/categorize"}.get(key, "")
+
+    monkeypatch.setattr(categorize, "get_setting", _fake_setting)
+
+    config = await categorize.load_ai_config(db, user_id)
+    assert config.provider == "custom"
+    assert config.enabled is True
+
+
+async def test_load_ai_config_openai_disabled_without_base_url(db, user_id, monkeypatch):
+    async def _fake_setting(db_arg, user_id_arg, key):
+        return {"ai_provider": "openai"}.get(key, "")
+
+    monkeypatch.setattr(categorize, "get_setting", _fake_setting)
+
+    config = await categorize.load_ai_config(db, user_id)
+    assert config.provider == "openai"
+    assert config.enabled is False
+
+
+# ── _call_ai: provider dispatch ──────────────────────────────────────────
+
+class _FakeAsyncClient:
+    """Minimal async-context-manager stand-in for httpx.AsyncClient."""
+
+    def __init__(self, captured: list, response_json):
+        self._captured = captured
+        self._response_json = response_json
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self._captured.append({"url": url, "headers": headers, "json": json})
+        return _FakeResponse(self._response_json)
+
+
+class _FakeResponse:
+    def __init__(self, data):
+        self._data = data
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._data
+
+
+async def test_call_ai_openai_provider_parses_chat_completions_response(monkeypatch):
+    captured: list = []
+    response_json = {
+        "choices": [{"message": {"content": '[{"m":"Migros","c":"Supermarket","s":0.9}]'}}]
+    }
+    monkeypatch.setattr(
+        categorize.httpx, "AsyncClient",
+        lambda *a, **k: _FakeAsyncClient(captured, response_json),
+    )
+
+    config = categorize.AiConfig(
+        enabled=True, provider="openai", api_key="sk-openai", model="gpt-4o-mini",
+        endpoint="", auth_header="", base_url="http://localhost:11434/v1",
+    )
+    results, error = await categorize._call_ai(config, "prompt text", [{"id": "x"}])
+
+    assert error is None
+    assert results == [{"m": "Migros", "c": "Supermarket", "s": 0.9}]
+    assert captured[0]["url"] == "http://localhost:11434/v1/chat/completions"
+    assert captured[0]["headers"]["Authorization"] == "Bearer sk-openai"
+    assert captured[0]["json"]["model"] == "gpt-4o-mini"
+
+
+async def test_call_ai_custom_provider_sends_configured_model(monkeypatch):
+    captured: list = []
+    response_json = [{"m": "Migros", "c": "Supermarket", "s": 0.8}]
+    monkeypatch.setattr(
+        categorize.httpx, "AsyncClient",
+        lambda *a, **k: _FakeAsyncClient(captured, response_json),
+    )
+
+    config = categorize.AiConfig(
+        enabled=True, provider="custom", api_key="", model="claude-opus-4",
+        endpoint="https://agent.example.com/categorize", auth_header="Bearer secret",
+        base_url="",
+    )
+    results, error = await categorize._call_ai(config, "prompt text", [{"id": "x"}])
+
+    assert error is None
+    assert results == response_json
+    assert captured[0]["url"] == "https://agent.example.com/categorize"
+    assert captured[0]["json"]["model"] == "claude-opus-4"  # not the old hardcoded default
+    assert captured[0]["headers"]["Authorization"] == "Bearer secret"
+
+
+async def test_call_ai_anthropic_provider_uses_async_client(monkeypatch):
+    captured: list = []
+
+    class _FakeContentBlock:
+        def __init__(self, text):
+            self.text = text
+
+    class _FakeAnthropicResponse:
+        def __init__(self, text):
+            self.content = [_FakeContentBlock(text)]
+
+    class _FakeMessages:
+        async def create(self, **kwargs):
+            captured.append(kwargs)
+            return _FakeAnthropicResponse('[{"m":"Migros","c":"Supermarket","s":0.7}]')
+
+    class _FakeAsyncAnthropic:
+        def __init__(self, api_key=None):
+            self.api_key = api_key
+            self.messages = _FakeMessages()
+
+    monkeypatch.setattr(categorize.anthropic, "AsyncAnthropic", _FakeAsyncAnthropic)
+
+    config = categorize.AiConfig(
+        enabled=True, provider="anthropic", api_key="sk-ant-test",
+        model="claude-haiku-4-5-20251001", endpoint="", auth_header="", base_url="",
+    )
+    results, error = await categorize._call_ai(config, "prompt text", [{"id": "x"}])
+
+    assert error is None
+    assert results == [{"m": "Migros", "c": "Supermarket", "s": 0.7}]
+    assert captured[0]["model"] == "claude-haiku-4-5-20251001"
+
+
+# ── Confidence 0.0 must not be coerced to the 0.5 fallback ──────────────
+
+def test_parse_ai_results_keeps_legitimate_zero_confidence():
+    chunk = [{"id": "x", "merchant": "Unknown Shop"}]
+    chunk_results = [{"m": "Unknown Shop", "c": "Other", "s": 0.0}]
+
+    mapped = categorize._parse_ai_results(chunk_results, chunk, {"Other": "cat-other"})
+
+    assert mapped[0]["confidence"] == 0.0
+
+
+# ── Per-request custom rules are injected into the prompt ────────────────
+
+def test_build_prompt_includes_custom_rules_with_priority():
+    chunk = [{"id": "x", "merchant": "Migros", "amount": -20.0}]
+    prompt = categorize._build_prompt("Groceries (Supermarket)", chunk, "Everything from Migros is Gaming")
+
+    assert "Everything from Migros is Gaming" in prompt
+    assert "priority" in prompt
+    # Without custom rules the block is absent entirely
+    assert "User rules" not in categorize._build_prompt("Groceries (Supermarket)", chunk)

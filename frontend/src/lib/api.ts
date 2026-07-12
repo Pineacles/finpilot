@@ -13,6 +13,7 @@ import type {
   SymbolClassification, AssetType, WatchlistItem,
   CreditCardAccount, ColumnMapping, CsvPreview, ImportProfile,
   RecurringExpense, CreateRecurringExpense, RecurringSuggestion,
+  AiTestResult,
 } from "@/lib/types";
 
 // Structured 422 detail from a currency mismatch on POST .../trade: see
@@ -285,6 +286,8 @@ export const api = {
     request<{ status: string; updated: string[] }>("/api/settings", { method: "PUT", body: JSON.stringify({ settings }) }),
   regenerateApiKey: () =>
     request<{ api_key: string; message: string }>("/api/settings/api-key/regenerate", { method: "POST" }),
+  testAiCategorization: () =>
+    request<AiTestResult>("/api/settings/ai/test", { method: "POST" }),
 
   // Sync
   syncGmail: () => request<{ status: string; new_transactions: number; balance: number | null; errors: string[] }>("/api/sync/gmail", { method: "POST" }),

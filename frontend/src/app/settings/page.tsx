@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
-import { api, type BrokerList, type BrokerStatus, type SyncStatus, type CreditCardAccount } from "@/lib/api";
+import { api, type BrokerList, type BrokerStatus, type SyncStatus, type CreditCardAccount, type AiTestResult } from "@/lib/api";
 import { GlassCard } from "@/components/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,21 +17,17 @@ import {
 const DEFAULT_SETTLEMENT_PATTERNS = ["cembra", "cumulus", "migros bank cumulus", "viseca payment services", "viseca card services"];
 
 const LABELS: Record<string, string> = {
-  anthropic_api_key: "Anthropic API Key", ai_model: "AI Model",
-  ai_endpoint: "Custom Agent Endpoint", ai_auth_header: "Agent Auth Header",
   agent_endpoint: "Agent API Endpoint", agent_auth_header: "Agent Auth Header",
   gmail_address: "Gmail Address", gmail_app_password: "App Password",
   gmail_poll_interval: "Auto-poll Interval (minutes)", gmail_sender_filter: "Sender Emails to Monitor",
 };
 const PLACEHOLDERS: Record<string, string> = {
-  anthropic_api_key: "sk-ant-...", ai_model: "claude-sonnet-4-20250514",
-  ai_endpoint: "https://your-agent.example.com/analyze", ai_auth_header: "Bearer sk-your-token",
   agent_endpoint: "https://your-agent.example.com/api/finpilot", agent_auth_header: "Bearer sk-your-token",
   gmail_address: "your-email@gmail.com", gmail_app_password: "16-char app password",
   gmail_poll_interval: "15 (minutes), 0 = manual", gmail_sender_filter: "noreply@valiant.ch",
 };
-const SENSITIVE = new Set(["anthropic_api_key", "ai_auth_header", "agent_auth_header", "gmail_app_password"]);
-const GROUP_ICONS: Record<string, typeof Brain> = { ai: Brain, agent: Bot, gmail: Mail };
+const SENSITIVE = new Set(["agent_auth_header", "gmail_app_password"]);
+const GROUP_ICONS: Record<string, typeof Brain> = { agent: Bot, gmail: Mail };
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -99,6 +95,16 @@ export default function SettingsPage() {
 
   const handleChange = (key: string, value: string) => { setEdits({ ...edits, [key]: value }); };
   const hasEdits = Object.keys(edits).length > 0;
+
+  // Flushes any pending (unsaved) edits before an action that needs the
+  // latest settings server-side (OAuth connect, AI test connection, ...).
+  const flushEdits = async () => {
+    if (Object.keys(edits).length > 0) {
+      await api.updateSettings(edits);
+      const d = await api.getSettings();
+      setSettings(d.settings); setEdits({});
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -197,6 +203,14 @@ export default function SettingsPage() {
         </GlassCard>
       )}
 
+      {/* AI categorization */}
+      <AiSection
+        settings={settings}
+        edits={edits}
+        onChange={handleChange}
+        onSaveThenAction={flushEdits}
+      />
+
       {/* Settings groups */}
       {Object.entries(groups).map(([groupKey, group], gi) => {
         const Icon = GROUP_ICONS[groupKey] || Brain;
@@ -268,13 +282,7 @@ export default function SettingsPage() {
           settings={settings}
           edits={edits}
           onChange={handleChange}
-          onSaveThenAction={async () => {
-            if (Object.keys(edits).length > 0) {
-              await api.updateSettings(edits);
-              const d = await api.getSettings();
-              setSettings(d.settings); setEdits({});
-            }
-          }}
+          onSaveThenAction={flushEdits}
         />
       </Suspense>
 
@@ -535,6 +543,250 @@ function BrokersSection({ settings, edits, onChange, onSaveThenAction }: Brokers
               {busy === "connect" ? "Opening…" : "Connect"}
             </Button>
           </div>
+        </div>
+      </div>
+    </GlassCard>
+  );
+}
+
+
+// ─── AI categorization section ─────────────────────────────────────────────
+// Bring-your-own-model settings for the AI categorization fallback: keyword
+// rules, merchant rules, transaction history and the ML classifier all run
+// first; only transactions none of those can place get sent to this model.
+
+interface AiSectionProps {
+  settings: Record<string, string>;
+  edits: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+  onSaveThenAction: () => Promise<void>;
+}
+
+function AiSection({ settings, edits, onChange, onSaveThenAction }: AiSectionProps) {
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<AiTestResult | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+
+  const value = (k: string) => edits[k] ?? settings[k] ?? "";
+  const enabled = value("ai_enabled") !== "0";
+  const providerRaw = value("ai_provider");
+  const provider = providerRaw !== "" ? providerRaw : (settings.ai_endpoint ? "custom" : "anthropic");
+
+  const handleTest = async () => {
+    setTesting(true); setTestResult(null); setTestError(null);
+    try {
+      await onSaveThenAction();
+      const r = await api.testAiCategorization();
+      setTestResult(r);
+      if (!r.ok) setTestError(r.error || "Test failed.");
+    } catch (e) {
+      setTestError(e instanceof Error ? e.message : "Could not test the AI connection.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const fieldsCls = enabled ? "" : "opacity-60 pointer-events-none";
+
+  return (
+    <GlassCard delay={0.08}>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
+          <Brain className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <div>
+          <h2 className="text-[16px] font-semibold">AI categorization</h2>
+          <p className="text-[12px] text-muted-foreground">Bring your own model for uncategorized transactions</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Enable toggle: always active, even while the section below is dimmed */}
+        <div>
+          <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+            Enable
+          </label>
+          <button
+            type="button"
+            onClick={() => onChange("ai_enabled", enabled ? "0" : "1")}
+            className={`h-11 w-full rounded-xl border border-border px-3 flex items-center justify-between transition-colors ${enabled ? "bg-emerald-500/10" : "bg-accent"}`}
+          >
+            <span className="text-[13px]">{enabled ? "Enabled" : "Disabled"}</span>
+            <span className={`h-5 w-9 rounded-full p-0.5 transition-colors ${enabled ? "bg-emerald-500" : "bg-muted-foreground/30"}`}>
+              <span className={`block h-4 w-4 rounded-full bg-white transition-transform ${enabled ? "translate-x-4" : ""}`} />
+            </span>
+          </button>
+        </div>
+
+        <div className={fieldsCls}>
+          <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+            Provider
+          </label>
+          <select
+            value={provider}
+            onChange={e => onChange("ai_provider", e.target.value)}
+            className="h-11 w-full rounded-xl border border-border bg-accent px-3 text-[13px] outline-none"
+          >
+            <option value="anthropic">Anthropic API</option>
+            <option value="openai">OpenAI-compatible</option>
+            <option value="custom">Custom gateway</option>
+          </select>
+        </div>
+      </div>
+
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 ${fieldsCls}`}>
+        {provider === "anthropic" && (
+          <>
+            <div>
+              <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+                API Key
+              </label>
+              <Input
+                type="password"
+                value={value("ai_api_key")}
+                onChange={e => onChange("ai_api_key", e.target.value)}
+                placeholder="sk-ant-..."
+                className="rounded-xl h-11 font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+                Model
+              </label>
+              <Input
+                value={value("ai_model")}
+                onChange={e => onChange("ai_model", e.target.value)}
+                placeholder="claude-haiku-4-5-20251001"
+                className="rounded-xl h-11"
+              />
+            </div>
+          </>
+        )}
+
+        {provider === "openai" && (
+          <>
+            <div className="sm:col-span-2">
+              <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+                Base URL
+              </label>
+              <Input
+                value={value("ai_base_url")}
+                onChange={e => onChange("ai_base_url", e.target.value)}
+                placeholder="https://api.openai.com/v1 or http://localhost:11434/v1"
+                className="rounded-xl h-11"
+              />
+            </div>
+            <div>
+              <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+                API Key
+              </label>
+              <Input
+                type="password"
+                value={value("ai_api_key")}
+                onChange={e => onChange("ai_api_key", e.target.value)}
+                placeholder="sk-..."
+                className="rounded-xl h-11 font-mono"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Some servers, such as Ollama, do not need a key. Leave blank.
+              </p>
+            </div>
+            <div>
+              <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+                Model
+              </label>
+              <Input
+                value={value("ai_model")}
+                onChange={e => onChange("ai_model", e.target.value)}
+                placeholder="gpt-5-mini, llama3.1, ..."
+                className="rounded-xl h-11"
+              />
+            </div>
+          </>
+        )}
+
+        {provider === "custom" && (
+          <>
+            <div className="sm:col-span-2">
+              <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+                Endpoint URL
+              </label>
+              <Input
+                value={value("ai_endpoint")}
+                onChange={e => onChange("ai_endpoint", e.target.value)}
+                placeholder="https://your-agent.example.com/analyze"
+                className="rounded-xl h-11"
+              />
+            </div>
+            <div>
+              <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+                Auth Header
+              </label>
+              <Input
+                type="password"
+                value={value("ai_auth_header")}
+                onChange={e => onChange("ai_auth_header", e.target.value)}
+                placeholder="Bearer sk-your-token"
+                className="rounded-xl h-11 font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5 uppercase tracking-wide">
+                Model
+              </label>
+              <Input
+                value={value("ai_model")}
+                onChange={e => onChange("ai_model", e.target.value)}
+                placeholder="claude-haiku-4-5-20251001"
+                className="rounded-xl h-11"
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className={fieldsCls}>
+        <p className="text-[12px] text-muted-foreground mt-4">
+          Transactions that keyword rules, merchant rules, history and the ML classifier cannot
+          categorize are sent to this model in small batches. Only merchant names and amounts are sent.
+        </p>
+
+        <div className="mt-5 pt-5 border-t border-border">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-[12px] text-muted-foreground">
+              Test the current settings against a few sample merchants.
+            </p>
+            <Button
+              variant="outline"
+              onClick={handleTest}
+              disabled={testing}
+              className="rounded-xl"
+            >
+              <RefreshCw className={`h-4 w-4 mr-1.5 ${testing ? "animate-spin" : ""}`} />
+              {testing ? "Testing..." : "Test connection"}
+            </Button>
+          </div>
+
+          {testResult && testResult.ok && (
+            <div className="mt-3 rounded-xl px-3 py-2 text-[13px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <p>
+                Connected: {testResult.provider} / {testResult.model} in {testResult.latency_ms} ms
+              </p>
+              {testResult.results.length > 0 && (
+                <div className="mt-1.5 space-y-0.5 font-mono text-[12px] opacity-90">
+                  {testResult.results.map((r, i) => (
+                    <p key={i}>{r.merchant} -&gt; {r.category} ({Math.round(r.confidence * 100)}%)</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {(testError || (testResult && !testResult.ok)) && (
+            <div className="mt-3 rounded-xl px-3 py-2 text-[13px] bg-red-500/10 text-red-600 dark:text-red-400">
+              {testError || testResult?.error || "Test failed."}
+            </div>
+          )}
         </div>
       </div>
     </GlassCard>

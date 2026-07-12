@@ -114,7 +114,7 @@ async def ai_categorize(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Send transactions to AI for categorization, optionally with a custom prompt."""
+    """Send transactions to the user's configured AI backend for categorization."""
     # Fetch the transactions
     txns = []
     for tid in body.transaction_ids:
@@ -135,13 +135,11 @@ async def ai_categorize(
     if not txns:
         raise HTTPException(status_code=400, detail="No valid transactions found")
 
-    # If custom prompt, inject it into the categorization
-    if body.custom_prompt:
-        # Override the batch categorize to include custom instructions
-        from app.services.categorize import _ai_categorize_with_custom_prompt
-        results = await _ai_categorize_with_custom_prompt(db, user.id, txns, body.custom_prompt)
-    else:
-        results = await batch_categorize_with_ai(db, user.id, txns)
+    # The AI backend (provider/model/endpoint) comes from Settings > AI;
+    # custom_prompt only adds per-request instructions on top of it.
+    results, _ai_errors = await batch_categorize_with_ai(
+        db, user.id, txns, custom_rules=body.custom_prompt,
+    )
 
     # Apply results
     applied = 0

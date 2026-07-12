@@ -595,7 +595,9 @@ async def import_transactions(
             f"saved {total_uncat - unique_count} AI calls by dedup" if total_uncat > unique_count else "",
         )
 
-        ai_results = await batch_categorize_with_ai(db, user_id, unique_merchants)
+        ai_results, ai_errors = await batch_categorize_with_ai(db, user_id, unique_merchants)
+        for err in ai_errors:
+            _log(f"AI error: {err}", "error")
 
         # Build merchant → category mapping from AI results
         merchant_cat_map: dict[str, dict] = {}

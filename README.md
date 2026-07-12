@@ -25,8 +25,11 @@ with [Architecture](#architecture) and the import pipeline under
 - **Bank statement import**: camt.053 XML (ISO 20022), Valiant/PostFinance/Viseca
   CSV, plus a generic column-mapper for anything else, all with automatic dedup.
 - **Auto-categorization that learns**: keyword rules → merchant database →
-  transaction history → a per-user ML classifier, falling back to Claude only
-  for genuine unknowns (and only if you configure an API key).
+  transaction history → a per-user ML classifier, falling back to AI only for
+  genuine unknowns. The AI fallback is a per-user setting: each user brings
+  their own Anthropic API key, any OpenAI-compatible endpoint (Ollama,
+  OpenRouter, OpenAI), or a custom gateway, and can enable/disable it and
+  test it from Settings.
 - **Cumulus settlement auto-reset**: detects the monthly Migros Cumulus
   (Cembra) card-bill payment on the linked bank account and resets the credit
   card balance to zero, idempotently, so re-importing the same statement is a
@@ -177,8 +180,8 @@ All variables are documented in [`.env.example`](.env.example).
 | `DB_PORT` / `API_PORT` / `WEB_PORT` | no | `5432` / `8001` / `3010` | Host ports for Compose |
 | `ENVIRONMENT` | no | `development` | Set to `production` to disable `/docs` |
 | `CORS_ORIGINS` | no | `http://localhost:3000,http://localhost:3010` | Allowed CORS origins |
-| `ANTHROPIC_API_KEY` | no | none | Enables the AI fallback step of transaction categorization |
-| `ANALYSIS_MODEL` | no | `claude-sonnet-4-20250514` | Model used for the categorization fallback |
+| `ANTHROPIC_API_KEY` | no | none | Server-wide default Anthropic key for the AI categorization fallback; each user can override it (and pick a different provider) in Settings |
+| `ANALYSIS_MODEL` | no | `claude-haiku-4-5-20251001` | Default model for the categorization fallback |
 
 See `.env.example` for the full, current list.
 

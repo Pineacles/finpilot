@@ -11,6 +11,7 @@ Layered approach (priority order):
 import re
 import json
 import logging
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +227,53 @@ async def categorize_transaction(
 # ── AI batch categorization ──────────────────────────────────────────
 
 CHUNK_SIZE = 20  # Max merchants per AI call
+DEFAULT_AI_MODEL = "claude-haiku-4-5-20251001"
+
+
+@dataclass
+class AiConfig:
+    """Resolved, per-user AI backend configuration for one categorization run."""
+    enabled: bool
+    provider: str  # "anthropic" | "openai" | "custom"
+    api_key: str
+    model: str
+    endpoint: str  # custom provider only
+    auth_header: str  # custom provider only
+    base_url: str  # openai provider only
+
+
+async def load_ai_config(db: AsyncSession, user_id: str) -> AiConfig:
+    """Load the user's AI settings once and resolve them into an AiConfig.
+
+    Provider inference when ai_provider is unset: "custom" if ai_endpoint is
+    set, else "anthropic". A provider is usable only when the setting it
+    needs is present (custom: endpoint, anthropic: api key, openai: base
+    url); ai_enabled="0" disables regardless of usability.
+    """
+    ai_enabled = await get_setting(db, user_id, "ai_enabled")
+    provider = await get_setting(db, user_id, "ai_provider")
+    api_key = await get_setting(db, user_id, "ai_api_key")
+    model = await get_setting(db, user_id, "ai_model") or DEFAULT_AI_MODEL
+    endpoint = await get_setting(db, user_id, "ai_endpoint")
+    auth_header = await get_setting(db, user_id, "ai_auth_header")
+    base_url = await get_setting(db, user_id, "ai_base_url")
+
+    if not provider:
+        provider = "custom" if endpoint else "anthropic"
+
+    if provider == "custom":
+        usable = bool(endpoint)
+    elif provider == "openai":
+        usable = bool(base_url)
+    else:  # anthropic
+        usable = bool(api_key)
+
+    enabled = ai_enabled != "0" and usable
+
+    return AiConfig(
+        enabled=enabled, provider=provider, api_key=api_key, model=model,
+        endpoint=endpoint, auth_header=auth_header, base_url=base_url,
+    )
 
 
 async def _build_category_tree_prompt(db: AsyncSession, user_id: str) -> tuple[str, dict[str, str]]:
@@ -258,42 +306,27 @@ async def _build_category_tree_prompt(db: AsyncSession, user_id: str) -> tuple[s
     return "\n".join(lines), cat_map
 
 
-async def batch_categorize_with_ai(
-    db: AsyncSession, user_id: str, transactions: list[dict]
-) -> list[dict]:
-    """Batch categorize using AI. Sends in chunks of CHUNK_SIZE.
+def _build_prompt(cat_tree_prompt: str, chunk: list[dict], custom_rules: str | None = None) -> str:
+    """Build the categorization prompt for one chunk of transactions.
 
-    transactions: [{"id": ..., "description": ..., "amount": ..., "merchant": ...}]
-    Returns: [{"id": ..., "category_id": ..., "category_name": ..., "confidence": ...}]
+    Shared by batch_categorize_with_ai and the settings "test AI" endpoint
+    so both send the model the exact same instructions. custom_rules is an
+    optional per-request instruction block (the transactions page lets the
+    user steer a one-off AI categorization run); it takes priority over the
+    built-in rules.
     """
-    if not transactions:
-        return []
+    txn_lines = "\n".join(
+        f'{i+1}. {t["merchant"]} | CHF {t["amount"]}'
+        for i, t in enumerate(chunk)
+    )
 
-    cat_tree_prompt, categories = await _build_category_tree_prompt(db, user_id)
+    custom_block = (
+        f"\nUser rules (follow these with priority over the rules below):\n{custom_rules}\n"
+        if custom_rules else ""
+    )
 
-    # Load AI settings once
-    custom_endpoint = await get_setting(db, user_id, "ai_endpoint")
-    auth_header = await get_setting(db, user_id, "ai_auth_header")
-    api_key = await get_setting(db, user_id, "anthropic_api_key")
-    model = await get_setting(db, user_id, "ai_model") or "claude-haiku-4-5-20251001"
-
-    if not custom_endpoint and not api_key:
-        logger.warning("No AI backend configured for categorization")
-        return []
-
-    all_results: list[dict] = []
-    for chunk_start in range(0, len(transactions), CHUNK_SIZE):
-        chunk = transactions[chunk_start:chunk_start + CHUNK_SIZE]
-        chunk_num = chunk_start // CHUNK_SIZE + 1
-        total_chunks = (len(transactions) + CHUNK_SIZE - 1) // CHUNK_SIZE
-        logger.info(f"AI categorize chunk {chunk_num}/{total_chunks} ({len(chunk)} merchants)")
-
-        txn_lines = "\n".join(
-            f'{i+1}. {t["merchant"]} | CHF {t["amount"]}'
-            for i, t in enumerate(chunk)
-        )
-
-        prompt = f"""Categorize these Swiss bank transactions. Use the MOST SPECIFIC subcategory.
+    return f"""Categorize these Swiss bank transactions. Use the MOST SPECIFIC subcategory.
+{custom_block}
 
 Category hierarchy (Parent > Subcategories):
 {cat_tree_prompt}
@@ -324,65 +357,133 @@ Rules:
 - Train / bus = Public Transport
 JSON only, no explanation."""
 
-        chunk_results = await _call_ai(
-            custom_endpoint, auth_header, api_key, model, prompt, chunk,
-        )
 
-        for i, txn in enumerate(chunk):
-            if i < len(chunk_results):
-                r = chunk_results[i]
-                cat_name = r.get("c") or r.get("category", "Other")
-                cat_id = categories.get(cat_name)
-                confidence = r.get("s") or r.get("confidence", 0.5)
-                all_results.append({
-                    "id": txn["id"], "category_id": cat_id,
-                    "category_name": cat_name, "confidence": float(confidence),
-                })
-            else:
-                all_results.append({
-                    "id": txn["id"], "category_id": None,
-                    "category_name": "Other", "confidence": 0.0,
-                })
+def _parse_ai_results(chunk_results: list[dict], chunk: list[dict], categories: dict[str, str]) -> list[dict]:
+    """Map raw AI result dicts onto the chunk's transaction ids."""
+    results = []
+    for i, txn in enumerate(chunk):
+        if i < len(chunk_results):
+            r = chunk_results[i]
+            cat_name = r.get("c") or r.get("category", "Other")
+            cat_id = categories.get(cat_name)
+            # Explicit None checks: `or` would turn a legitimate confidence
+            # of 0.0 into the 0.5 fallback.
+            confidence = r.get("s")
+            if confidence is None:
+                confidence = r.get("confidence")
+            if confidence is None:
+                confidence = 0.5
+            results.append({
+                "id": txn["id"], "category_id": cat_id,
+                "category_name": cat_name, "confidence": float(confidence),
+            })
+        else:
+            results.append({
+                "id": txn["id"], "category_id": None,
+                "category_name": "Other", "confidence": 0.0,
+            })
+    return results
 
-    return all_results
+
+async def batch_categorize_with_ai(
+    db: AsyncSession, user_id: str, transactions: list[dict],
+    custom_rules: str | None = None,
+) -> tuple[list[dict], list[str]]:
+    """Batch categorize using AI. Sends in chunks of CHUNK_SIZE.
+
+    transactions: [{"id": ..., "description": ..., "amount": ..., "merchant": ...}]
+    custom_rules: optional per-request user instructions, see _build_prompt.
+    Returns: (results, errors).
+    results: [{"id": ..., "category_id": ..., "category_name": ..., "confidence": ...}]
+    errors: one human-readable message per chunk that failed to call the AI backend.
+    """
+    if not transactions:
+        return [], []
+
+    config = await load_ai_config(db, user_id)
+    if not config.enabled:
+        logger.warning("AI categorization disabled or not configured for user %s", user_id[:8])
+        return [], ["AI categorization disabled or not configured"]
+
+    cat_tree_prompt, categories = await _build_category_tree_prompt(db, user_id)
+
+    all_results: list[dict] = []
+    errors: list[str] = []
+    for chunk_start in range(0, len(transactions), CHUNK_SIZE):
+        chunk = transactions[chunk_start:chunk_start + CHUNK_SIZE]
+        chunk_num = chunk_start // CHUNK_SIZE + 1
+        total_chunks = (len(transactions) + CHUNK_SIZE - 1) // CHUNK_SIZE
+        logger.info(f"AI categorize chunk {chunk_num}/{total_chunks} ({len(chunk)} merchants)")
+
+        prompt = _build_prompt(cat_tree_prompt, chunk, custom_rules)
+        chunk_results, error = await _call_ai(config, prompt, chunk)
+        if error:
+            errors.append(error)
+
+        all_results.extend(_parse_ai_results(chunk_results, chunk, categories))
+
+    return all_results, errors
 
 
 async def _call_ai(
-    custom_endpoint: str | None, auth_header: str | None,
-    api_key: str | None, model: str,
-    prompt: str, transactions: list[dict],
-) -> list[dict]:
-    """Call AI backend and parse response."""
+    config: AiConfig, prompt: str, transactions: list[dict],
+) -> tuple[list[dict], str | None]:
+    """Call the configured AI provider and parse its response.
+
+    Returns (results, error). On failure results is [] and error is a short
+    human-readable message identifying the provider and the cause.
+    """
     try:
-        if custom_endpoint:
-            headers = {"Content-Type": "application/json"}
-            if auth_header:
-                headers["Authorization"] = auth_header
-            async with httpx.AsyncClient(timeout=60) as client:
-                resp = await client.post(custom_endpoint, headers=headers, json={
-                    "analysis_type": "categorize",
-                    "model": "claude-haiku-4-5-20251001",
-                    "system_prompt": "You are a Swiss personal finance assistant. Return ONLY valid JSON.",
-                    "user_prompt": prompt,
-                    "transactions": transactions,
-                })
-                resp.raise_for_status()
-                result_data = resp.json()
-                logger.info(f"AI response keys: {list(result_data.keys()) if isinstance(result_data, dict) else 'array'}")
-                return _parse_ai_response(result_data)
-        elif api_key:
-            client = anthropic.Anthropic(api_key=api_key)
-            response = client.messages.create(
-                model=model,
+        if config.provider == "anthropic":
+            client = anthropic.AsyncAnthropic(api_key=config.api_key)
+            response = await client.messages.create(
+                model=config.model,
                 max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}],
             )
             text = response.content[0].text.strip()
-            return _parse_json_text(text)
-        return []
+            return _parse_json_text(text), None
+
+        if config.provider == "openai":
+            headers = {}
+            if config.api_key:
+                headers["Authorization"] = f"Bearer {config.api_key}"
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(
+                    f"{config.base_url.rstrip('/')}/chat/completions",
+                    headers=headers,
+                    json={
+                        "model": config.model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                content = data["choices"][0]["message"]["content"]
+                return _parse_json_text(content), None
+
+        # custom
+        headers = {"Content-Type": "application/json"}
+        if config.auth_header:
+            headers["Authorization"] = config.auth_header
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(config.endpoint, headers=headers, json={
+                "analysis_type": "categorize",
+                "model": config.model,
+                "system_prompt": "You are a Swiss personal finance assistant. Return ONLY valid JSON.",
+                "user_prompt": prompt,
+                "transactions": transactions,
+            })
+            resp.raise_for_status()
+            result_data = resp.json()
+            return _parse_ai_response(result_data), None
+    except httpx.HTTPStatusError as e:
+        logger.error(f"AI categorization chunk failed: {e}", exc_info=True)
+        return [], f"{config.provider} endpoint returned {e.response.status_code} {e.response.reason_phrase}"
     except Exception as e:
         logger.error(f"AI categorization chunk failed: {e}", exc_info=True)
-        return []
+        return [], f"{config.provider} call failed: {e}"
 
 
 def _parse_ai_response(result_data: dict | list) -> list[dict]:
@@ -422,54 +523,6 @@ def _parse_json_text(text: str) -> list[dict]:
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse AI JSON: {e}, text: {text[:200]}")
         return []
-
-
-async def _ai_categorize_with_custom_prompt(
-    db: AsyncSession, user_id: str, transactions: list[dict], custom_prompt: str
-) -> list[dict]:
-    """Categorize with a user-provided custom prompt. Uses chunking."""
-    if not transactions:
-        return []
-
-    cat_tree_prompt, categories = await _build_category_tree_prompt(db, user_id)
-
-    custom_endpoint = await get_setting(db, user_id, "ai_endpoint")
-    auth_header = await get_setting(db, user_id, "ai_auth_header")
-    api_key = await get_setting(db, user_id, "anthropic_api_key")
-    model = await get_setting(db, user_id, "ai_model") or "claude-haiku-4-5-20251001"
-
-    all_results: list[dict] = []
-    for chunk_start in range(0, len(transactions), CHUNK_SIZE):
-        chunk = transactions[chunk_start:chunk_start + CHUNK_SIZE]
-        txn_lines = "\n".join(
-            f'{i+1}. {t["merchant"]} | CHF {t["amount"]}'
-            for i, t in enumerate(chunk)
-        )
-
-        prompt = f"""User rules: {custom_prompt}
-
-Category hierarchy:
-{cat_tree_prompt}
-
-Transactions:
-{txn_lines}
-
-Return ONLY JSON array: [{{"m":"merchant","c":"subcategory","s":0.9}}]
-c must exactly match a category name. Use most specific subcategory. Follow user rules. JSON only."""
-
-        chunk_results = await _call_ai(custom_endpoint, auth_header, api_key, model, prompt, chunk)
-
-        for i, txn in enumerate(chunk):
-            if i < len(chunk_results):
-                r = chunk_results[i]
-                cat_name = r.get("c") or r.get("category", "Other")
-                cat_id = categories.get(cat_name)
-                confidence = r.get("s") or r.get("confidence", 0.5)
-                all_results.append({"id": txn["id"], "category_id": cat_id, "category_name": cat_name, "confidence": float(confidence)})
-            else:
-                all_results.append({"id": txn["id"], "category_id": None, "category_name": "Other", "confidence": 0.0})
-
-    return all_results
 
 
 async def _find_category(db: AsyncSession, user_id: str, name: str) -> Category | None:

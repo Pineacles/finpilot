@@ -25,3 +25,18 @@ class SettingsUpdateResponse(BaseModel):
 class ApiKeyRegenerateResponse(BaseModel):
     api_key: str
     message: str
+
+
+class AiTestResult(BaseModel):
+    merchant: str
+    category: str
+    confidence: float
+
+
+class AiTestResponse(BaseModel):
+    ok: bool
+    provider: str
+    model: str
+    latency_ms: int
+    error: str | None = None
+    results: list[AiTestResult] = []

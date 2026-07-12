@@ -239,3 +239,13 @@ export interface SymbolClassification {
   updated_at: string;
 }
 
+// AI categorization test connection (Settings > AI section)
+export interface AiTestResult {
+  ok: boolean;
+  provider: string;
+  model: string;
+  latency_ms: number;
+  error: string | null;
+  results: { merchant: string; category: string; confidence: number }[];
+}
+
