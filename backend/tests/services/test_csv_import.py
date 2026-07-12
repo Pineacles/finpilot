@@ -168,3 +168,35 @@ async def test_import_upgrades_matching_pending_transaction_in_place(db, user_id
     assert upgraded.merchant == "Migros"
     assert upgraded.merchant != "Pending"
     assert upgraded.amount == pytest.approx(-25.90)
+
+
+# ── Classifier failures must never fail an import ───────────────────────
+
+async def test_import_succeeds_when_classifier_persistence_denied(db, user_id, monkeypatch, tmp_path):
+    """Regression: a root-owned /data/models volume raised PermissionError in
+    joblib.dump, which aborted the whole statement import AFTER transactions
+    were committed (the UI showed failure for a successful import)."""
+    from app.services import classifier as clf
+
+    readonly_dir = tmp_path / "models"
+    readonly_dir.mkdir()
+    readonly_dir.chmod(0o555)
+    monkeypatch.setattr(clf, "MODEL_DIR", readonly_dir)
+
+    bank = await _bank(db, user_id)
+    result = await import_transactions(db, user_id, bank.id, VALIANT_CSV, use_ai=False)
+    assert result["imported"] == 2
+
+
+async def test_import_succeeds_when_classifier_training_explodes(db, user_id, monkeypatch):
+    """Even an unexpected error inside training must not fail the import."""
+    from app.services import classifier as clf
+
+    async def boom(*a, **k):
+        raise RuntimeError("classifier exploded")
+
+    monkeypatch.setattr(clf, "train_classifier", boom)
+
+    bank = await _bank(db, user_id)
+    result = await import_transactions(db, user_id, bank.id, VALIANT_CSV, use_ai=False)
+    assert result["imported"] == 2

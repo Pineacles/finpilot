@@ -10,6 +10,7 @@ camt.053 XML: ISO 20022 (preferred)
 """
 import csv
 import io
+import logging
 import re
 from datetime import date, datetime
 
@@ -23,6 +24,8 @@ from app.services.seed_merchants import seed_merchants
 from app.services.camt053 import parse_camt053
 from app.services import classifier
 from app.services import settlement as settlement_service
+
+logger = logging.getLogger(__name__)
 
 
 def parse_valiant_csv(content: str) -> list[dict]:
@@ -642,13 +645,19 @@ async def import_transactions(
     categorized = sum(1 for t in imported_txns if t.category_id) + ai_categorized
     still_uncategorized = imported - categorized
 
-    # Train/retrain ML classifier on all categorized data
+    # Train/retrain ML classifier on all categorized data. The import itself
+    # is already committed at this point; classifier training is an
+    # optimization and must never turn a successful import into an error.
     _log("Training ML classifier on categorized data...")
-    train_result = await classifier.train_classifier(db, user_id)
-    if train_result["status"] == "trained":
-        _log(f"  Classifier trained: {train_result['samples']} samples, {train_result['categories']} categories")
-    else:
-        _log(f"  Classifier: {train_result.get('reason', 'skipped')}")
+    try:
+        train_result = await classifier.train_classifier(db, user_id)
+        if train_result["status"] == "trained":
+            _log(f"  Classifier trained: {train_result['samples']} samples, {train_result['categories']} categories")
+        else:
+            _log(f"  Classifier: {train_result.get('reason', 'skipped')}")
+    except Exception as e:
+        logger.warning(f"Classifier training failed after import: {e}")
+        _log(f"  Classifier training failed (import unaffected): {e}")
 
     _log(f"Done: {categorized} categorized, {still_uncategorized} uncategorized")
 

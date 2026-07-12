@@ -12,7 +12,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser \
-    && chown -R appuser:appgroup /app
+    && chown -R appuser:appgroup /app \
+    # Pre-create the classifier model dir with app ownership: named volumes
+    # mounted at /data/models inherit it on first creation, so the non-root
+    # appuser can write models (a root-owned volume caused Errno 13 here).
+    && mkdir -p /data/models && chown -R appuser:appgroup /data
 
 USER appuser
 

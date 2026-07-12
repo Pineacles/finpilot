@@ -119,10 +119,18 @@ async def train_classifier(db: AsyncSession, user_id: str) -> dict:
     # Cache in memory
     _model_cache[user_id] = (pipeline, cat_map)
 
-    # Persist to disk
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    model_data = {"pipeline": pipeline, "cat_map": cat_map}
-    joblib.dump(model_data, _model_path(user_id))
+    # Persist to disk. Best-effort: the in-memory cache above already serves
+    # predictions for this process, so a read-only or misowned model volume
+    # must never fail training (and, transitively, a statement import).
+    try:
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
+        model_data = {"pipeline": pipeline, "cat_map": cat_map}
+        joblib.dump(model_data, _model_path(user_id))
+    except OSError as e:
+        logger.warning(
+            f"Classifier trained but could not be persisted to {MODEL_DIR}: {e}. "
+            "Predictions still work from the in-memory model until restart."
+        )
 
     stats = {
         "status": "trained",
