@@ -95,6 +95,16 @@ export default function PortfolioPage() {
     return value;
   }, [p, livePrices]);
 
+  // Money-weighted P&L needs recorded deposits; without them the subtraction
+  // degenerates to the raw portfolio value. Fall back to cost-basis P&L in
+  // that case and label the chip honestly.
+  const netDeposits = p?.net_deposits ?? 0;
+  const totalCost = p?.total_cost ?? 0;
+  const allTime =
+    netDeposits > 0
+      ? { pnl: liveTotalValue - netDeposits, pct: ((liveTotalValue - netDeposits) / netDeposits) * 100, label: "all-time P&L" }
+      : { pnl: liveTotalValue - totalCost, pct: totalCost > 0 ? ((liveTotalValue - totalCost) / totalCost) * 100 : 0, label: "unrealized P&L" };
+
   if (loading && !p) return <div className="space-y-6">{[...Array(4)].map((_, i) => <div key={i} className="h-32 rounded-3xl bg-muted animate-pulse" />)}</div>;
 
   return (
@@ -113,8 +123,9 @@ export default function PortfolioPage() {
         positionsCount={p?.positions_count ?? 0}
         dayPnl={dayTotals.dayPnl}
         dayPnlPct={dayTotals.dayPnlPct}
-        allTimePnl={liveTotalValue - (p?.net_deposits ?? 0)}
-        allTimePnlPct={(p?.net_deposits ?? 0) > 0 ? ((liveTotalValue - (p?.net_deposits ?? 0)) / (p?.net_deposits ?? 1)) * 100 : 0}
+        allTimePnl={allTime.pnl}
+        allTimePnlPct={allTime.pct}
+        allTimeLabel={allTime.label}
         positions={p?.positions ?? []}
         warnings={p?.warnings ?? []}
         live={live}

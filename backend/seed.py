@@ -275,12 +275,12 @@ async def seed_demo_data(db: AsyncSession, user: User) -> None:
     # ── Small ETF/stock portfolio (fixed fake prices, no network calls) ──
     stock_defs = [
         {
-            "symbol": "VWRL", "name": "Vanguard FTSE All-World UCITS ETF", "currency": "CHF",
+            "symbol": "VWRL.SW", "name": "Vanguard FTSE All-World UCITS ETF", "currency": "CHF",
             "asset_type": "etf", "last_price": 112.40,
             "buys": [(date(2026, 1, 10), 20, 102.50, 5.0), (date(2026, 4, 14), 20, 107.80, 5.0)],
         },
         {
-            "symbol": "CHSPI", "name": "iShares Core SPI ETF (CH)", "currency": "CHF",
+            "symbol": "CHSPI.SW", "name": "iShares Core SPI ETF (CH)", "currency": "CHF",
             "asset_type": "etf", "last_price": 126.90,
             "buys": [(date(2026, 2, 5), 15, 118.40, 5.0), (date(2026, 5, 6), 10, 123.10, 5.0)],
         },
