@@ -17,7 +17,7 @@ from app.schemas.finance import (
     RecurringSuggestionResponse,
     CashFlowMonth,
 )
-from app.services import budget_service, recurring_detection, recurring_service
+from app.services import budget_service, portfolio_service, recurring_detection, recurring_service
 from app.services.budget_service import BudgetNotFoundError
 from app.services.recurring_service import RecurringNotFoundError
 
@@ -60,6 +60,18 @@ async def delete_budget(
 
 # ─── Savings Goals ─────────────────────────────────────────
 
+def _goal_response(goal: SavingsGoal, total_wealth: float) -> SavingsGoalResponse:
+    """Build the response with progress computed from real total wealth
+    (portfolio + cash + bank balance), not the manual, never-updated
+    SavingsGoal.current_amount column. current_amount is overridden with
+    the same figure so the "amount saved so far" the frontend displays
+    stays consistent with progress_pct."""
+    r = SavingsGoalResponse.model_validate(goal)
+    r.current_amount = total_wealth
+    r.progress_pct = (total_wealth / goal.target_amount * 100) if goal.target_amount else 0
+    return r
+
+
 @router.get("/goals", response_model=list[SavingsGoalResponse])
 async def list_goals(
     user: User = Depends(get_current_user),
@@ -69,13 +81,8 @@ async def list_goals(
         select(SavingsGoal).where(SavingsGoal.user_id == user.id)
     )
     goals = result.scalars().all()
-    responses = []
-    for g in goals:
-        pct = (g.current_amount / g.target_amount * 100) if g.target_amount else 0
-        r = SavingsGoalResponse.model_validate(g)
-        r.progress_pct = pct
-        responses.append(r)
-    return responses
+    total_wealth = await portfolio_service.compute_total_wealth(db, user.id)
+    return [_goal_response(g, total_wealth) for g in goals]
 
 
 @router.post("/goals", response_model=SavingsGoalResponse)
@@ -88,9 +95,8 @@ async def create_goal(
     db.add(goal)
     await db.commit()
     await db.refresh(goal)
-    r = SavingsGoalResponse.model_validate(goal)
-    r.progress_pct = (goal.current_amount / goal.target_amount * 100) if goal.target_amount else 0
-    return r
+    total_wealth = await portfolio_service.compute_total_wealth(db, user.id)
+    return _goal_response(goal, total_wealth)
 
 
 @router.patch("/goals/{goal_id}", response_model=SavingsGoalResponse)
@@ -110,9 +116,8 @@ async def update_goal(
         setattr(goal, field, value)
     await db.commit()
     await db.refresh(goal)
-    r = SavingsGoalResponse.model_validate(goal)
-    r.progress_pct = (goal.current_amount / goal.target_amount * 100) if goal.target_amount else 0
-    return r
+    total_wealth = await portfolio_service.compute_total_wealth(db, user.id)
+    return _goal_response(goal, total_wealth)
 
 
 # ─── Milestones ────────────────────────────────────────────

@@ -26,7 +26,7 @@ from app.models.stock import PortfolioSnapshot
 TRANSFER_CATEGORY_NAMES = ["Transfer"]
 
 
-def _exclude_transfer_category(transfer_cat_ids: set[str]):
+def exclude_transfer_category(transfer_cat_ids: set[str]):
     """WHERE condition that drops Transfer-categorized rows without also
     dropping *uncategorized* rows.
 
@@ -35,11 +35,15 @@ def _exclude_transfer_category(transfer_cat_ids: set[str]):
     silently exclude every uncategorized transaction from income/expense
     totals and the category breakdown once the user had any Transfer
     category at all. Explicitly allowing NULL through fixes that.
+
+    Shared with agent_finance_router.financial_summary so the AI-agent
+    summary and the dashboard stats never disagree on what counts as
+    income/expense.
     """
     return or_(Transaction.category_id.is_(None), Transaction.category_id.notin_(transfer_cat_ids))
 
 
-async def _get_transfer_category_ids(db: AsyncSession, user_id: str) -> set[str]:
+async def get_transfer_category_ids(db: AsyncSession, user_id: str) -> set[str]:
     transfer_cats = await db.execute(
         select(Category.id).where(and_(
             Category.user_id == user_id,
@@ -58,7 +62,7 @@ async def monthly_stats(db: AsyncSession, user_id: str, year: int | None = None,
     prev_start = month_start - relativedelta(months=1)
     prev_end = month_start - timedelta(days=1)
 
-    transfer_cat_ids = await _get_transfer_category_ids(db, user_id)
+    transfer_cat_ids = await get_transfer_category_ids(db, user_id)
 
     async def _period_totals(start: date, end: date):
         # Exclude transfers from income/expense totals
@@ -68,7 +72,7 @@ async def monthly_stats(db: AsyncSession, user_id: str, year: int | None = None,
             Transaction.date <= end,
         ]
         if transfer_cat_ids:
-            conditions.append(_exclude_transfer_category(transfer_cat_ids))
+            conditions.append(exclude_transfer_category(transfer_cat_ids))
 
         result = await db.execute(
             select(
@@ -117,7 +121,7 @@ async def monthly_stats(db: AsyncSession, user_id: str, year: int | None = None,
             Transaction.date >= month_start,
             Transaction.date <= month_end,
             Transaction.amount < 0,
-            _exclude_transfer_category(transfer_cat_ids) if transfer_cat_ids else True,
+            exclude_transfer_category(transfer_cat_ids) if transfer_cat_ids else True,
         ))
         .group_by(Category.id, Category.name, Category.color)
         .order_by(func.sum(func.abs(Transaction.amount)).desc())
@@ -213,7 +217,7 @@ async def monthly_stats(db: AsyncSession, user_id: str, year: int | None = None,
             Transaction.date >= month_start,
             Transaction.date <= month_end,
             Transaction.amount < 0,
-            _exclude_transfer_category(transfer_cat_ids) if transfer_cat_ids else True,
+            exclude_transfer_category(transfer_cat_ids) if transfer_cat_ids else True,
         ))
         .group_by(Account.name, Account.type)
     )
@@ -246,7 +250,7 @@ async def yearly_stats(db: AsyncSession, user_id: str, year: int | None = None) 
     prev_year_start = date(y - 1, 1, 1)
     prev_year_end = date(y - 1, 12, 31)
 
-    transfer_cat_ids = await _get_transfer_category_ids(db, user_id)
+    transfer_cat_ids = await get_transfer_category_ids(db, user_id)
 
     async def _year_totals(start: date, end: date):
         conditions = [
@@ -255,7 +259,7 @@ async def yearly_stats(db: AsyncSession, user_id: str, year: int | None = None) 
             Transaction.date <= end,
         ]
         if transfer_cat_ids:
-            conditions.append(_exclude_transfer_category(transfer_cat_ids))
+            conditions.append(exclude_transfer_category(transfer_cat_ids))
 
         result = await db.execute(
             select(

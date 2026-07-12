@@ -495,24 +495,9 @@ async def goals_progress(
     # Savings goals
     sg_result = await db.execute(select(SavingsGoal).where(SavingsGoal.user_id == user.id))
 
-    # Get total portfolio + cash for savings goal progress
-    pos_result = await db.execute(select(StockPosition).where(StockPosition.user_id == user.id))
-    positions = pos_result.scalars().all()
-    portfolio_value = sum((p.last_price or p.avg_cost_price) * p.quantity for p in positions if p.symbol != "CASH")
-    cash_in_portfolio = sum(p.quantity for p in positions if p.symbol == "CASH")
-
-    # Bank balance
-    acct_result = await db.execute(select(Account).where(and_(Account.user_id == user.id, Account.type == "bank")))
-    bank_balance = 0
-    for acct in acct_result.scalars().all():
-        bal_result = await db.execute(
-            select(func.coalesce(func.sum(Transaction.amount), 0)).where(and_(
-                Transaction.user_id == user.id, Transaction.account_id == acct.id,
-            ))
-        )
-        bank_balance += float(bal_result.scalar())
-
-    total_wealth = portfolio_value + cash_in_portfolio + bank_balance
+    # Total wealth (portfolio + cash + bank balance), shared with the
+    # dashboard's savings-goal endpoints (finance.py) via portfolio_service.
+    total_wealth = await portfolio_service.compute_total_wealth(db, user.id)
 
     for g in sg_result.scalars().all():
         pct_used = (total_wealth / g.target_amount * 100) if g.target_amount else 0

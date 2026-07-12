@@ -28,6 +28,7 @@ from app.services import (
     account_service, budget_service, merchant_service,
     transaction_service, stats_service, recurring_detection, recurring_service,
 )
+from app.services.stats_service import exclude_transfer_category, get_transfer_category_ids
 from app.services.account_service import AccountNotFoundError
 from app.services.budget_service import BudgetNotFoundError
 from app.services.merchant_service import MerchantNotFoundError
@@ -47,12 +48,23 @@ async def financial_summary(
     today = date.today()
     month_start = today.replace(day=1)
 
+    # Transfer-categorized rows (Viseca/Cembra settlements etc.) are internal
+    # money movement, not real income/expense: exclude them from every
+    # aggregate below, same as the dashboard stats (stats_service). Account
+    # balances further down deliberately keep transfers, since a transfer
+    # really does move money in or out of that account.
+    transfer_cat_ids = await get_transfer_category_ids(db, user.id)
+
+    conditions = [Transaction.user_id == user.id, Transaction.date >= month_start]
+    if transfer_cat_ids:
+        conditions.append(exclude_transfer_category(transfer_cat_ids))
+
     result = await db.execute(
         select(
             func.coalesce(func.sum(case((Transaction.amount > 0, Transaction.amount), else_=0)), 0).label("income"),
             func.coalesce(func.sum(case((Transaction.amount < 0, func.abs(Transaction.amount)), else_=0)), 0).label("expenses"),
             func.count(Transaction.id).label("txn_count"),
-        ).where(and_(Transaction.user_id == user.id, Transaction.date >= month_start))
+        ).where(and_(*conditions))
     )
     row = result.one()
     income, expenses, txn_count = float(row.income), float(row.expenses), int(row.txn_count)
@@ -61,23 +73,31 @@ async def financial_summary(
     cat_result = await db.execute(
         select(Category.name, func.coalesce(func.sum(func.abs(Transaction.amount)), 0).label("total"))
         .outerjoin(Category, Transaction.category_id == Category.id)
-        .where(and_(Transaction.user_id == user.id, Transaction.date >= month_start, Transaction.amount < 0))
+        .where(and_(
+            Transaction.user_id == user.id, Transaction.date >= month_start, Transaction.amount < 0,
+            exclude_transfer_category(transfer_cat_ids) if transfer_cat_ids else True,
+        ))
         .group_by(Category.name)
         .order_by(func.sum(func.abs(Transaction.amount)).desc())
         .limit(10)
     )
     categories = [{"name": r.name or "Uncategorized", "total": float(r.total)} for r in cat_result.all()]
 
-    # Budget status
+    # Budget status. A budget with category_id=None means "all spending":
+    # keep that semantic but still drop Transfer rows from it.
     result = await db.execute(select(Budget).where(Budget.user_id == user.id))
     budgets = []
     for b in result.scalars().all():
+        spent_conditions = [
+            Transaction.user_id == user.id, Transaction.date >= month_start,
+            Transaction.amount < 0,
+        ]
+        if b.category_id:
+            spent_conditions.append(Transaction.category_id == b.category_id)
+        elif transfer_cat_ids:
+            spent_conditions.append(exclude_transfer_category(transfer_cat_ids))
         spent_result = await db.execute(
-            select(func.coalesce(func.sum(func.abs(Transaction.amount)), 0)).where(and_(
-                Transaction.user_id == user.id, Transaction.date >= month_start,
-                Transaction.amount < 0,
-                Transaction.category_id == b.category_id if b.category_id else True,
-            ))
+            select(func.coalesce(func.sum(func.abs(Transaction.amount)), 0)).where(and_(*spent_conditions))
         )
         spent = float(spent_result.scalar())
         budgets.append({"name": b.name, "limit": b.amount, "spent": spent, "pct": (spent / b.amount * 100) if b.amount else 0})

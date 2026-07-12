@@ -165,3 +165,39 @@ async def test_execute_trade_raises_when_fx_unavailable(db, user_id):
                 db, user_id, symbol="TEST", type="buy", quantity=1,
                 currency="USD", deduct_from_cash=False,
             )
+
+
+# ── compute_total_wealth: positions + cash + bank balance ────────────────
+
+async def test_compute_total_wealth_sums_positions_cash_and_bank_balance(db, user_id):
+    from datetime import date as _date
+
+    from app.models.finance import Transaction
+
+    brokerage = await _make_brokerage(db, user_id)
+    await _make_position(db, user_id, brokerage.id, symbol="AAPL", quantity=10, avg_cost=90.0, last_price=100.0)
+    await _make_position(db, user_id, brokerage.id, symbol="CASH", quantity=250.0, avg_cost=1.0, last_price=None)
+
+    bank = Account(user_id=user_id, name="Bank", type="bank", currency="CHF")
+    db.add(bank)
+    await db.flush()
+    db.add_all([
+        Transaction(user_id=user_id, account_id=bank.id, date=_date(2026, 1, 5), merchant="Employer", amount=3000.0, currency="CHF"),
+        Transaction(user_id=user_id, account_id=bank.id, date=_date(2026, 1, 10), merchant="Rent", amount=-1200.0, currency="CHF"),
+    ])
+    await db.commit()
+
+    total = await portfolio_service.compute_total_wealth(db, user_id)
+
+    # AAPL: 10 * 100.0 = 1000.0, CASH position: 250.0, bank balance: 3000 - 1200 = 1800.0
+    assert total == 1000.0 + 250.0 + 1800.0
+
+
+async def test_compute_total_wealth_falls_back_to_avg_cost_without_live_price(db, user_id):
+    brokerage = await _make_brokerage(db, user_id)
+    await _make_position(db, user_id, brokerage.id, symbol="MSFT", quantity=5, avg_cost=80.0, last_price=None)
+    await db.commit()
+
+    total = await portfolio_service.compute_total_wealth(db, user_id)
+
+    assert total == 5 * 80.0

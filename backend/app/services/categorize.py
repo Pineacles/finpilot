@@ -173,12 +173,27 @@ async def categorize_transaction(
         if cat:
             return cat.id, merchant_name, "keyword", 0.95
 
-    # 1b. Any incoming money (positive amount) = Income by default
+    # 1b. Incoming money (positive amount): Salary first, then two
+    # person-to-person / self-deposit signals that must NOT fall into
+    # Income (TWINT reimbursements from friends, ATM/branch cash deposits,
+    # Revolut top-ups), and only then the Income default.
     if amount > 0:
-        cat_name = "Salary" if "gehalt" in normalized or "lohn" in normalized else "Income"
-        cat = await _find_category(db, user_id, cat_name)
-        if cat:
-            return cat.id, merchant_name, "keyword", 0.9
+        if "gehalt" in normalized or "lohn" in normalized:
+            cat = await _find_category(db, user_id, "Salary")
+            if cat:
+                return cat.id, merchant_name, "keyword", 0.9
+        elif is_person_name(merchant_name):
+            cat = await _find_category(db, user_id, "Transfer")
+            if cat:
+                return cat.id, merchant_name, "keyword", 0.9
+        elif "einzahlung" in normalized:
+            cat = await _find_category(db, user_id, "Transfer")
+            if cat:
+                return cat.id, merchant_name, "keyword", 0.9
+        else:
+            cat = await _find_category(db, user_id, "Income")
+            if cat:
+                return cat.id, merchant_name, "keyword", 0.9
 
     # 1c. "Vergütung" = e-banking payment
     if "vergütung" in normalized or "vergutung" in normalized:

@@ -56,16 +56,19 @@ async def test_merchant_db_fuzzy_match_resolves_migros(db, user_id):
 
 
 async def test_positive_amount_defaults_to_income(db, user_id):
+    """An ordinary positive amount from a business (not a person, not a
+    salary/deposit keyword) still defaults to Income. Four words defeats
+    the is_person_name() heuristic (it only accepts up to 3)."""
     await seed_merchants(db, user_id)
 
     cat_id, merchant_name, method, confidence = await categorize_transaction(
-        db, user_id, "Vergütung Max Muster", 500.0,
+        db, user_id, "Quarterly Freelance Invoice Payment", 500.0,
     )
 
     income = await _category(db, user_id, "Income")
     assert method == "keyword"
     assert cat_id == income.id
-    assert merchant_name == "Vergütung Max Muster"
+    assert merchant_name == "Quarterly Freelance Invoice Payment"
 
 
 async def test_positive_amount_with_gehalt_resolves_salary(db, user_id):
@@ -78,6 +81,36 @@ async def test_positive_amount_with_gehalt_resolves_salary(db, user_id):
     salary = await _category(db, user_id, "Salary")
     assert method == "keyword"
     assert cat_id == salary.id
+
+
+async def test_positive_amount_to_person_name_resolves_transfer(db, user_id):
+    """A positive amount from a counterparty that looks like a person (e.g.
+    a TWINT reimbursement from a friend that wasn't sent via TWINT itself)
+    must land in Transfer, not Income."""
+    await seed_merchants(db, user_id)
+
+    cat_id, merchant_name, method, confidence = await categorize_transaction(
+        db, user_id, "Zahlung - Anna Suter", 50.0,
+    )
+
+    transfer = await _category(db, user_id, "Transfer")
+    assert method == "keyword"
+    assert cat_id == transfer.id
+    assert merchant_name == "Anna Suter"
+
+
+async def test_positive_einzahlung_resolves_transfer(db, user_id):
+    """Own cash deposit ("Einzahlung ...") is money moving into the account
+    from the same person, not real income."""
+    await seed_merchants(db, user_id)
+
+    cat_id, merchant_name, method, confidence = await categorize_transaction(
+        db, user_id, "Einzahlung Postomat 4111", 200.0,
+    )
+
+    transfer = await _category(db, user_id, "Transfer")
+    assert method == "keyword"
+    assert cat_id == transfer.id
 
 
 async def test_history_fallback_reuses_prior_categorization(db, user_id):

@@ -13,6 +13,7 @@ from sqlalchemy import select, and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
+from app.models.finance import Transaction
 from app.models.stock import StockPosition, StockTransaction, PortfolioSnapshot, SymbolClassification
 from app.services.prices import get_quote, get_quotes_batch, get_history, get_fx_rate, get_cached_fx_rate
 from app.services.currency import normalize_currency
@@ -149,6 +150,43 @@ async def get_cash_position(db: AsyncSession, user_id: str, account_id: str) -> 
         db.add(cash)
         await db.flush()
     return cash
+
+
+async def compute_total_wealth(db: AsyncSession, user_id: str) -> float:
+    """Real net worth: stock/ETF/crypto position value (at last known price,
+    not live-refreshed here) + the CASH position + every bank account's
+    transaction-derived balance.
+
+    Shared by the agent's /goals/progress and the dashboard's savings-goal
+    endpoints so progress is computed from actual wealth instead of the
+    manual, never-updated SavingsGoal.current_amount column.
+    """
+    pos_result = await db.execute(select(StockPosition).where(StockPosition.user_id == user_id))
+    positions = pos_result.scalars().all()
+    # Position prices are native-currency: convert to CHF with the cached FX
+    # rate. A never-fetched pair falls back to 1.0 (same graceful degradation
+    # as the trade-history display totals; get_portfolio remains the source
+    # of warned, live-priced valuations).
+    portfolio_value = 0.0
+    for p in positions:
+        if p.symbol == "CASH":
+            continue
+        _, divisor = normalize_currency(p.currency or "CHF")
+        fx = get_cached_fx_rate(p.currency or "CHF", "CHF") or 1.0
+        portfolio_value += (p.last_price or p.avg_cost_price) * p.quantity / divisor * fx
+    cash_in_portfolio = sum(p.quantity for p in positions if p.symbol == "CASH")
+
+    acct_result = await db.execute(select(Account).where(and_(Account.user_id == user_id, Account.type == "bank")))
+    bank_balance = 0.0
+    for acct in acct_result.scalars().all():
+        bal_result = await db.execute(
+            select(func.coalesce(func.sum(Transaction.amount), 0)).where(and_(
+                Transaction.user_id == user_id, Transaction.account_id == acct.id,
+            ))
+        )
+        bank_balance += float(bal_result.scalar())
+
+    return portfolio_value + cash_in_portfolio + bank_balance
 
 
 # ── Portfolio overview with live prices ──────────────────────────
