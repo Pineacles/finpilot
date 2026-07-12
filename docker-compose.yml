@@ -28,12 +28,6 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3010}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANALYSIS_MODEL: ${ANALYSIS_MODEL:-claude-sonnet-4-20250514}
-      SAXO_APP_KEY: ${SAXO_APP_KEY:-}
-      SAXO_APP_SECRET: ${SAXO_APP_SECRET:-}
-      SAXO_CERT_PATH: ${SAXO_CERT_PATH:-}
-      SAXO_ACCOUNT_KEY: ${SAXO_ACCOUNT_KEY:-}
-      VISECA_USERNAME: ${VISECA_USERNAME:-}
-      VISECA_PASSWORD: ${VISECA_PASSWORD:-}
       CLASSIFIER_MODEL_DIR: /data/models
     ports:
       - "${API_PORT:-8001}:8000"

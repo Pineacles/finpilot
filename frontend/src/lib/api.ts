@@ -12,7 +12,7 @@ import type {
   BrokerStatus, BrokerAccount, SaxoSyncResult, SaxoSubPortfolio,
   SymbolClassification, AssetType, WatchlistItem,
   CreditCardAccount, ColumnMapping, CsvPreview, ImportProfile,
-  RecurringExpense, CreateRecurringExpense, UpdateRecurringExpense, RecurringSuggestion,
+  RecurringExpense, CreateRecurringExpense, RecurringSuggestion,
 } from "@/lib/types";
 
 // Structured 422 detail from a currency mismatch on POST .../trade — see
@@ -174,8 +174,6 @@ export const api = {
   detectedRecurring: () => request<RecurringSuggestion[]>("/api/dashboard/recurring/detected"),
   createRecurring: (data: CreateRecurringExpense) =>
     request<RecurringExpense>("/api/dashboard/recurring", { method: "POST", body: JSON.stringify(data) }),
-  updateRecurring: (id: string, data: UpdateRecurringExpense) =>
-    request<RecurringExpense>(`/api/dashboard/recurring/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteRecurring: (id: string) =>
     request<{ status: string; id: string }>(`/api/dashboard/recurring/${id}`, { method: "DELETE" }),
 

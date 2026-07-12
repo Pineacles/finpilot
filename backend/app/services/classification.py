@@ -111,12 +111,6 @@ async def get_classification(
     return result.scalar_one_or_none()
 
 
-async def get_asset_type(db: AsyncSession, user_id: str, symbol: str) -> str:
-    """Return the asset_type for a symbol, falling back to default if unclassified."""
-    row = await get_classification(db, user_id, symbol)
-    return row.asset_type if row else DEFAULT_ASSET_TYPE
-
-
 async def get_asset_types_bulk(
     db: AsyncSession, user_id: str, symbols: list[str]
 ) -> dict[str, str]:

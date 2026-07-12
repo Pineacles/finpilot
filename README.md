@@ -157,8 +157,6 @@ All variables are documented in [`.env.example`](.env.example).
 | `DB_PORT` / `API_PORT` / `WEB_PORT` | no | `5432` / `8001` / `3010` | Host ports for Compose |
 | `ENVIRONMENT` | no | `development` | Set to `production` to disable `/docs` |
 | `CORS_ORIGINS` | no | `http://localhost:3000,http://localhost:3010` | Allowed CORS origins |
-| `SAXO_APP_KEY` / `SAXO_APP_SECRET` / `SAXO_CERT_PATH` / `SAXO_ACCOUNT_KEY` | no | — | Saxo Bank read-only sync |
-| `VISECA_USERNAME` / `VISECA_PASSWORD` | no | — | Viseca One card sync |
 | `ANTHROPIC_API_KEY` | no | — | Enables the AI fallback step of transaction categorization |
 | `ANALYSIS_MODEL` | no | `claude-sonnet-4-20250514` | Model used for the categorization fallback |
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from urllib.parse import urlencode
 
 
@@ -17,24 +17,6 @@ from urllib.parse import urlencode
 #
 # Permanent: re-auth is the only fix. Delete stored tokens, set needs_reauth.
 # Transient: backoff and retry; keep tokens intact.
-
-
-@dataclass
-class RefreshResult:
-    """Outcome of a single refresh attempt.
-
-    `ok` is True when we got a fresh access_token. `permanent` distinguishes
-    refresh-token-is-dead from a transient outage. `error` is a short human
-    string for logging / surfacing to the user — MUST NOT contain the token.
-    """
-    tokens: dict[str, str] | None = None
-    permanent: bool = False
-    error: str = ""
-    http_status: int | None = None
-
-    @property
-    def ok(self) -> bool:
-        return self.tokens is not None and bool(self.tokens.get("access_token"))
 
 
 # HTTP statuses that are terminal on the token endpoint — the refresh token

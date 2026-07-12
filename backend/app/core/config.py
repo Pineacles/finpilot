@@ -13,19 +13,6 @@ class Settings(BaseSettings):
     # Comma-separated CORS origins (e.g. "http://localhost:3000,https://your-domain.example.com")
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3010"
 
-    # Saxo Bank
-    SAXO_APP_KEY: str = ""
-    SAXO_APP_SECRET: str = ""
-    SAXO_CERT_PATH: str = ""
-    SAXO_ACCOUNT_KEY: str = ""
-    SAXO_TOKEN_URL: str = "https://live.logonvalidation.net/token"
-    SAXO_API_URL: str = "https://gateway.saxobank.com/openapi"
-
-    # Viseca One
-    VISECA_USERNAME: str = ""
-    VISECA_PASSWORD: str = ""
-    VISECA_API_URL: str = "https://api.one.viseca.ch/v1"
-
     # AI Analysis
     ANTHROPIC_API_KEY: str = ""
     ANALYSIS_MODEL: str = "claude-sonnet-4-20250514"

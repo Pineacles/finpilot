@@ -181,8 +181,3 @@ def predict(user_id: str, merchant: str, description: str = "", amount: float = 
     except Exception as e:
         logger.warning(f"Classifier prediction failed: {e}")
         return None, None, 0.0
-
-
-def invalidate_cache(user_id: str):
-    """Clear cached model for a user (call after retraining)."""
-    _model_cache.pop(user_id, None)

@@ -21,10 +21,6 @@ class CallbackPayload(BaseModel):
     state: str
 
 
-class QuickQuery(BaseModel):
-    account_key: str
-
-
 class DisconnectResponse(BaseModel):
     status: str
 

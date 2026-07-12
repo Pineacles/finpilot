@@ -21,7 +21,6 @@ import {
   RecurringExpense,
   RecurringSuggestion,
   TransactionItem,
-  UpdateRecurringExpense,
 } from "@/lib/api";
 
 /* ------------------------------------------------------------------ */
@@ -101,14 +100,6 @@ export function useCategoriesQuery() {
   return useQuery({ queryKey: queryKeys.categories(), queryFn: () => api.categories() });
 }
 
-export function useCreateCategory() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { name: string; type: string; parent_id?: string }) => api.createCategory(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.categories() }),
-  });
-}
-
 /* ------------------------------------------------------------------ */
 /*  Dashboard overview (net worth, accounts, recent txns, budget health) */
 /* ------------------------------------------------------------------ */
@@ -168,14 +159,6 @@ export function useCreateRecurring() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateRecurringExpense) => api.createRecurring(data),
-    onSuccess: () => invalidateRecurring(qc),
-  });
-}
-
-export function useUpdateRecurring() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateRecurringExpense }) => api.updateRecurring(id, data),
     onSuccess: () => invalidateRecurring(qc),
   });
 }
