@@ -21,17 +21,23 @@ interface SymbolChartDialogProps {
 // history table without disturbing the main holdings chart panel's state.
 export function SymbolChartDialog({ symbol, onClose, fetchChart }: SymbolChartDialogProps) {
   const [range, setRange] = useState("1y");
-  const [data, setData] = useState<{ date: string; close: number }[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Keyed by `${symbol}:${range}` so `loading`/`data` can be derived during
+  // render instead of set imperatively at the top of the effect (avoids
+  // react-hooks/set-state-in-effect while keeping identical visible
+  // behavior: loading flips true as soon as symbol/range change, false once
+  // the matching fetch settles).
+  const [chart, setChart] = useState<{ key: string; data: { date: string; close: number }[] } | null>(null);
+  const requestKey = symbol ? `${symbol}:${range}` : null;
+  const loading = requestKey !== null && chart?.key !== requestKey;
+  const data = chart && chart.key === requestKey ? chart.data : [];
 
   useEffect(() => {
     if (!symbol) return;
     let cancelled = false;
-    setLoading(true);
+    const key = `${symbol}:${range}`;
     fetchChart(symbol, range)
-      .then((d) => { if (!cancelled) setData(d); })
-      .catch(() => { if (!cancelled) setData([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then((d) => { if (!cancelled) setChart({ key, data: d }); })
+      .catch(() => { if (!cancelled) setChart({ key, data: [] }); });
     return () => { cancelled = true; };
   }, [symbol, range, fetchChart]);
 
@@ -61,7 +67,7 @@ export function SymbolChartDialog({ symbol, onClose, fetchChart }: SymbolChartDi
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} stroke="var(--muted-foreground)" />
                 <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} stroke="var(--muted-foreground)" />
-                <Tooltip formatter={(v: any) => Number(v).toFixed(2)} />
+                <Tooltip formatter={(v: unknown) => Number(v).toFixed(2)} />
                 <Area type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} fill="url(#symbol-chart-dialog-gradient)" />
               </AreaChart>
             </ResponsiveContainer>

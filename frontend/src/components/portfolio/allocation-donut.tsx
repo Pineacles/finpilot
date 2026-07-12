@@ -49,7 +49,7 @@ export function AllocationDonut({ positions, delay = 0.2 }: AllocationDonutProps
                   <Cell key={s.name} fill={s.name.startsWith("Other") ? OTHER_COLOR : COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v: any) => formatCurrency(Number(v))} />
+              <Tooltip formatter={(v: unknown) => formatCurrency(Number(v))} />
             </PieChart>
           </ResponsiveContainer>
         </div>

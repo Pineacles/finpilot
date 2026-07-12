@@ -16,6 +16,30 @@ interface PortfolioTimelineCardProps {
   timeline: ValueTimelinePoint[];
 }
 
+// Shape of one point in `chartData` below — matches what the Tooltip's
+// `content` render-prop receives back via `payload[0].payload`.
+interface TimelineChartDatum {
+  date: string;
+  value: number;
+  cost: number;
+  pnl: number;
+  dailyChange: number;
+  gain: number;
+  loss: number;
+  tradeLabels: string | null;
+  trades: ValueTimelinePoint["trades"];
+}
+
+// Minimal structural type for the subset of recharts' Tooltip content props
+// this component actually reads (recharts' own generic TooltipContentProps
+// is keyed on its internal TooltipPayload type, which doesn't know about
+// our chart-specific datum shape).
+interface TimelineTooltipContentProps {
+  active?: boolean;
+  payload?: readonly { payload?: TimelineChartDatum }[];
+  label?: string | number;
+}
+
 export function PortfolioTimelineCard({ timeline }: PortfolioTimelineCardProps) {
   const [timelineRange, setTimelineRange] = useState<TimelineRange>("3M");
   if (timeline.length === 0) return null;
@@ -66,7 +90,7 @@ export function PortfolioTimelineCard({ timeline }: PortfolioTimelineCardProps) 
               <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d: string) => d.slice(5)} stroke="var(--muted-foreground)" />
               <YAxis yAxisId="value" tick={{ fontSize: 10 }} domain={["auto", "auto"]} stroke="var(--muted-foreground)" tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0))} />
               <YAxis yAxisId="change" orientation="right" tick={{ fontSize: 9 }} stroke="var(--muted-foreground)" tickFormatter={(v: number) => (v >= 1000 || v <= -1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0))} width={45} />
-              <Tooltip content={({ active, payload, label }: any) => {
+              <Tooltip content={({ active, payload, label }: TimelineTooltipContentProps) => {
                 if (!active || !payload?.length) return null;
                 const d = payload[0]?.payload;
                 const change = d?.dailyChange ?? 0;

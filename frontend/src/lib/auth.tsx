@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useSyncExternalStore, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "./api";
 
@@ -16,13 +16,41 @@ const AuthContext = createContext<AuthCtx>({
   logout: () => {},
 });
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const router = useRouter();
+// Auth state lives in localStorage, outside React. We read it via
+// useSyncExternalStore rather than mirroring it into useState + an effect:
+// that would mean calling setState synchronously in an effect body
+// (react-hooks/set-state-in-effect) and briefly render the wrong value on
+// every mount. useSyncExternalStore instead renders `getServerSnapshot`
+// (unauthenticated) during SSR/first paint, then swaps in the real
+// `getSnapshot` value as soon as the client can read localStorage — with no
+// hydration-mismatch warning, which is exactly what it's designed for.
+type AuthListener = () => void;
+let authListeners: AuthListener[] = [];
 
-  useEffect(() => {
-    setIsAuthenticated(!!localStorage.getItem("token"));
-  }, []);
+function notifyAuthChange() {
+  authListeners.forEach((listener) => listener());
+}
+
+function subscribeAuth(callback: AuthListener) {
+  authListeners.push(callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    authListeners = authListeners.filter((l) => l !== callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function getAuthSnapshot() {
+  return !!localStorage.getItem("token");
+}
+
+function getAuthServerSnapshot() {
+  return false;
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const isAuthenticated = useSyncExternalStore(subscribeAuth, getAuthSnapshot, getAuthServerSnapshot);
+  const router = useRouter();
 
   const login = async (email: string, password: string) => {
     const data = await api.login(email, password);
@@ -30,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("refreshToken", data.refresh_token);
     // Set cookie for middleware auth check
     document.cookie = `token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-    setIsAuthenticated(true);
+    notifyAuthChange();
     router.push("/");
   };
 
@@ -38,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
     document.cookie = "token=; path=/; max-age=0";
-    setIsAuthenticated(false);
+    notifyAuthChange();
     router.push("/login");
   };
 

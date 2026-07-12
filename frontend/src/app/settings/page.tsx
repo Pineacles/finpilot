@@ -361,8 +361,8 @@ function BrokersSection({ settings, edits, onChange, onSaveThenAction }: Brokers
       await onSaveThenAction();
       const { authorize_url } = await api.saxoConnect();
       window.location.href = authorize_url;
-    } catch (e: any) {
-      setBanner({ kind: "err", text: e?.message || "Could not start Saxo OAuth flow." });
+    } catch (e) {
+      setBanner({ kind: "err", text: e instanceof Error ? e.message : "Could not start Saxo OAuth flow." });
     } finally {
       setBusy(null);
     }
@@ -374,8 +374,8 @@ function BrokersSection({ settings, edits, onChange, onSaveThenAction }: Brokers
       await api.saxoDisconnect();
       await refreshStatus();
       setBanner({ kind: "ok", text: "Saxo disconnected." });
-    } catch (e: any) {
-      setBanner({ kind: "err", text: e?.message || "Disconnect failed." });
+    } catch (e) {
+      setBanner({ kind: "err", text: e instanceof Error ? e.message : "Disconnect failed." });
     } finally {
       setBusy(null);
     }
@@ -580,8 +580,8 @@ function AccountsSection() {
       setDrafts(prev => ({ ...prev, [id]: (updated.settlement_patterns || []).join(", ") }));
       setSavedId(id);
       setTimeout(() => setSavedId(null), 2500);
-    } catch (e: any) {
-      alert(e?.message || "Failed to save settlement patterns.");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to save settlement patterns.");
     } finally {
       setSaving(null);
     }

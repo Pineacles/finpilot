@@ -32,8 +32,8 @@ export function SaxoSection() {
     try {
       await api.saxoSync();
       await load();
-    } catch (e: any) {
-      setSyncError(e?.message || "Sync failed");
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : "Sync failed");
     } finally {
       setSyncing(false);
     }

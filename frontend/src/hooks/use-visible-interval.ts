@@ -1,6 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+
+// document.visibilityState is an external, mutable source outside React —
+// tracked via useSyncExternalStore (subscribing to the `visibilitychange`
+// event) rather than useState + an effect that calls setState synchronously
+// (react-hooks/set-state-in-effect). This also means `live` is correct on
+// the very first client render, with no hydration-mismatch risk: SSR/first
+// paint assumes visible (matching this hook's old default), and the real
+// value is swapped in as soon as the browser can report it.
+function subscribeVisibility(callback: () => void) {
+  document.addEventListener("visibilitychange", callback);
+  return () => document.removeEventListener("visibilitychange", callback);
+}
+function getVisibilitySnapshot() {
+  return document.visibilityState === "visible";
+}
+function getVisibilityServerSnapshot() {
+  return true;
+}
 
 /**
  * Runs `callback` immediately and then every `ms`, but only while the tab is
@@ -12,51 +30,29 @@ import { useEffect, useRef, useState } from "react";
  * Returns `live`: true while polling is active, false while paused.
  */
 export function useVisibleInterval(callback: () => void | Promise<void>, ms: number): boolean {
-  const [live, setLive] = useState(true);
+  const live = useSyncExternalStore(subscribeVisibility, getVisibilitySnapshot, getVisibilityServerSnapshot);
   const savedCallback = useRef(callback);
-  savedCallback.current = callback;
+
+  // Keep the ref pointing at the latest callback. Refs must not be written
+  // during render (react-hooks/refs), so this sync happens in its own
+  // effect (no deps array — runs after every render) rather than inline.
+  useEffect(() => {
+    savedCallback.current = callback;
+  });
 
   useEffect(() => {
+    if (!live) return;
     let cancelled = false;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
     const tick = () => {
       if (!cancelled) void savedCallback.current();
     };
-
-    const start = () => {
-      if (intervalId) return;
-      tick();
-      intervalId = setInterval(tick, ms);
-    };
-    const stop = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    const onVisibility = () => {
-      const visible = document.visibilityState === "visible";
-      setLive(visible);
-      if (visible) start();
-      else stop();
-    };
-
-    if (typeof document !== "undefined" && document.visibilityState === "visible") {
-      start();
-    } else {
-      setLive(false);
-    }
-
-    document.addEventListener("visibilitychange", onVisibility);
+    tick();
+    const intervalId = setInterval(tick, ms);
     return () => {
       cancelled = true;
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(intervalId);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ms]);
+  }, [live, ms]);
 
   return live;
 }

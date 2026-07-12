@@ -60,14 +60,21 @@ function CategoryDrillDown({
 }) {
   const router = useRouter();
   const [txns, setTxns] = useState<TransactionItem[]>([]);
-  const [ld, setLd] = useState(false);
+  // Keyed by the request params so `ld` (loading) can be derived during
+  // render instead of set imperatively at the top of the effect (avoids
+  // react-hooks/set-state-in-effect). `loadedKey` tracks which request the
+  // current `txns` reflects; it's out of sync with `requestKey` exactly
+  // while a fetch for the latest params is in flight.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const requestKey = open && categoryId ? `${categoryId}:${fromDate}:${toDate}` : null;
+  const ld = requestKey !== null && loadedKey !== requestKey;
 
   useEffect(() => {
     if (!open || !categoryId) return;
-    setLd(true);
+    const key = `${categoryId}:${fromDate}:${toDate}`;
     api.transactions({ category_id: categoryId, from_date: fromDate, to_date: toDate, limit: 500 })
       .then(setTxns)
-      .finally(() => setLd(false));
+      .finally(() => setLoadedKey(key));
   }, [open, categoryId, fromDate, toDate]);
 
   const total = txns.reduce((s, t) => s + Math.abs(t.amount), 0);
@@ -139,15 +146,21 @@ export default function StatsPage() {
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [monthly, setMonthly] = useState<MonthlyStats | null>(null);
   const [yearly, setYearly] = useState<YearlyStats | null>(null);
-  const [loading, setLoading] = useState(true);
   const [drillCat, setDrillCat] = useState<{ id: string | null; name: string } | null>(null);
+  // Keyed by the request params so `loading` can be derived during render
+  // instead of set imperatively at the top of the effect (avoids
+  // react-hooks/set-state-in-effect). `loadedKey` tracks which request the
+  // current monthly/yearly state reflects.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const requestKey = `${tab}:${year}:${month}`;
+  const loading = loadedKey !== requestKey;
 
   useEffect(() => {
-    setLoading(true);
-    if (tab === "monthly")
-      api.monthlyStats(year, month).then(setMonthly).finally(() => setLoading(false));
-    else
-      api.yearlyStats(year).then(setYearly).finally(() => setLoading(false));
+    const key = `${tab}:${year}:${month}`;
+    const request = tab === "monthly"
+      ? api.monthlyStats(year, month).then(setMonthly)
+      : api.yearlyStats(year).then(setYearly);
+    request.finally(() => setLoadedKey(key));
   }, [tab, year, month]);
 
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(year - 1); } else setMonth(month - 1); };

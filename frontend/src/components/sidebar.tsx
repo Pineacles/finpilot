@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import {
   LayoutDashboard,
   TrendingUp,
@@ -31,23 +31,52 @@ const nav = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
+// Theme preference lives in localStorage/matchMedia, outside React. Reading
+// it via useSyncExternalStore (rather than useState + an effect that calls
+// setState synchronously — react-hooks/set-state-in-effect) renders the
+// server-safe default on first paint and swaps in the real value once the
+// client can check localStorage, without a hydration-mismatch warning.
+type ThemeListener = () => void;
+let themeListeners: ThemeListener[] = [];
+
+function notifyThemeChange() {
+  themeListeners.forEach((listener) => listener());
+}
+
+function subscribeTheme(callback: ThemeListener) {
+  themeListeners.push(callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    themeListeners = themeListeners.filter((l) => l !== callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function getThemeSnapshot() {
+  const stored = localStorage.getItem("theme");
+  return stored === "dark" || (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches);
+}
+
+function getThemeServerSnapshot() {
+  return false;
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const { logout } = useAuth();
-  const [dark, setDark] = useState(false);
+  const dark = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getThemeServerSnapshot);
 
+  // Synchronize the `dark` class on <html> with the current theme — a
+  // genuine external-system side effect, not a setState call, so it belongs
+  // in an effect.
   useEffect(() => {
-    const stored = localStorage.getItem("theme");
-    const isDark = stored === "dark" || (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    setDark(isDark);
-    document.documentElement.classList.toggle("dark", isDark);
-  }, []);
+    document.documentElement.classList.toggle("dark", dark);
+  }, [dark]);
 
   const toggleTheme = () => {
     const next = !dark;
-    setDark(next);
-    document.documentElement.classList.toggle("dark", next);
     localStorage.setItem("theme", next ? "dark" : "light");
+    notifyThemeChange();
   };
 
   return (

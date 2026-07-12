@@ -56,8 +56,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       localStorage.removeItem("refreshToken");
       document.cookie = "token=; path=/; max-age=0";
       // Prevent multiple concurrent redirects
-      if (!(window as any).__redirecting) {
-        (window as any).__redirecting = true;
+      const win = window as Window & { __redirecting?: boolean };
+      if (!win.__redirecting) {
+        win.__redirecting = true;
         window.location.href = "/login";
       }
     }
