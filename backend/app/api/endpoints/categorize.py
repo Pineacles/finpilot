@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
-from app.models.finance import Transaction
+from app.models.finance import Category, Transaction
 from app.models.user import User
 from app.schemas.categorize import ManualCategorizeResponse, BulkCategorizeResponse, AICategorizeResponse
 from app.services.categorize import batch_categorize_with_ai
@@ -141,7 +141,11 @@ async def ai_categorize(
         db, user.id, txns, custom_rules=body.custom_prompt,
     )
 
-    # Apply results
+    # Apply results. Never replace an existing subcategory with its own
+    # parent: models sometimes answer with the parent name, and that would
+    # silently degrade an already-more-specific categorization.
+    cat_result = await db.execute(select(Category).where(Category.user_id == user.id))
+    parent_of = {c.id: c.parent_id for c in cat_result.scalars().all()}
     applied = 0
     for r in results:
         if r.get("category_id"):
@@ -150,6 +154,8 @@ async def ai_categorize(
             )
             txn = res.scalar_one_or_none()
             if txn:
+                if txn.category_id and parent_of.get(txn.category_id) == r["category_id"]:
+                    continue
                 txn.category_id = r["category_id"]
                 applied += 1
 
