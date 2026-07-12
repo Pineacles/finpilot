@@ -56,5 +56,8 @@ graphify-out/
 skills-lock.json
 **/skills-lock.json
 
-# Screenshots / scratch images
+# Ad-hoc screenshots / scratch images stay untracked; the curated
+# demo-data README screenshots under docs/screenshots are the exception.
 screenshots/
+!docs/screenshots/
+!docs/screenshots/**

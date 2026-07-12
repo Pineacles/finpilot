@@ -20,7 +20,17 @@ with [Architecture](#architecture) and the import pipeline under
 
 ## Screenshots
 
-*(Add screenshots here, generated from `seed.py --demo` data)*
+![Dashboard overview with net worth, portfolio value, accounts, and upcoming payments](docs/screenshots/dashboard.png)
+Dashboard: net worth, live portfolio value, accounts, and upcoming payments.
+
+![Transactions table with categorized merchants and amounts](docs/screenshots/transactions.png)
+Transactions: imported and categorized Swiss bank and card activity.
+
+![Portfolio holdings with live prices and a one year VWRL chart](docs/screenshots/portfolio.png)
+Portfolio: stock and ETF holdings with live prices and performance.
+
+![Statistics page with monthly income, expenses, and category breakdown](docs/screenshots/stats.png)
+Statistics: monthly income, expenses, and spending by category.
 
 ## Features
 
