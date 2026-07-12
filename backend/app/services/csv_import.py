@@ -21,7 +21,7 @@ from app.models.finance import Transaction, Category
 from app.models.account import Account
 from app.services.categorize import categorize_transaction, batch_categorize_with_ai
 from app.services.seed_merchants import seed_merchants
-from app.services.camt053 import parse_camt053
+from app.services.camt053 import parse_camt053, parse_statement_period
 from app.services import classifier
 from app.services import settlement as settlement_service
 
@@ -389,38 +389,55 @@ async def import_transactions(
     for raw in raw_transactions:
         desc = raw["description"]
         ref = raw.get("reference", "")
+        has_ref = bool(ref) and ref != "NOTPROVIDED"
 
         # Primary dedup: by reference (AcctSvcrRef / viseca_transaction_id)
-        if ref and ref != "NOTPROVIDED" and ref in existing_refs:
+        if has_ref and ref in existing_refs:
             skipped += 1
             continue
 
-        # Secondary dedup: date + amount + merchant (always check, catches re-imports)
+        # Secondary dedup: date + amount + merchant (catches re-imports).
+        # A row with an unseen bank reference can still duplicate a row
+        # imported earlier from a reference-less source (Valiant CSV), but
+        # if the existing row carries a DIFFERENT reference it is a distinct
+        # transaction (e.g. two identical TWINT payments the same day), so
+        # a referenced row only fuzzy-matches reference-less rows.
         merchant_hint = raw.get("merchant", desc[:30])
-        existing = await db.execute(
-            select(Transaction).where(and_(
-                Transaction.user_id == user_id,
-                Transaction.date == raw["date"],
-                Transaction.amount == raw["amount"],
-                Transaction.merchant == merchant_hint,
-            ))
-        )
-        if existing.scalar_one_or_none():
+        fuzzy_conditions = [
+            Transaction.user_id == user_id,
+            Transaction.date == raw["date"],
+            Transaction.amount == raw["amount"],
+            Transaction.merchant == merchant_hint,
+        ]
+        if has_ref:
+            fuzzy_conditions.append(Transaction.viseca_transaction_id.is_(None))
+        existing = await db.execute(select(Transaction).where(and_(*fuzzy_conditions)))
+        fuzzy_dup = existing.scalars().first()
+        if fuzzy_dup:
+            if has_ref:
+                # Attach the reference so future imports hit the primary dedup
+                fuzzy_dup.viseca_transaction_id = ref
+                existing_refs.add(ref)
             skipped += 1
             continue
 
         # Tertiary dedup: date + amount + description notes (catches same txn with different merchant extraction)
         if desc:
-            existing2 = await db.execute(
-                select(Transaction).where(and_(
-                    Transaction.user_id == user_id,
-                    Transaction.account_id == account_id,
-                    Transaction.date == raw["date"],
-                    Transaction.amount == raw["amount"],
-                    Transaction.notes.ilike(f"%{desc[:30]}%"),
-                ))
-            )
-            if existing2.scalar_one_or_none():
+            notes_conditions = [
+                Transaction.user_id == user_id,
+                Transaction.account_id == account_id,
+                Transaction.date == raw["date"],
+                Transaction.amount == raw["amount"],
+                Transaction.notes.ilike(f"%{desc[:30]}%"),
+            ]
+            if has_ref:
+                notes_conditions.append(Transaction.viseca_transaction_id.is_(None))
+            existing2 = await db.execute(select(Transaction).where(and_(*notes_conditions)))
+            notes_dup = existing2.scalars().first()
+            if notes_dup:
+                if has_ref:
+                    notes_dup.viseca_transaction_id = ref
+                    existing_refs.add(ref)
                 skipped += 1
                 continue
 
@@ -461,7 +478,7 @@ async def import_transactions(
             # Upgrade pending transaction with real details
             pending_txn.merchant = merchant_name
             pending_txn.category_id = cat_id
-            pending_txn.viseca_transaction_id = ref if ref and ref != "NOTPROVIDED" else None
+            pending_txn.viseca_transaction_id = ref if has_ref else None
             pending_txn.notes = notes
             txn = pending_txn
             imported += 1
@@ -478,7 +495,7 @@ async def import_transactions(
                 original_amount=raw.get("original_amount"),
                 original_currency=raw.get("original_currency"),
                 category_id=cat_id,
-                viseca_transaction_id=ref if ref and ref != "NOTPROVIDED" else None,
+                viseca_transaction_id=ref if has_ref else None,
                 notes=notes,
             )
             db.add(txn)
@@ -500,44 +517,53 @@ async def import_transactions(
                 "merchant": merchant_name,
             })
 
-    # ── Purge pending transactions that were replaced by real imports ──
-    # Email notifications often batch multiple transactions into one "Pending"
-    # entry (e.g. 11 individual charges → 2 aggregated pending amounts).
-    # After importing the real transactions for a date, remove any remaining
-    # "Pending" entries for that date if their total roughly matches.
-    imported_dates = {t.date for t in imported_txns}
-    pending_purged = 0
-    for d in imported_dates:
-        pending_result = await db.execute(
+    # ── Prune stale placeholders inside the statement period ───────────
+    # The statement is authoritative for the period it covers. Email
+    # notifications create "Pending" placeholders whose booking date rarely
+    # matches the email date (so the exact-match upgrade above misses most),
+    # and older imports can leave "Unknown" rows the bank later dropped.
+    # Any placeholder in the covered period that this statement does not
+    # corroborate (its reference is absent from the statement) is stale and
+    # removed. Rows created or upgraded by this very import are kept, as is
+    # any referenced row the statement confirms (a real booked transaction
+    # whose merchant extraction merely failed).
+    period_start = period_end = None
+    if fmt == "camt053" and content:
+        period_start, period_end = parse_statement_period(content)
+    if raw_transactions:
+        row_dates = [t["date"] for t in raw_transactions]
+        period_start = period_start or min(row_dates)
+        period_end = period_end or max(row_dates)
+
+    pruned = 0
+    if period_start and period_end:
+        statement_refs = {
+            t.get("reference") for t in raw_transactions
+            if t.get("reference") and t.get("reference") != "NOTPROVIDED"
+        }
+        imported_ids = {t.id for t in imported_txns}
+        placeholder_result = await db.execute(
             select(Transaction).where(and_(
                 Transaction.user_id == user_id,
                 Transaction.account_id == account_id,
-                Transaction.date == d,
-                Transaction.merchant == "Pending",
+                Transaction.date >= period_start,
+                Transaction.date <= period_end,
+                Transaction.merchant.in_(("Pending", "Unknown")),
             ))
         )
-        pending_for_date = pending_result.scalars().all()
-        if not pending_for_date:
-            continue
+        for placeholder in placeholder_result.scalars().all():
+            if placeholder.id in imported_ids:
+                continue
+            if placeholder.viseca_transaction_id and placeholder.viseca_transaction_id in statement_refs:
+                continue
+            await db.delete(placeholder)
+            pruned += 1
 
-        # Sum of pending entries and imported entries for this date
-        pending_total = sum(p.amount for p in pending_for_date)
-        imported_for_date = [t for t in imported_txns if t.date == d]
-        imported_total = sum(t.amount for t in imported_for_date)
-
-        # If the pending total is close to the imported total (within 5% or 5 CHF),
-        # or if we imported more granular transactions than pending entries,
-        # the pending entries are clearly the batched email notifications → purge them.
-        diff = abs(pending_total - imported_total)
-        threshold = max(abs(pending_total) * 0.05, 5.0)  # 5% or 5 CHF
-
-        if diff <= threshold or len(imported_for_date) > len(pending_for_date):
-            for p in pending_for_date:
-                await db.delete(p)
-                pending_purged += 1
-
-    if pending_purged:
-        _log(f"Purged {pending_purged} batched pending transactions (replaced by {len(imported_txns)} real imports)")
+    if pruned:
+        _log(
+            f"Pruned {pruned} stale placeholder transactions (Pending/Unknown) "
+            f"not present in the statement period {period_start} to {period_end}"
+        )
 
     if skipped:
         _log(f"Skipped {skipped} duplicate transactions")
@@ -667,6 +693,7 @@ async def import_transactions(
         "skipped": skipped,
         "categorized": categorized,
         "uncategorized": still_uncategorized,
+        "pruned": pruned,
         "total_rows": len(raw_transactions),
         "log": log,
         "settlements": settlement_results,

@@ -41,6 +41,37 @@ def _t(el: ET.Element | None, path: str, ns: str) -> str:
     return found.text.strip() if found is not None and found.text else ""
 
 
+def parse_statement_period(content: str) -> tuple[date | None, date | None]:
+    """Return the statement's declared coverage period (Stmt/FrToDt).
+
+    The period can extend past the last booked entry (e.g. a statement
+    "to 11.07." whose last booking is 09.07.), so it is the correct
+    window for treating the statement as authoritative.
+    """
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError:
+        return None, None
+    ns = _find_ns(root)
+    stmt = _f(root, "BkToCstmrStmt/Stmt", ns)
+    if stmt is None:
+        stmts = _fa(root, "BkToCstmrStmt/Stmt", ns)
+        stmt = stmts[0] if stmts else None
+    if stmt is None:
+        return None, None
+
+    def _parse_dt(s: str) -> date | None:
+        try:
+            return date.fromisoformat(s[:10]) if s else None
+        except ValueError:
+            return None
+
+    return (
+        _parse_dt(_t(stmt, "FrToDt/FrDtTm", ns)),
+        _parse_dt(_t(stmt, "FrToDt/ToDtTm", ns)),
+    )
+
+
 def parse_camt053(content: str, owner_name: str = "") -> list[dict]:
     """Parse camt.053 XML. owner_name is used to detect self-referencing entries."""
     root = ET.fromstring(content)
