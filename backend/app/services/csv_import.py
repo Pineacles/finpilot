@@ -1,4 +1,4 @@
-"""Import Swiss bank statements — CSV and camt.053 XML.
+"""Import Swiss bank statements: CSV and camt.053 XML.
 
 CSV: Valiant Bank format (Datum;Buchungstext;Betrag;Saldo;Valuta)
   - Limited detail: "Vergütung" entries are batched without recipient info
@@ -91,7 +91,7 @@ def parse_viseca_csv(content: str) -> list[dict]:
     elif "," in header and header.count(",") >= 5:
         delimiter = ","
     else:
-        # No standard delimiter — log for debugging
+        # No standard delimiter: log for debugging
         import logging
         logging.getLogger(__name__).warning(
             f"Viseca CSV: no tab/semicolon/comma found in header. "
@@ -141,10 +141,10 @@ def parse_viseca_csv(content: str) -> list[dict]:
         # Negative amounts in Viseca = payments you made to pay off the bill
         # Positive amounts = purchases (expenses)
         if raw_amount < 0:
-            # Bill payment ("Ihre Zahlung - Danke") — this is a credit (positive in our system)
+            # Bill payment ("Ihre Zahlung - Danke"): this is a credit (positive in our system)
             amount = abs(raw_amount)
         else:
-            # Purchase — expense (negative in our system)
+            # Purchase: expense (negative in our system)
             amount = -abs(raw_amount)
 
         orig_amount = None
@@ -482,7 +482,7 @@ async def import_transactions(
             try:
                 await db.flush()
             except Exception:
-                # Duplicate reference — skip gracefully
+                # Duplicate reference: skip gracefully
                 await db.rollback()
                 skipped += 1
                 continue
@@ -546,10 +546,10 @@ async def import_transactions(
         label = {"keyword": "Keyword match", "merchant_db": "Merchant DB", "history": "History", "classifier": "ML Classifier", "unmatched": "Unmatched", "upgraded": "Upgraded from email"}.get(method, method)
         _log(f"  {label}: {count}", "categorized" if method != "unmatched" else "pending")
 
-    # Batch AI categorization for unknowns — deduplicated by merchant
+    # Batch AI categorization for unknowns, deduplicated by merchant
     ai_categorized = 0
     if use_ai and uncategorized_txns:
-        # Group by merchant — only send 1 per unique merchant to AI
+        # Group by merchant: only send 1 per unique merchant to AI
         merchant_groups: dict[str, list[dict]] = {}
         for t in uncategorized_txns:
             key = t["merchant"].lower()
@@ -614,7 +614,7 @@ async def import_transactions(
     # ── Credit-card settlement auto-reset ───────────────────────────
     # Piggybacks on the dedup above: only transactions newly inserted (or
     # upgraded from a "Pending" placeholder) in *this* import are examined,
-    # never existing rows — so re-importing the same file is a no-op here
+    # never existing rows, so re-importing the same file is a no-op here
     # too (nothing new to settle).
     settlement_results: list[dict] = []
     if imported_txns:
@@ -627,7 +627,7 @@ async def import_transactions(
             for r in settlement_results:
                 if r["skipped"]:
                     _log(
-                        f"Settlement match on {r['card_account_name']} but balance already CHF 0.00 — no reset needed",
+                        f"Settlement match on {r['card_account_name']} but balance already CHF 0.00: no reset needed",
                         "settlement",
                     )
                 else:

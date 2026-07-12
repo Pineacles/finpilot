@@ -1,4 +1,4 @@
-"""Saxo instrument lookup — resolves FinPilot symbols to Saxo Uic + AssetType.
+"""Saxo instrument lookup: resolves FinPilot symbols to Saxo Uic + AssetType.
 
 Saxo's order endpoints take a numeric Uic, not a ticker. Given a symbol like
 "AAPL" or "SHEL.L", we search `/ref/v1/instruments` and pick the best stock
@@ -88,5 +88,5 @@ async def lookup(
 
 
 def _reset_cache_for_tests() -> None:
-    """Testing hook — never call from production code."""
+    """Testing hook; never call from production code."""
     _CACHE.clear()

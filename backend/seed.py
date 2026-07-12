@@ -1,8 +1,8 @@
 """Seed script: creates a default user with API key.
 
 Credentials are read from environment variables:
-  SEED_EMAIL    — defaults to admin@example.com
-  SEED_PASSWORD — defaults to change-me (change before use!)
+  SEED_EMAIL    : defaults to admin@example.com
+  SEED_PASSWORD : defaults to change-me (change before use!)
 
 Optional --demo flag additionally generates ~6 months of plausible but
 entirely FAKE Swiss personal-finance data, so the app's features are visible
@@ -11,13 +11,13 @@ without needing a real bank export:
   - salary, rent, health insurance, an SBB travelcard, groceries (Migros/Coop)
   - a Migros Cumulus (Cembra) credit-card cycle with monthly auto-settlement
     (card purchases each month + a bank-side payment that zeroes the card via
-    services/settlement.py — the same code path a real import would trigger)
+    services/settlement.py, the same code path a real import would trigger)
   - a small ETF/stock portfolio (VWRL, CHSPI, AAPL, Novartis) with trades
   - budgets, a savings goal, recurring expenses, and watchlist entries
 
 Generation is deterministic (fixed RNG seed, fixed fake calendar window) so
 running it twice against a fresh database produces byte-identical data. No
-real names, account numbers, or figures — everything here is synthetic.
+real names, account numbers, or figures: everything here is synthetic.
 
     python seed.py            # just the user + starter accounts
     python seed.py --demo     # ...plus the fake demo dataset above
@@ -45,7 +45,7 @@ SEED_EMAIL = os.environ.get("SEED_EMAIL", "admin@example.com")
 SEED_PASSWORD = os.environ.get("SEED_PASSWORD", "change-me")
 
 # Fixed fake calendar window for --demo data. Deliberately NOT "today minus 6
-# months" — the data is synthetic, so pinning it to a fixed window keeps the
+# months": the data is synthetic, so pinning it to a fixed window keeps the
 # generated dataset identical across runs regardless of when seed.py executes.
 DEMO_MONTHS = [(2026, m) for m in range(1, 7)]  # Jan..Jun 2026
 DEMO_RNG_SEED = 20260107
@@ -137,7 +137,7 @@ async def seed_demo_data(db: AsyncSession, user: User) -> None:
 
     # The base seed() flow also creates a "Viseca One" credit_card account.
     # services/settlement.py matches the bank-side payment against the FIRST
-    # credit_card account whose settlement_patterns match — with two cards
+    # credit_card account whose settlement_patterns match, and with two cards
     # both left on the default pattern list (cembra/cumulus/viseca...), the
     # always-empty Viseca account would shadow the real Cumulus Card match
     # every month (matched first, balance already 0 -> "skipped", and the
@@ -257,7 +257,7 @@ async def seed_demo_data(db: AsyncSession, user: User) -> None:
                 "payment_type": "", "reference": f"demo-bank-{year}{month:02d}-twint",
             },
             {
-                # Cumulus settlement — merchant matches settlement.DEFAULT_SETTLEMENT_PATTERNS
+                # Cumulus settlement: merchant matches settlement.DEFAULT_SETTLEMENT_PATTERNS
                 # ("cembra"/"cumulus"), so importing this triggers the card
                 # auto-reset to CHF 0 via services/settlement.py.
                 "date": date(year, month, 28), "description": "Kreditkartenabrechnung Cumulus",
@@ -340,7 +340,7 @@ async def seed_demo_data(db: AsyncSession, user: User) -> None:
     ))
 
     # ── Recurring expenses (the confirmed/tracked list, distinct from the
-    # auto-detection suggestions — as if the user had already confirmed
+    # auto-detection suggestions: as if the user had already confirmed
     # these from the transaction history generated above) ──────────
     for name, cat_name, amount, day, freq in [
         ("Rent", "Rent", 1450.0, 1, "monthly"),

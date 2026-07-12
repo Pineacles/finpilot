@@ -34,7 +34,7 @@ function SaxoCallbackInner() {
         }
       } catch {
         if (cancelled) return;
-        setMessage("Connection failed — redirecting.");
+        setMessage("Connection failed, redirecting.");
         router.replace("/settings?saxo=error&reason=callback_failed");
       }
     })();

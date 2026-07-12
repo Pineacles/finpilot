@@ -1,7 +1,7 @@
-"""User settings service — DB-first with env var fallback.
+"""User settings service: DB-first with env var fallback.
 
 Naming note: the AI-categorization settings used to be named
-`analysis_model`/`analysis_endpoint`/`analysis_auth_header` — a name that
+`analysis_model`/`analysis_endpoint`/`analysis_auth_header`, a name that
 predates this app dropping AI *stock* analysis and reads confusingly next to
 "analysis" of transactions/stats. They're renamed to `ai_model`/`ai_endpoint`/
 `ai_auth_header`. The old keys are kept in SETTING_KEYS (so old writes still
@@ -23,13 +23,13 @@ SETTING_KEYS = {
     "ai_model": "ANALYSIS_MODEL",
     "ai_endpoint": None,
     "ai_auth_header": None,
-    # Deprecated aliases — kept so old reads/writes (and any external agent
+    # Deprecated aliases, kept so old reads/writes (and any external agent
     # still using the old names) keep working. New code should use the
     # ai_* keys above. See LEGACY_ALIASES / migrate_legacy_settings().
     "analysis_model": "ANALYSIS_MODEL",
     "analysis_endpoint": None,
     "analysis_auth_header": None,
-    # Agent — can scrape banks, fetch data, run tasks
+    # Agent: can scrape banks, fetch data, run tasks
     "agent_endpoint": None,  # e.g. https://your-agent.example.com/api/finpilot
     "agent_auth_header": None,
     # Gmail (for bank email notifications)
@@ -38,7 +38,7 @@ SETTING_KEYS = {
     "gmail_last_uid": None,
     "gmail_poll_interval": None,
     "gmail_sender_filter": None,
-    # Saxo Bank broker adapter — see app/brokers/saxo/ (read-only position sync)
+    # Saxo Bank broker adapter, see app/brokers/saxo/ (read-only position sync)
     "saxo_enabled": None,
     "saxo_environment": None,  # "sim" | "live" (LIVE rejected at write time this release)
     "saxo_app_key": None,
@@ -50,8 +50,8 @@ SETTING_KEYS = {
     "saxo_pkce_verifier": None,
     "saxo_oauth_state": None,
     "saxo_last_error": None,
-    "saxo_needs_reauth": None,  # "1" when refresh failed permanently — UI shows Reconnect banner
-    # Dashboard customization — JSON-encoded, read/written verbatim by the
+    "saxo_needs_reauth": None,  # "1" when refresh failed permanently: UI shows Reconnect banner
+    # Dashboard customization: JSON-encoded, read/written verbatim by the
     # frontend (this table is a plain string k/v store; no schema needed).
     "dashboard_layout": None,  # JSON: [{id, visible, order}] widget config
     "dismissed_recurring_suggestions": None,  # JSON: string[] of normalized merchant keys
@@ -64,7 +64,7 @@ LEGACY_ALIASES = {
     "ai_auth_header": "analysis_auth_header",
 }
 
-# Keys that are never shown as their own group/field in the settings UI —
+# Keys that are never shown as their own group/field in the settings UI:
 # they're superseded by their ai_* counterpart (still readable/writable for
 # compatibility, just not enumerated).
 DEPRECATED_KEYS = set(LEGACY_ALIASES.values())
@@ -128,7 +128,7 @@ async def get_all_settings(db: AsyncSession, user_id: str) -> dict[str, str]:
     """Get all settings for a user, merged with env fallbacks.
 
     Hidden keys (internal token/verifier state) are stripped entirely.
-    Deprecated keys (old ai_* names) are not enumerated on their own — their
+    Deprecated keys (old ai_* names) are not enumerated on their own; their
     value is folded into the new key instead. Sensitive keys are masked.
     Values still stored under an old key are migrated (copied) to the new key
     so subsequent reads/writes stay on the new name.
@@ -197,7 +197,7 @@ async def set_many(db: AsyncSession, user_id: str, settings: dict[str, str]) -> 
 
 
 async def set_many_atomic(db: AsyncSession, user_id: str, settings: dict[str, str]) -> None:
-    """Upsert many settings in a single transaction — commits once at the end.
+    """Upsert many settings in a single transaction: commits once at the end.
 
     Use this when multiple keys must move together (e.g. an access+refresh+expiry
     triple after an OAuth token exchange). A crash before the commit leaves the

@@ -1,4 +1,4 @@
-"""Agent sub-router — API key auth for AI assistant integration."""
+"""Agent sub-router: API key auth for AI assistant integration."""
 import json
 from datetime import date, datetime, timedelta, timezone
 
@@ -47,11 +47,11 @@ async def agent_portfolio(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Full portfolio view — same computation as the dashboard's
+    """Full portfolio view, same computation as the dashboard's
     GET /api/dashboard/portfolio: live prices, CHF conversion, per-position
     asset_type (equity/etf/index/crypto/bond/commodity/cash), staleness
     flags, and a `warnings` list for any failed price/FX lookups (never
-    silent — see PortfolioResponse.warnings).
+    silent; see PortfolioResponse.warnings).
     For a smaller human-readable digest, see GET /summary/portfolio."""
     return await portfolio_service.get_portfolio(db, user.id)
 
@@ -232,7 +232,7 @@ async def agent_import_file(
 
 # ── Generic CSV column-mapper import ──────────────────────────────
 # For formats detect_format() doesn't recognize (e.g. a Cumulus/Cembra card
-# export) — preview the columns, then import with an explicit mapping.
+# export): preview the columns, then import with an explicit mapping.
 # Same pipeline as /api/import/csv/preview + /api/import/csv/mapped
 # (dashboard surface) via app.services.mapped_import.
 
@@ -260,7 +260,7 @@ async def agent_import_mapped_csv(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Import a CSV using a user-supplied column mapping — for any format
+    """Import a CSV using a user-supplied column mapping, for any format
     detect_format() doesn't recognize (e.g. Cumulus/Cembra card exports).
     Optionally save the mapping as a reusable named profile."""
     try:
@@ -641,16 +641,16 @@ async def delete_milestone(
 
 
 
-# ── Watchlist (tracking only — no analysis/recommendations) ──────
+# ── Watchlist (tracking only, no analysis/recommendations) ──────
 
 @router.get("/watchlist", response_model=list[WatchlistItemOut])
 async def agent_watchlist(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Read the user's watchlist — live price + day change per symbol.
+    """Read the user's watchlist: live price + day change per symbol.
     Tracking only; this deliberately does not return any analysis or buy/sell
-    recommendations (that stack was removed — see redesign decisions)."""
+    recommendations (that stack was removed; see redesign decisions)."""
     return await watchlist_service.list_watchlist(db, user.id)
 
 
@@ -660,13 +660,13 @@ async def agent_add_to_watchlist(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Add a symbol to the watchlist (tracking only — no recommendations)."""
+    """Add a symbol to the watchlist (tracking only, no recommendations)."""
     try:
         return await watchlist_service.add_watchlist_item(db, user.id, body.symbol)
     except WatchlistDuplicateError as e:
         raise HTTPException(status_code=409, detail=f"{e.symbol} is already on your watchlist")
     except WatchlistInvalidSymbolError as e:
-        raise HTTPException(status_code=400, detail=f"No live quote found for {e.symbol} — check the ticker")
+        raise HTTPException(status_code=400, detail=f"No live quote found for {e.symbol}, check the ticker")
 
 
 @router.delete("/watchlist/{symbol}", summary="Remove a symbol from the watchlist")
@@ -722,7 +722,7 @@ async def resync_currencies(
         if not quote:
             flagged.append({
                 "symbol": pos.symbol,
-                "reason": "yfinance returned no data — symbol may be invalid or delisted",
+                "reason": "yfinance returned no data: symbol may be invalid or delisted",
             })
             continue
 
@@ -749,7 +749,7 @@ async def resync_currencies(
                     "symbol": pos.symbol,
                     "reason": (
                         f"yfinance price {yf_price:.4f} {yf_ccy} is {ratio:.1f}x higher than "
-                        f"avg cost {db_cost:.4f} {pos.currency} — possible wrong ticker "
+                        f"avg cost {db_cost:.4f} {pos.currency}: possible wrong ticker "
                         f"(e.g. should be {pos.symbol}.L for LSE?)"
                     ),
                 })
@@ -758,7 +758,7 @@ async def resync_currencies(
                     "symbol": pos.symbol,
                     "reason": (
                         f"yfinance price {yf_price:.4f} {yf_ccy} is {1/ratio:.1f}x lower than "
-                        f"avg cost {db_cost:.4f} {pos.currency} — possible wrong ticker or stale cost basis"
+                        f"avg cost {db_cost:.4f} {pos.currency}: possible wrong ticker or stale cost basis"
                     ),
                 })
 

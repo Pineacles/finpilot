@@ -1,4 +1,4 @@
-"""Transaction categorization engine — keyword map, merchant-DB fuzzy
+"""Transaction categorization engine: keyword map, merchant-DB fuzzy
 match, income default, history fallback, and the AI batch path's
 hermetic early-return when no AI backend is configured.
 
@@ -43,7 +43,7 @@ async def test_direct_keyword_match_resolves_rent(db, user_id):
 async def test_merchant_db_fuzzy_match_resolves_migros(db, user_id):
     await seed_merchants(db, user_id)
 
-    # Misspelled merchant name (typo: "Migeos") — must not match any
+    # Misspelled merchant name (typo: "Migeos"), must not match any
     # DIRECT_CATEGORY_MAP keyword, only the fuzzy merchant-DB pass.
     cat_id, merchant_name, method, confidence = await categorize_transaction(
         db, user_id, "Migeos Zuerich Hauptbahnhof", -15.30,
@@ -97,7 +97,7 @@ async def test_history_fallback_reuses_prior_categorization(db, user_id):
     await db.commit()
 
     # Negative amount and a description that doesn't hit the keyword map or
-    # merchant DB — only the exact merchant-name history match should fire.
+    # merchant DB: only the exact merchant-name history match should fire.
     cat_id, merchant_name, method, confidence = await categorize_transaction(
         db, user_id, "Payment Acme Freelance Client Invoice 2026-04", -200.0,
         counterparty="Acme Freelance Client",

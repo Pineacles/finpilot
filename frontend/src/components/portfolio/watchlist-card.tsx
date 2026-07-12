@@ -9,7 +9,7 @@ import { api, ApiError } from "@/lib/api";
 import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import type { WatchlistItem } from "@/lib/types";
 
-// Tracking only — deliberately no analysis, no buy/sell signal, no
+// Tracking only, deliberately no analysis, no buy/sell signal, no
 // recommendations here. Just "what price is X at right now."
 export function WatchlistCard() {
   const [items, setItems] = useState<WatchlistItem[]>([]);
@@ -93,7 +93,7 @@ export function WatchlistCard() {
             <div key={item.id} className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-accent transition-colors group">
               <div className="min-w-0">
                 <p className="font-bold text-[13px]">{item.symbol}</p>
-                <p className="text-[11px] text-muted-foreground truncate max-w-[140px]">{item.name || "—"}</p>
+                <p className="text-[11px] text-muted-foreground truncate max-w-[140px]">{item.name || "-"}</p>
               </div>
               <div className="flex items-center gap-2">
                 {item.quote_unavailable ? (

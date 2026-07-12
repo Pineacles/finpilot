@@ -8,7 +8,7 @@ from app.core.database import Base
 
 
 class WatchlistItem(Base):
-    """A symbol the user wants to keep an eye on — live price + day change
+    """A symbol the user wants to keep an eye on: live price + day change
     only, no AI analysis or recommendations. Separate from StockPosition:
     watching a ticker does not imply holding it."""
     __tablename__ = "watchlist_items"

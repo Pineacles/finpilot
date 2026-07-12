@@ -1,4 +1,4 @@
-"""Budget CRUD + status — shared between the JWT dashboard router
+"""Budget CRUD + status: shared between the JWT dashboard router
 (api/endpoints/finance.py) and the API-key agent router
 (api/endpoints/agent_finance_router.py) so "spent/remaining/pct_used" is
 computed identically on both surfaces.

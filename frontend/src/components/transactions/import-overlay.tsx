@@ -243,7 +243,7 @@ export function ImportOverlay({ onImported }: ImportOverlayProps) {
                         onClick={closeImportPage}
                         className="w-full h-11 rounded-xl bg-accent text-[14px] font-medium hover:bg-muted transition-colors cursor-pointer"
                       >
-                        Done — Back to Transactions
+                        Done, Back to Transactions
                       </button>
                     )}
                   </div>

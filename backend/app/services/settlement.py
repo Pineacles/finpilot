@@ -5,7 +5,7 @@ The user's credit card is Migros Cumulus, issued by Cembra; the bank
 When a bank-statement import contains such a payment, this module:
 
   1. categorizes the bank-side transaction as "Transfer" (already excluded
-     from stats — see services/stats_service.py),
+     from stats, see services/stats_service.py),
   2. matches it to the user's credit_card account via configurable
      `settlement_patterns` (Account.settlement_patterns; defaults to
      DEFAULT_SETTLEMENT_PATTERNS when unset),
@@ -19,12 +19,12 @@ When a bank-statement import contains such a payment, this module:
 Because the offsetting transaction is dated *on* the settlement date and
 compute_account_balance only sums transactions dated *strictly after* the
 anchor date, the offsetting transaction itself is correctly excluded from
-the post-reset balance — the card reads exactly 0 right after settlement,
+the post-reset balance: the card reads exactly 0 right after settlement,
 and later purchases accumulate again from a clean anchor.
 
 This is only ever invoked (from services/csv_import.import_transactions)
-with the list of transactions *newly inserted* in the current import batch
-— it never rescans existing rows. Idempotency therefore piggybacks entirely
+with the list of transactions *newly inserted* in the current import batch;
+it never rescans existing rows. Idempotency therefore piggybacks entirely
 on the existing import dedup: re-importing the same bank file inserts
 nothing new, so this function isn't even called with anything to settle.
 """
@@ -52,7 +52,7 @@ DEFAULT_SETTLEMENT_PATTERNS: list[str] = [
 
 STATEMENT_PAYMENT_MERCHANT = "Statement payment"
 
-# Below this magnitude (CHF) a computed balance is treated as "already 0" —
+# Below this magnitude (CHF) a computed balance is treated as "already 0":
 # guards against float noise from repeated add/subtract.
 ZERO_EPSILON = 0.005
 
@@ -86,7 +86,7 @@ async def detect_and_settle(
 
     Returns a list of result dicts, one per detected settlement, suitable
     for surfacing in the import response log. Never raises for a "balance
-    already 0" case — that's logged and reported with skipped=True.
+    already 0" case: that's logged and reported with skipped=True.
     """
     results: list[dict] = []
     if not new_transactions or source_account.type != "bank":
@@ -118,7 +118,7 @@ async def detect_and_settle(
 
         if abs(balance) < ZERO_EPSILON:
             logger.info(
-                "Settlement match on card %s (txn %s) but balance already ~0 (%.2f) — skipping reset",
+                "Settlement match on card %s (txn %s) but balance already ~0 (%.2f), skipping reset",
                 matched_card.name, txn.id, balance,
             )
             results.append({

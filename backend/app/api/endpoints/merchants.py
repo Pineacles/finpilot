@@ -1,4 +1,4 @@
-"""Merchant management — view, add, edit categorization rules.
+"""Merchant management: view, add, edit categorization rules.
 
 Business logic lives in app.services.merchant_service so the dashboard
 (JWT) and agent (API key) surfaces share the same behavior.

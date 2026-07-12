@@ -64,7 +64,7 @@ class BrokerAdapter(ABC):
 
     Implementations are instantiated once per adapter and scoped per call by
     passing `(db, user_id)` into each method. Persistence (tokens, flags) lives
-    in the DB — adapters must not hold mutable per-user state on the instance.
+    in the DB; adapters must not hold mutable per-user state on the instance.
     """
 
     name: str

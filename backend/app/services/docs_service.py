@@ -5,7 +5,7 @@ attribute or its endpoint function's docstring) and renders the markdown +
 JSON that app.api.endpoints.docs serves.
 
 GET /openapi.json remains the authoritative source for exact request/
-response schemas — this module exists to give an agent (or a human) a fast,
+response schemas. This module exists to give an agent (or a human) a fast,
 readable map of what's available, generated rather than hand-maintained.
 """
 from __future__ import annotations
@@ -80,7 +80,7 @@ def _route_info(route: APIRoute) -> RouteInfo:
 
 def collect_agent_routes(app: FastAPI) -> list[RouteInfo]:
     """Every /api/agent/* route currently registered on `app`, sorted by
-    path then method — this IS the live source of truth; nothing here is
+    path then method. This IS the live source of truth; nothing here is
     hand-maintained."""
     routes = [
         r for r in app.routes
@@ -118,7 +118,7 @@ Every route below requires the `X-API-Key` header:
 X-API-Key: <your agent api key>
 ```
 
-Generate/rotate your key from the dashboard Settings page — the agent
+Generate/rotate your key from the dashboard Settings page. The agent
 cannot rotate its own key (see "Deliberately excluded" below).
 
 ## Base URL
@@ -130,25 +130,25 @@ cannot rotate its own key (see "Deliberately excluded" below).
 All errors are FastAPI's default shape: `{"detail": "..."}` (a string, or a
 structured object for a few routes that need extra fields, e.g.
 `/trade`'s currency_mismatch 422). Requests for another user's resource (or
-one that doesn't exist) return `404` — never a `403` that would leak
+one that doesn't exist) return `404`, never a `403` that would leak
 whether the resource exists for someone else.
 
 ## Deliberately excluded from this surface
 
 The agent can do a lot, but not everything a logged-in user can do:
 
-- **User settings / API key management** (`/api/settings/*`) — the agent
+- **User settings / API key management** (`/api/settings/*`): the agent
   must not be able to rotate its own credentials.
-- **Saxo OAuth / broker connect** (`/api/brokers/saxo/connect|callback|disconnect`)
-  — the agent must not be able to establish new brokerage credentials.
-- **Public portfolio share toggling** (`/api/dashboard/portfolio/public/*`)
-  — the agent must not be able to widen what's publicly exposed.
+- **Saxo OAuth / broker connect** (`/api/brokers/saxo/connect|callback|disconnect`):
+  the agent must not be able to establish new brokerage credentials.
+- **Public portfolio share toggling** (`/api/dashboard/portfolio/public/*`):
+  the agent must not be able to widen what's publicly exposed.
 
 ## Authoritative schema
 
 `GET /openapi.json` is the source of truth for exact request/response
 fields and status codes for every route (including the ones below). This
-document is generated directly from the running app's routes — it cannot
+document is generated directly from the running app's routes, so it cannot
 go stale the way a hand-written reference can, but it intentionally stays
 high-level (path, method, one-line summary).
 """
@@ -164,7 +164,7 @@ def render_markdown(app: FastAPI) -> str:
         lines.append(f"### {label}\n")
         for info in groups[key]:
             method = info.methods[0] if info.methods else "?"
-            lines.append(f"**{method} {info.path}** — {info.summary}")
+            lines.append(f"**{method} {info.path}**: {info.summary}")
             if info.description and info.description.splitlines()[0].strip() != info.summary:
                 extra = "\n".join(info.description.splitlines()[1:]).strip()
                 if extra:
@@ -195,7 +195,7 @@ def render_json(app: FastAPI) -> dict:
         "title": "FinPilot Agent API",
         "description": "Gateway for an AI agent to read the user's full financial state and fix data mistakes.",
         "base_url": "https://your-finpilot-domain.example.com/api/agent",
-        "authoritative_schema": "GET /openapi.json — full request/response schemas for every route",
+        "authoritative_schema": "GET /openapi.json: full request/response schemas for every route",
         "auth": {
             "header": "X-API-Key: <user_api_key>",
         },
@@ -205,7 +205,7 @@ def render_json(app: FastAPI) -> dict:
             "/api/dashboard/portfolio/public/* (public share toggling)",
         ],
         "endpoint_groups": endpoint_groups,
-        "generated_from": "app.routes — always in sync, see app.services.docs_service",
+        "generated_from": "app.routes, always in sync, see app.services.docs_service",
     }
 
 
@@ -217,7 +217,7 @@ def render_summary(app: FastAPI) -> dict:
     for key in _ordered_group_keys(groups):
         label = _GROUP_LABELS.get(key, key.replace("_", " ").title())
         summary[key] = [
-            f"{info.methods[0] if info.methods else '?'} {info.path} — {info.summary}"
+            f"{info.methods[0] if info.methods else '?'} {info.path}: {info.summary}"
             for info in groups[key]
         ]
     summary["_meta"] = [

@@ -172,7 +172,7 @@ async def get_detected_recurring(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Suggested recurring expenses inferred from transaction history —
+    """Suggested recurring expenses inferred from transaction history:
     merchants with >=3 similarly-timed, similarly-priced transactions that
     aren't already tracked as a RecurringExpense. Accept a suggestion by
     POSTing it to /recurring; dismissals are tracked client-side via

@@ -1,5 +1,5 @@
 """Agent surface (X-API-Key) scoping: requesting another user's resource by
-id must return 404 — indistinguishable from "does not exist". Never a 403,
+id must return 404, indistinguishable from "does not exist". Never a 403,
 which would leak that the id exists for someone else.
 
 Endpoint handlers are called directly (no HTTP transport), matching the
@@ -94,7 +94,7 @@ async def test_update_and_delete_foreign_merchant_return_404(db, user_id):
 
 
 async def test_owner_can_still_delete_own_transaction(db, user_id):
-    """Control: same call succeeds for the owner — the 404s above are about
+    """Control: same call succeeds for the owner. The 404s above are about
     scoping, not broken routes."""
     txn = Transaction(
         user_id=user_id, account_id="acct-mine", date=date(2026, 6, 2),

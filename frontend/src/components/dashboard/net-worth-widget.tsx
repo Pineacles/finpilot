@@ -6,7 +6,7 @@ import { AnimatedNumber } from "@/components/animated-number";
 import { formatCurrency } from "@/lib/format";
 import { useOverviewQuery } from "@/hooks/queries";
 
-/** Big "at a glance" net worth number — bank + credit card + portfolio. */
+/** Big "at a glance" net worth number: bank + credit card + portfolio. */
 export function NetWorthWidget() {
   const { data, isLoading } = useOverviewQuery();
 

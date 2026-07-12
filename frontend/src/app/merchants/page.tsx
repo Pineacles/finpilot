@@ -12,7 +12,7 @@ import {
 import { MerchantRule } from "@/lib/api";
 
 function formatCreated(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleDateString("de-CH");
 }
 
@@ -94,7 +94,7 @@ export default function MerchantsPage() {
   return (
     <div className="space-y-6">
       <p className="text-[14px] text-muted-foreground">
-        These rules steer future auto-categorization — when a transaction&apos;s merchant matches a pattern below, it gets the default category automatically on import.
+        These rules steer future auto-categorization: when a transaction&apos;s merchant matches a pattern below, it gets the default category automatically on import.
       </p>
 
       {/* Create form */}
@@ -221,9 +221,9 @@ export default function MerchantsPage() {
                             ))}
                           </select>
                         ) : m.default_category_id ? (
-                          <CategoryPill name={m.category_name ?? categoryName(m.default_category_id) ?? "—"} />
+                          <CategoryPill name={m.category_name ?? categoryName(m.default_category_id) ?? "-"} />
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-muted-foreground">-</span>
                         )}
                       </td>
                       <td className="py-3 pr-4 whitespace-nowrap text-muted-foreground tabular-nums">

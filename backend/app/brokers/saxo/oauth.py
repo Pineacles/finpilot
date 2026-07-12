@@ -19,7 +19,7 @@ from urllib.parse import urlencode
 # Transient: backoff and retry; keep tokens intact.
 
 
-# HTTP statuses that are terminal on the token endpoint — the refresh token
+# HTTP statuses that are terminal on the token endpoint: the refresh token
 # itself is dead and retrying with it will never succeed.
 _PERMANENT_TOKEN_STATUSES = {400, 401, 403}
 
@@ -29,14 +29,14 @@ _PERMANENT_OAUTH_ERRORS = {
     "invalid_grant",       # refresh token expired / revoked / already used
     "invalid_client",      # app_key or app_secret wrong
     "unauthorized_client", # app not allowed to refresh
-    "invalid_request",     # malformed payload — re-auth won't help, but still terminal here
+    "invalid_request",     # malformed payload; re-auth won't help, but still terminal here
 }
 
 
 def classify_refresh_error(
     *, http_status: int | None, oauth_error: str | None
 ) -> bool:
-    """Return True if the error is permanent (don't retry — re-auth needed)."""
+    """Return True if the error is permanent (don't retry; re-auth needed)."""
     if oauth_error and oauth_error.lower() in _PERMANENT_OAUTH_ERRORS:
         return True
     if http_status is None:

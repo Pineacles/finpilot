@@ -1,5 +1,5 @@
 """Response schemas for the watchlist (app.api.endpoints.watchlist /
-app.services.watchlist_service). Tracking only — no analysis, no
+app.services.watchlist_service). Tracking only: no analysis, no
 recommendations."""
 from pydantic import BaseModel
 

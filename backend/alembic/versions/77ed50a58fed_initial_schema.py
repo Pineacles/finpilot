@@ -8,7 +8,7 @@ NOTE: This baseline was originally committed as an empty stub (upgrade/downgrade
 were both `pass`); the schema only existed via Base.metadata.create_all in
 seed.py and test fixtures. It was reconstructed on 2026-07-07 from
 backend/app/models/ to contain exactly the tables/columns that existed at
-baseline time — i.e. everything in the models EXCEPT what later migrations in
+baseline time, i.e. everything in the models EXCEPT what later migrations in
 this chain add (user_settings, merchants, categorization_log, the
 public_share_token/public_portfolio columns on users, buy_assessments,
 symbol_classifications, pending_orders, buy_assessments.time_stop,

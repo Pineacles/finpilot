@@ -3,7 +3,7 @@
 Groups a user's transaction history by normalized merchant name and flags
 groups that look like a recurring bill/subscription: at least 3 occurrences
 at a roughly regular interval (weekly/monthly/yearly, within tolerance) and
-similar amounts. Used to power "suggested" upcoming payments — the user (or
+similar amounts. Used to power "suggested" upcoming payments: the user (or
 their agent) can accept a suggestion to turn it into a tracked
 RecurringExpense, or dismiss it.
 
@@ -62,7 +62,7 @@ def _amounts_similar(amounts: list[float]) -> bool:
 def _matching_frequency(gaps: list[int]) -> str | None:
     """Return a frequency name if every gap (days between consecutive
     occurrences, sorted ascending) falls within tolerance of the same
-    candidate frequency; otherwise None (irregular — no suggestion)."""
+    candidate frequency; otherwise None (irregular, no suggestion)."""
     if not gaps:
         return None
     for name, nominal, tolerance in _FREQUENCIES:
@@ -86,7 +86,7 @@ def detect_from_transactions(
     """Pure grouping/detection over an already-fetched transaction list.
 
     `existing_merchants` is a set of normalized merchant names already
-    tracked by a RecurringExpense — those groups are skipped so accepted
+    tracked by a RecurringExpense: those groups are skipped so accepted
     recurring expenses aren't suggested again.
     """
     groups: dict[str, list[Transaction]] = {}

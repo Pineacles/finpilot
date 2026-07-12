@@ -8,7 +8,7 @@ interface TransactionFiltersProps {
   onChange: (value: string) => void;
 }
 
-/** Search bar for the transactions table — merchant, description, category. */
+/** Search bar for the transactions table: merchant, description, category. */
 export function TransactionFilters({ value, onChange }: TransactionFiltersProps) {
   return (
     <div className="relative">

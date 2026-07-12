@@ -62,7 +62,7 @@ export function SaxoSection() {
             <h2 className="text-[16px] font-semibold">{account.name}</h2>
             <p className="text-[12px] text-muted-foreground">
               Broker-synced (read-only) · {account.positions.length} position{account.positions.length === 1 ? "" : "s"} ·
-              cash updated {account.cash_updated_at ? new Date(account.cash_updated_at).toLocaleTimeString() : "—"}
+              cash updated {account.cash_updated_at ? new Date(account.cash_updated_at).toLocaleTimeString() : "-"}
             </p>
           </div>
         </div>
@@ -117,10 +117,10 @@ export function SaxoSection() {
                   <td className="px-4 py-2.5 text-muted-foreground truncate max-w-[220px]">{p.name}</td>
                   <td className="px-4 py-2.5 text-right font-mono tabular-nums">{p.quantity}</td>
                   <td className="px-4 py-2.5 text-right font-mono tabular-nums">{p.avg_cost_price.toFixed(2)} <span className="text-muted-foreground text-[11px]">{p.currency}</span></td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">{p.last_price ? p.last_price.toFixed(2) : "—"}</td>
+                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">{p.last_price ? p.last_price.toFixed(2) : "-"}</td>
                   <td className="px-4 py-2.5 text-right font-mono tabular-nums">{p.market_value.toFixed(2)}</td>
                   <td className={`px-4 py-2.5 text-right font-mono tabular-nums ${(p.unrealized_pnl ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                    {p.unrealized_pnl !== null ? (p.unrealized_pnl >= 0 ? "+" : "") + p.unrealized_pnl.toFixed(2) : "—"}
+                    {p.unrealized_pnl !== null ? (p.unrealized_pnl >= 0 ? "+" : "") + p.unrealized_pnl.toFixed(2) : "-"}
                   </td>
                 </tr>
               ))}

@@ -8,11 +8,11 @@
 ![Next.js 16](https://img.shields.io/badge/next.js-16-black?logo=nextdotjs)
 
 FinPilot imports your bank's e-banking exports and categorizes every
-transaction — and gets better each time you correct it. It keeps a lean view
+transaction, and gets better each time you correct it. It keeps a lean view
 of your ETF and stock holdings with honest pricing (stale quotes and failed FX
 lookups are flagged, never papered over), and exposes a small,
 key-authenticated API so a personal AI agent can read your financial state and
-fix data mistakes — without access to anything else.
+fix data mistakes, with no access to anything else.
 
 It runs my own household's finances daily. If you're here to read code, start
 with [Architecture](#architecture) and the import pipeline under
@@ -24,30 +24,30 @@ with [Architecture](#architecture) and the import pipeline under
 
 ## Features
 
-- **Bank statement import** — camt.053 XML (ISO 20022), Valiant/PostFinance/Viseca
+- **Bank statement import**: camt.053 XML (ISO 20022), Valiant/PostFinance/Viseca
   CSV, plus a generic column-mapper for anything else, all with automatic dedup.
-- **Auto-categorization that learns** — keyword rules → merchant database →
+- **Auto-categorization that learns**: keyword rules → merchant database →
   transaction history → a per-user ML classifier, falling back to Claude only
   for genuine unknowns (and only if you configure an API key).
-- **Cumulus settlement auto-reset** — detects the monthly Migros Cumulus
+- **Cumulus settlement auto-reset**: detects the monthly Migros Cumulus
   (Cembra) card-bill payment on the linked bank account and resets the credit
   card balance to zero, idempotently, so re-importing the same statement is a
   no-op.
-- **Holdings-only portfolio** — current ETF/stock positions with live pricing,
+- **Holdings-only portfolio**: current ETF/stock positions with live pricing,
   a staleness indicator, and explicit FX-rate warnings instead of silent
-  fallbacks. No AI stock analysis or trade recommendations — that experiment
+  fallbacks. No AI stock analysis or trade recommendations: that experiment
   was tried, didn't work, and was removed.
-- **Selective watchlist** — track a handful of tickers (price + day change)
+- **Selective watchlist**: track a handful of tickers (price + day change)
   without implying you hold them or want advice on them.
-- **Customizable dashboard** — a widget registry with per-user visibility and
+- **Customizable dashboard**: a widget registry with per-user visibility and
   ordering.
-- **Recurring-payment detection** — surfaces subscriptions and bills from
+- **Recurring-payment detection**: surfaces subscriptions and bills from
   transaction history with an upcoming-payments view.
-- **Budgets & savings goals** — simple caps and targets checked against real
+- **Budgets & savings goals**: simple caps and targets checked against real
   transaction data.
-- **Read-only Saxo Bank sync** — pulls real brokerage positions in without any
+- **Read-only Saxo Bank sync**: pulls real brokerage positions in without any
   order-placement capability.
-- **Agent gateway** — a thin, `X-API-Key`-authenticated API surface so a
+- **Agent gateway**: a thin, `X-API-Key`-authenticated API surface so a
   personal AI agent can read financial state and fix data mistakes (merchant
   renames, recategorization, corrections) without touching the database
   directly.
@@ -73,9 +73,9 @@ graph TD
 
 The frontend never calls the backend cross-origin: `frontend/src/app/api/[...path]/route.ts`
 proxies same-origin requests to the FastAPI service, so the browser only ever
-talks to Next.js. Two background schedulers run inside the API process —
+talks to Next.js. Two background schedulers run inside the API process:
 `services/gmail_scheduler.py` (polls for bank email notifications) and
-`services/saxo_scheduler.py` (periodic read-only position sync) — both started
+`services/saxo_scheduler.py` (periodic read-only position sync), both started
 in `app/main.py`'s lifespan handler.
 
 ## Tech stack
@@ -106,7 +106,7 @@ cd finpilot
 cp .env.example .env
 ```
 
-Edit `.env` — at minimum set `SECRET_KEY` and `POSTGRES_PASSWORD`:
+Edit `.env`, at minimum setting `SECRET_KEY` and `POSTGRES_PASSWORD`:
 
 ```bash
 # Generate a strong key:
@@ -127,7 +127,7 @@ existing pre-Alembic database rather than starting fresh).
 |---|---|
 | Web (Next.js) | http://localhost:3010 |
 | API (FastAPI) | http://localhost:8001 |
-| API docs | http://localhost:8001/docs *(dev only — disabled when `ENVIRONMENT=production`)* |
+| API docs | http://localhost:8001/docs *(dev only, disabled when `ENVIRONMENT=production`)* |
 
 ### 3. Seed a user
 
@@ -151,13 +151,13 @@ All variables are documented in [`.env.example`](.env.example).
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `SECRET_KEY` | **yes** | — | JWT signing key (≥ 32 chars) |
-| `POSTGRES_PASSWORD` | **yes** | — | Postgres password |
+| `SECRET_KEY` | **yes** | none | JWT signing key (≥ 32 chars) |
+| `POSTGRES_PASSWORD` | **yes** | none | Postgres password |
 | `POSTGRES_USER` / `POSTGRES_DB` | no | `finpilot` | Postgres user/database name |
 | `DB_PORT` / `API_PORT` / `WEB_PORT` | no | `5432` / `8001` / `3010` | Host ports for Compose |
 | `ENVIRONMENT` | no | `development` | Set to `production` to disable `/docs` |
 | `CORS_ORIGINS` | no | `http://localhost:3000,http://localhost:3010` | Allowed CORS origins |
-| `ANTHROPIC_API_KEY` | no | — | Enables the AI fallback step of transaction categorization |
+| `ANTHROPIC_API_KEY` | no | none | Enables the AI fallback step of transaction categorization |
 | `ANALYSIS_MODEL` | no | `claude-sonnet-4-20250514` | Model used for the categorization fallback |
 
 See `.env.example` for the full, current list.
@@ -171,7 +171,7 @@ pip install -r requirements.txt
 pytest tests/ -x -q
 ```
 
-Tests run fully offline against an in-memory SQLite database — no Postgres,
+Tests run fully offline against an in-memory SQLite database: no Postgres,
 network access, or Anthropic API key required. CI (`.github/workflows/ci.yml`)
 runs this suite against Postgres on every push/PR, plus a frontend type-check
 and production build.

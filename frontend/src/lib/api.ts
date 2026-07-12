@@ -15,7 +15,7 @@ import type {
   RecurringExpense, CreateRecurringExpense, RecurringSuggestion,
 } from "@/lib/types";
 
-// Structured 422 detail from a currency mismatch on POST .../trade — see
+// Structured 422 detail from a currency mismatch on POST .../trade: see
 // backend/app/services/portfolio_service.py CurrencyMismatchError.
 export interface CurrencyMismatchDetail {
   error: "currency_mismatch";
@@ -27,7 +27,7 @@ export interface CurrencyMismatchDetail {
 }
 
 // Thrown by request() on any non-2xx response. `detail` preserves the raw
-// (possibly structured) FastAPI error body — plain string errors just have
+// (possibly structured) FastAPI error body: plain string errors just have
 // message === detail, but callers that need to render a "use X instead"
 // confirm button (currency mismatch) inspect `.detail` directly instead of
 // re-parsing `.message`.
@@ -290,7 +290,7 @@ export const api = {
   syncGmail: () => request<{ status: string; new_transactions: number; balance: number | null; errors: string[] }>("/api/sync/gmail", { method: "POST" }),
   syncStatus: () => request<SyncStatus[]>("/api/sync/status"),
 
-  // Brokers (read-only position sync — no order placement)
+  // Brokers (read-only position sync, no order placement)
   brokers: () => request<BrokerList>("/api/brokers"),
   saxoStatus: () => request<BrokerStatus>("/api/brokers/saxo/status"),
   saxoConnect: () => request<{ authorize_url: string; environment: string }>("/api/brokers/saxo/connect", { method: "POST" }),
@@ -302,7 +302,7 @@ export const api = {
   saxoSync: () => request<SaxoSyncResult>("/api/brokers/saxo/sync", { method: "POST" }),
   saxoSubPortfolio: () => request<SaxoSubPortfolio>("/api/brokers/saxo/sub-portfolio"),
 
-  // Symbol classification (equity/etf/index/... — used for grouping holdings)
+  // Symbol classification (equity/etf/index/..., used for grouping holdings)
   listClassifications: () => request<SymbolClassification[]>("/api/dashboard/portfolio/classifications"),
   setClassification: (symbol: string, assetType: AssetType) =>
     request<SymbolClassification>(`/api/dashboard/portfolio/classifications/${encodeURIComponent(symbol)}`, {
@@ -311,7 +311,7 @@ export const api = {
   backfillClassifications: () =>
     request<{ created: number; skipped: number; total_symbols: number }>("/api/dashboard/portfolio/classifications/backfill", { method: "POST" }),
 
-  // Watchlist — tracking only, no analysis/recommendations
+  // Watchlist: tracking only, no analysis/recommendations
   watchlist: () => request<WatchlistItem[]>("/api/dashboard/watchlist"),
   addWatchlistItem: (symbol: string) =>
     request<WatchlistItem>("/api/dashboard/watchlist", { method: "POST", body: JSON.stringify({ symbol }) }),

@@ -101,7 +101,7 @@ async def bulk_manual_categorize(
     db: AsyncSession = Depends(get_db),
 ):
     # Shared with the agent surface (POST /api/agent/categorize/bulk) via
-    # transaction_service.bulk_categorize — includes classifier retraining.
+    # transaction_service.bulk_categorize, includes classifier retraining.
     count = await transaction_service.bulk_categorize(
         db, user.id, body.transaction_ids, body.category_id
     )

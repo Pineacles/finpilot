@@ -1,7 +1,7 @@
 """Shared account balance computation.
 
 `compute_account_balance` is the single source of truth for "what is this
-account's balance right now" — used by both the dashboard overview
+account's balance right now", used by both the dashboard overview
 (api/endpoints/dashboard.py) and the credit-card settlement auto-reset
 (services/settlement.py) so the two can never diverge on the anchor-aware
 math (anchor balance + sum of transactions dated strictly *after* the
@@ -95,7 +95,7 @@ async def update_settlement_patterns(
 async def set_account_balance(
     db: AsyncSession, user_id: str, account_id: str, balance: float
 ) -> tuple[float | None, Account]:
-    """Set the actual balance anchor for an account (manual correction —
+    """Set the actual balance anchor for an account (manual correction,
     e.g. reconciling against the real bank statement). Returns
     (previous_balance, account) so callers can report the change.
     Raises AccountNotFoundError if the account doesn't exist / isn't owned
@@ -110,7 +110,7 @@ async def set_account_balance(
 
 
 async def list_accounts_with_balances(db: AsyncSession, user_id: str) -> list[dict]:
-    """Every account with its computed (anchor-aware) balance — the
+    """Every account with its computed (anchor-aware) balance: the
     "what accounts exist and what do they hold" view shared by the dashboard
     and the agent surface."""
     accounts = await get_accounts(db, user_id)

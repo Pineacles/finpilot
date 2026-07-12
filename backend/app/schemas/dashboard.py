@@ -37,7 +37,7 @@ class OverviewResponse(BaseModel):
 # --- Accounts (shared between dashboard + agent surfaces) ---
 
 class AccountOut(BaseModel):
-    """One account with its computed (anchor-aware) balance — used by both
+    """One account with its computed (anchor-aware) balance, used by both
     the dashboard account list and the agent's read-only account view."""
     id: str
     name: str

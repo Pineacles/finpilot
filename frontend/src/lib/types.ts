@@ -50,7 +50,7 @@ export interface Position {
   asset_type: AssetType;
   // Quote fetch failed this request AND the last known price is >15min old.
   price_stale: boolean;
-  // No CHF exchange rate is known for this position's currency — market_value
+  // No CHF exchange rate is known for this position's currency: market_value
   // and unrealized_pnl are 0.0 placeholders, not real numbers.
   fx_unavailable: boolean;
 }
@@ -105,7 +105,7 @@ export interface UpdateRecurringExpense {
   name?: string; amount?: number; currency?: string; frequency?: RecurringFrequency | string;
   next_due_date?: string; category_id?: string; active?: boolean;
 }
-// Auto-detected from transaction history — not yet a tracked RecurringExpense.
+// Auto-detected from transaction history, not yet a tracked RecurringExpense.
 export interface RecurringSuggestion {
   merchant: string; amount: number; currency: string; frequency: RecurringFrequency | string;
   next_due_date: string; last_date: string; occurrences: number;

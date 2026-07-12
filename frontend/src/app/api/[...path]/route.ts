@@ -13,7 +13,7 @@ export async function handler(req: NextRequest) {
 
   const headers: Record<string, string> = {};
 
-  // Don't set Content-Type for multipart — fetch will set it with boundary
+  // Don't set Content-Type for multipart: fetch will set it with boundary
   if (!isMultipart) {
     headers["Content-Type"] = contentType || "application/json";
   }

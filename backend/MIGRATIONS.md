@@ -8,7 +8,7 @@ Schema is managed by Alembic (`backend/alembic/`). The ORM models in
 
 The baseline migration `77ed50a58fed_initial_schema.py` was originally an
 empty stub (`upgrade()`/`downgrade()` were `pass`), so `alembic upgrade head`
-on a fresh database created only the tables added by later migrations — the
+on a fresh database created only the tables added by later migrations: the
 core tables (users, accounts, transactions, ...) existed only where
 `Base.metadata.create_all` had been run (seed.py, test fixtures).
 
@@ -16,7 +16,7 @@ On 2026-07-07 the baseline was reconstructed from the models to contain
 exactly the schema that existed at baseline time (everything in the models
 except what later migrations add). Alembic never re-executes a revision a
 database is already at or past, so this rewrite only affects databases that
-have not yet run the baseline — i.e. fresh ones.
+have not yet run the baseline, i.e. fresh ones.
 
 A drift-fix migration `e7a9c2d41f88_add_user_id_to_merchants.py` was added at
 the same time: the `Merchant` model has a non-nullable `user_id` FK that no
@@ -44,7 +44,7 @@ does this on boot.)
 
 ### 2. Existing database WITH an alembic_version row
 
-This is the normal case for existing deployments — the api container has been
+This is the normal case for existing deployments: the api container has been
 running `alembic upgrade head` on boot, so `alembic_version` is populated
 (e.g. `3f9e1a7c2b4d` before this change). Just upgrade:
 
@@ -66,7 +66,7 @@ alembic stamp head
 ```
 
 After stamping, future migrations apply normally with `alembic upgrade head`.
-Do NOT run `upgrade head` without stamping first — the baseline would fail on
+Do NOT run `upgrade head` without stamping first, or the baseline would fail on
 the already-existing tables.
 
 ## Verified equivalence
@@ -86,7 +86,7 @@ The schemas are identical except one known, pre-existing difference:
 
 Revision `f3a8c91b5d2e` drops the AI stock-analysis / AI-trading tables
 (`market_analyses`, `post_mortems`, `buy_assessments`, `pending_orders`,
-`signal_history`, `tool_weights`, `tool_weight_proposals`) — that feature was
+`signal_history`, `tool_weights`, `tool_weight_proposals`): that feature was
 tried and removed from the product (see the root README). If you have a live
 database with data in these tables and want to keep a copy before upgrading,
 export it first:
@@ -100,7 +100,7 @@ alembic upgrade head
 The script connects with the same `DATABASE_URL` the app uses and dumps every
 row from the seven tables to a single JSON file; it makes no changes to the
 database. `downgrade()` on this revision recreates the empty tables (schema
-only) — the export is the only way to get the data back.
+only); the export is the only way to get the data back.
 
 ## Settlement feature migration
 
@@ -111,7 +111,7 @@ matching bank-side settlement payment (e.g. the monthly Migros Cumulus /
 Cembra bill) is imported. Unset (`NULL`) means the account falls back to
 `settlement.DEFAULT_SETTLEMENT_PATTERNS`; it only needs a value when a card's
 issuer-match keywords differ from the defaults (e.g. a non-Cembra/Viseca
-card). No data migration involved — existing accounts simply start at `NULL`.
+card). No data migration involved: existing accounts simply start at `NULL`.
 
 ## Caveats
 

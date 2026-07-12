@@ -153,7 +153,7 @@ async def test_mapped_csv_import_full_pipeline_and_dedup(db, user_id):
     assert result["imported"] == 2
 
     # Re-importing the identical mapped rows dedups via the existing
-    # date+amount+merchant / notes secondary checks — no duplicate rows.
+    # date+amount+merchant / notes secondary checks, no duplicate rows.
     raw_transactions_2 = mapped_import.parse_mapped_csv(content, mapping)
     result2 = await import_transactions(
         db, user_id, bank.id, "", use_ai=False, pre_parsed=raw_transactions_2, source_format="mapped_csv",

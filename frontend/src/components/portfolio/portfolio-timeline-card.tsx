@@ -16,7 +16,7 @@ interface PortfolioTimelineCardProps {
   timeline: ValueTimelinePoint[];
 }
 
-// Shape of one point in `chartData` below — matches what the Tooltip's
+// Shape of one point in `chartData` below: matches what the Tooltip's
 // `content` render-prop receives back via `payload[0].payload`.
 interface TimelineChartDatum {
   date: string;

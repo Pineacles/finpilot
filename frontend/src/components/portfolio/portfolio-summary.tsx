@@ -84,7 +84,7 @@ export function PortfolioSummary({
                       {staleSymbols.length} stale
                     </span>
                     <span className="pointer-events-none absolute left-0 top-full mt-1.5 z-20 hidden group-hover:block w-max max-w-[260px] rounded-lg bg-popover border border-border px-3 py-2 text-[11px] text-foreground shadow-lg">
-                      Live refresh failed for: {staleSymbols.join(", ")} — showing last known price.
+                      Live refresh failed for: {staleSymbols.join(", ")}, showing last known price.
                     </span>
                   </>
                 )}

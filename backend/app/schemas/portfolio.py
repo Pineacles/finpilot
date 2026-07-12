@@ -23,9 +23,9 @@ class PositionOut(BaseModel):
     trade_count: int
     earnings_date: str | None
     sparkline: list[float]
-    asset_type: str = "equity"  # equity|etf|index|crypto|bond|commodity|cash — from SymbolClassification
+    asset_type: str = "equity"  # equity|etf|index|crypto|bond|commodity|cash, from SymbolClassification
     price_stale: bool = False  # quote fetch failed this request AND last known price is >15min old
-    fx_unavailable: bool = False  # no CHF rate known for this currency — market_value/unrealized_pnl are 0.0, not real
+    fx_unavailable: bool = False  # no CHF rate known for this currency: market_value/unrealized_pnl are 0.0, not real
 
 
 class PortfolioResponse(BaseModel):
@@ -39,7 +39,7 @@ class PortfolioResponse(BaseModel):
     fx_rates: dict[str, float]
     positions_count: int
     positions: list[PositionOut]
-    warnings: list[str] = []  # e.g. failed quote/FX fetches this request — never silent
+    warnings: list[str] = []  # e.g. failed quote/FX fetches this request, never silent
 
 
 class TradeExecutionResponse(BaseModel):

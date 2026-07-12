@@ -143,7 +143,7 @@ export function CsvMapperModal({ file, onClose, onImported }: CsvMapperModalProp
                 Map columns
               </h2>
               <p className="text-[13px] text-muted-foreground mt-1">
-                {file.name} isn&apos;t a recognized format — map its columns to import it anyway.
+                {file.name} isn&apos;t a recognized format: map its columns to import it anyway.
               </p>
             </div>
             <button
@@ -180,7 +180,7 @@ export function CsvMapperModal({ file, onClose, onImported }: CsvMapperModalProp
                     defaultValue=""
                     className="h-11 w-full rounded-xl border border-border bg-accent px-3 text-[13px] outline-none"
                   >
-                    <option value="">— Select a saved mapping —</option>
+                    <option value="">Select a saved mapping</option>
                     {profiles.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
@@ -359,8 +359,8 @@ function ColumnSelect({ columns, value, onChange, allowEmpty }: { columns: strin
       onChange={e => onChange(e.target.value)}
       className="h-11 w-full rounded-xl border border-border bg-accent px-3 text-[13px] outline-none"
     >
-      {allowEmpty && <option value="">— None —</option>}
-      {!allowEmpty && !value && <option value="">— Select column —</option>}
+      {allowEmpty && <option value="">None</option>}
+      {!allowEmpty && !value && <option value="">Select column</option>}
       {columns.map(c => <option key={c} value={c}>{c}</option>)}
     </select>
   );

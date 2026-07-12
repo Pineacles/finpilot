@@ -116,7 +116,7 @@ def parse_camt053(content: str, owner_name: str = "") -> list[dict]:
 
                 transactions.append(txn)
         else:
-            # No detail — use entry-level info
+            # No detail: use entry-level info
             transactions.append({
                 "date": txn_date,
                 "description": addtl_ntry_inf or f"Transaction {abs(amount)} {currency}",
@@ -164,7 +164,7 @@ def _parse_tx_detail(txd: ET.Element, ns: str, txn_date: date, currency: str,
     description = ""
 
     if fmly_cd == "CCRD":
-        # Card payment — merchant is in remittance info
+        # Card payment: merchant is in remittance info
         description = remittance or addtl_tx_inf or addtl_ntry_inf
         merchant = _extract_merchant_from_text(description)
 
@@ -190,7 +190,7 @@ def _parse_tx_detail(txd: ET.Element, ns: str, txn_date: date, currency: str,
             merchant = _extract_merchant_from_text(description)
 
     else:
-        # Other — use whatever info is available
+        # Other: use whatever info is available
         description = addtl_tx_inf or remittance or addtl_ntry_inf
 
         # TWINT: Cdtr is "TWINT" but real merchant is in AddtlTxInf

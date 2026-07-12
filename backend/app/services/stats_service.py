@@ -18,7 +18,7 @@ from app.models.stock import PortfolioSnapshot
 #
 # NOTE: "Viseca Bill Payment" used to be listed here too, but it is only ever
 # used as a *merchant* name (see services/csv_import.py), never a category
-# name — Viseca settlement transactions are categorized "Transfer" (see
+# name. Viseca settlement transactions are categorized "Transfer" (see
 # services/seed_merchants.py). Category.name.in_(["Viseca Bill Payment"])
 # never matched anything, so it was silently dead. Transactions carry no
 # persisted payment_type/payment_method column (that's a transient import-time
@@ -31,7 +31,7 @@ def _exclude_transfer_category(transfer_cat_ids: set[str]):
     dropping *uncategorized* rows.
 
     SQL's `category_id NOT IN (...)` evaluates to NULL (excluded by WHERE)
-    when category_id IS NULL — so a naive `.notin_(transfer_cat_ids)` used to
+    when category_id IS NULL, so a naive `.notin_(transfer_cat_ids)` used to
     silently exclude every uncategorized transaction from income/expense
     totals and the category breakdown once the user had any Transfer
     category at all. Explicitly allowing NULL through fixes that.

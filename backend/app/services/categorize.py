@@ -1,12 +1,12 @@
 """Transaction categorization engine.
 
 Layered approach (priority order):
-1. Keywords — direct Swiss-German keyword match
-2. Merchant DB — fuzzy pattern match against known merchants
-3. History — same merchant was categorized before
-4. ML Classifier — scikit-learn model trained on user's own data
-5. AI/LLM — fallback for unknowns (chunked, deduplicated)
-6. Uncategorized — flagged for manual review
+1. Keywords: direct Swiss-German keyword match
+2. Merchant DB: fuzzy pattern match against known merchants
+3. History: same merchant was categorized before
+4. ML Classifier: scikit-learn model trained on user's own data
+5. AI/LLM: fallback for unknowns (chunked, deduplicated)
+6. Uncategorized: flagged for manual review
 """
 import re
 import json
@@ -158,7 +158,7 @@ async def categorize_transaction(
     normalized = parsed["normalized"]
     pm = payment_method or parsed["payment_method"] or ""
 
-    # 0. Merchant DB lookup FIRST — user-created rules take priority over keywords
+    # 0. Merchant DB lookup FIRST: user-created rules take priority over keywords
     result = await db.execute(select(Merchant).where(Merchant.user_id == user_id))
     merchants = result.scalars().all()
     search_text = f"{normalized} {counterparty.lower()}"
@@ -196,7 +196,7 @@ async def categorize_transaction(
             if cat:
                 return cat.id, merchant_name, "keyword", 1.0
 
-    # 2. History — same merchant was categorized before
+    # 2. History: same merchant was categorized before
     result = await db.execute(
         select(Transaction.category_id, func.count().label("cnt"))
         .where(and_(
@@ -219,7 +219,7 @@ async def categorize_transaction(
     if cat_id and confidence >= 0.6:
         return cat_id, merchant_name, "classifier", confidence
 
-    # 4. Return uncategorized — AI will be run in batch
+    # 4. Return uncategorized: AI will be run in batch
     return None, merchant_name, "unmatched", 0.0
 
 

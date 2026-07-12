@@ -4,7 +4,7 @@ Regression test for the dead "Viseca Bill Payment" exclusion: that name was
 only ever used as a *merchant*, never a *category*, so the old
 `Category.name.in_(["Transfer", "Viseca Bill Payment"])` filter silently
 never matched the second name. The category that actually gets assigned to
-Viseca settlement transactions is "Transfer" — this test locks that in.
+Viseca settlement transactions is "Transfer": this test locks that in.
 """
 from __future__ import annotations
 
@@ -36,14 +36,14 @@ async def test_transfer_category_excluded_from_monthly_income_expense(db, user_i
     await db.commit()
 
     db.add_all([
-        # A large outgoing "Viseca" settlement payment, categorized Transfer —
+        # A large outgoing "Viseca" settlement payment, categorized Transfer,
         # must NOT count as an expense.
         Transaction(
             user_id=user_id, account_id=acct.id, date=date(2026, 1, 10),
             merchant="Viseca Bill Payment", amount=-500.0, currency="CHF",
             category_id=transfer_cat.id,
         ),
-        # A real expense — must count.
+        # A real expense: must count.
         Transaction(
             user_id=user_id, account_id=acct.id, date=date(2026, 1, 12),
             merchant="Migros", amount=-50.0, currency="CHF",
@@ -88,6 +88,6 @@ async def test_a_category_literally_named_viseca_bill_payment_is_not_special_cas
     """Belt-and-suspenders: TRANSFER_CATEGORY_NAMES no longer references the
     dead "Viseca Bill Payment" name, so a category that happened to be named
     that would NOT be excluded (it never legitimately occurs as a category in
-    practice — merchant names and category names are different concepts)."""
+    practice: merchant names and category names are different concepts)."""
     assert "Viseca Bill Payment" not in stats_service.TRANSFER_CATEGORY_NAMES
     assert stats_service.TRANSFER_CATEGORY_NAMES == ["Transfer"]

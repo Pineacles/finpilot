@@ -147,7 +147,7 @@ async def test_delete_transaction_scoped_to_owner(db, user_id):
 
     with pytest.raises(TransactionNotFoundError):
         await transaction_service.delete_transaction(db, "someone-else", txn.id)
-    # Still there — the wrong-user delete must not have removed it
+    # Still there: the wrong-user delete must not have removed it
     assert len(await transaction_service.list_transactions(db, user_id)) == 1
 
 
@@ -169,7 +169,7 @@ async def test_bulk_delete_transactions_scoped_to_owner(db, user_id):
     ids_to_delete = [t.id for t in mine] + [theirs.id]
     deleted_count = await transaction_service.bulk_delete_transactions(db, user_id, ids_to_delete)
 
-    # Only the 3 owned by user_id were deleted — the other user's row is untouched.
+    # Only the 3 owned by user_id were deleted; the other user's row is untouched.
     assert deleted_count == 3
     assert await transaction_service.list_transactions(db, user_id) == []
     assert len(await transaction_service.list_transactions(db, "other-user")) == 1

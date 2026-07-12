@@ -1,6 +1,6 @@
-"""watchlist_service: tracking-only symbol list — CRUD + duplicate rejection.
+"""watchlist_service: tracking-only symbol list, CRUD + duplicate rejection.
 
-No AI analysis/recommendations here by design (see redesign decisions) —
+No AI analysis/recommendations here by design (see redesign decisions);
 just live price + day change, mirroring what the endpoint exposes.
 """
 from __future__ import annotations

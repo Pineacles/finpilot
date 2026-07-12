@@ -37,7 +37,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   const isLogin = pathname === "/login";
   const isPublic = pathname.startsWith("/p/");
 
-  // One QueryClient per mounted app (not per render) — standard Next.js App
+  // One QueryClient per mounted app (not per render): standard Next.js App
   // Router pattern to avoid sharing state across requests/users.
   const [queryClient] = useState(
     () =>

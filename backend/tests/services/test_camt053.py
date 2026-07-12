@@ -1,4 +1,4 @@
-"""camt.053 XML parser (ISO 20022) — pure function, no DB.
+"""camt.053 XML parser (ISO 20022): pure function, no DB.
 
 Exercises app.services.camt053.parse_camt053 directly against a minimal
 synthetic (unnamespaced) camt.053 document covering the four transaction

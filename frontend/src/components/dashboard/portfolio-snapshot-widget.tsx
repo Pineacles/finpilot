@@ -11,7 +11,7 @@ import { api, PortfolioSummary } from "@/lib/api";
 import { useVisibleInterval } from "@/hooks/use-visible-interval";
 
 /** Total portfolio value + today's live change, linking through to the full
- * portfolio page. Not a TanStack Query hook — the portfolio page itself
+ * portfolio page. Not a TanStack Query hook: the portfolio page itself
  * isn't refactored this phase, so this widget polls independently, same
  * pattern the portfolio page already uses. */
 export function PortfolioSnapshotWidget() {

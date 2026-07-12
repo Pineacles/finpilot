@@ -1,4 +1,4 @@
-"""Watchlist endpoints — tracking-only, no AI analysis or recommendations.
+"""Watchlist endpoints: tracking-only, no AI analysis or recommendations.
 
 Business logic lives in app.services.watchlist_service so the dashboard
 (JWT) and agent (API key) surfaces share the same behavior.
@@ -44,7 +44,7 @@ async def add_to_watchlist(
     except WatchlistDuplicateError as e:
         raise HTTPException(status_code=409, detail=f"{e.symbol} is already on your watchlist")
     except WatchlistInvalidSymbolError as e:
-        raise HTTPException(status_code=400, detail=f"No live quote found for {e.symbol} — check the ticker")
+        raise HTTPException(status_code=400, detail=f"No live quote found for {e.symbol}, check the ticker")
 
 
 @router.delete("/{symbol}")

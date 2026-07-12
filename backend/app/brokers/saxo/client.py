@@ -24,7 +24,7 @@ logger = logging.getLogger("app.brokers.saxo")
 _TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 _RATE_LIMIT_PER_MIN = 60
 _RATE_WINDOW_SECONDS = 60.0
-_RETRY_BACKOFF_SECONDS = (0.5, 1.5)  # (first_wait,) — retry count fixed at 1
+_RETRY_BACKOFF_SECONDS = (0.5, 1.5)  # (first_wait,); retry count fixed at 1
 
 
 class SaxoHTTPError(RuntimeError):
@@ -67,8 +67,8 @@ class _RateLimiter:
 class SaxoHTTPClient:
     """Thin wrapper over httpx.AsyncClient with rate limit + retry + redacted logs.
 
-    One instance per (user, environment). The instance holds no secrets directly
-    — tokens are passed in on each call by the adapter.
+    One instance per (user, environment). The instance holds no secrets directly:
+    tokens are passed in on each call by the adapter.
     """
 
     def __init__(self, *, base_url: str, token_url: str):
@@ -112,7 +112,7 @@ class SaxoHTTPClient:
 
     async def token_post(self, *, form: dict[str, str]) -> dict:
         """POST to the token endpoint. Does NOT retry (token exchanges must not
-        double-fire — a refresh token rotates on first use)."""
+        double-fire: a refresh token rotates on first use)."""
         await self._limiter.acquire()
         start = time.monotonic()
         try:
@@ -148,7 +148,7 @@ class SaxoHTTPClient:
             )
 
         start = time.monotonic()
-        # Only retry idempotent methods — never retry POST/PATCH/DELETE since an
+        # Only retry idempotent methods; never retry POST/PATCH/DELETE since an
         # order might fire twice.
         can_retry = method.upper() in {"GET", "HEAD"}
         try:
@@ -186,7 +186,7 @@ def _ms(start: float) -> int:
 
 
 def _safe_detail(resp: httpx.Response) -> str:
-    """Non-leaky error detail — status+error code only, no raw body echo."""
+    """Non-leaky error detail: status+error code only, no raw body echo."""
     try:
         data = resp.json()
         code = data.get("ErrorCode") or data.get("error") or ""

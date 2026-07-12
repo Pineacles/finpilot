@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
-// document.visibilityState is an external, mutable source outside React —
+// document.visibilityState is an external, mutable source outside React,
 // tracked via useSyncExternalStore (subscribing to the `visibilitychange`
 // event) rather than useState + an effect that calls setState synchronously
 // (react-hooks/set-state-in-effect). This also means `live` is correct on
@@ -22,9 +22,9 @@ function getVisibilityServerSnapshot() {
 
 /**
  * Runs `callback` immediately and then every `ms`, but only while the tab is
- * visible (document.visibilityState). Pauses cleanly when the tab is hidden
- * — no wasted requests, and no misleadingly-fresh "last updated" timestamps
- * for a tab nobody is looking at — and resumes with an immediate refresh
+ * visible (document.visibilityState). Pauses cleanly when the tab is hidden,
+ * with no wasted requests and no misleadingly-fresh "last updated" timestamps
+ * for a tab nobody is looking at, and resumes with an immediate refresh
  * when it regains focus.
  *
  * Returns `live`: true while polling is active, false while paused.
@@ -35,7 +35,7 @@ export function useVisibleInterval(callback: () => void | Promise<void>, ms: num
 
   // Keep the ref pointing at the latest callback. Refs must not be written
   // during render (react-hooks/refs), so this sync happens in its own
-  // effect (no deps array — runs after every render) rather than inline.
+  // effect (no deps array, runs after every render) rather than inline.
   useEffect(() => {
     savedCallback.current = callback;
   });

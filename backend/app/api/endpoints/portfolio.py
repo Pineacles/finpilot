@@ -1,7 +1,7 @@
-"""Portfolio endpoints — positions, trades, cash, live prices, charts.
+"""Portfolio endpoints: positions, trades, cash, live prices, charts.
 
 Business logic (valuation, trade execution, CRUD) lives in
-app.services.portfolio_service — this router just parses/validates requests,
+app.services.portfolio_service; this router just parses/validates requests,
 calls the service, and shapes HTTP responses/errors.
 """
 import secrets
@@ -324,7 +324,7 @@ async def get_live_prices(
             missing_from_saxo = saxo_symbols - set(saxo_quotes.keys())
             other_symbols |= missing_from_saxo
         except Exception:
-            # Broker-side failure — fall back to yfinance for all symbols.
+            # Broker-side failure: fall back to yfinance for all symbols.
             other_symbols |= saxo_symbols
 
     if other_symbols:
@@ -372,11 +372,11 @@ async def toggle_public_portfolio(
     db: AsyncSession = Depends(get_db),
 ):
     if user.public_portfolio:
-        # Turning off — clear the token so old links stop working
+        # Turning off: clear the token so old links stop working
         user.public_portfolio = False
         user.public_share_token = None
     else:
-        # Turning on — generate a fresh token
+        # Turning on: generate a fresh token
         user.public_portfolio = True
         user.public_share_token = secrets.token_urlsafe(32)
     await db.commit()

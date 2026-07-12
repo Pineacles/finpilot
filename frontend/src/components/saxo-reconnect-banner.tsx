@@ -17,7 +17,7 @@ export function SaxoReconnectBanner() {
       try {
         const s = await api.saxoStatus();
         if (!cancelled) setStatus(s);
-      } catch { /* ignore — user likely not auth'd yet */ }
+      } catch { /* ignore: user likely not auth'd yet */ }
     };
     poll();
     const interval = setInterval(poll, 60_000); // re-check every minute

@@ -1,4 +1,4 @@
-"""Agent endpoints — API key auth for AI assistant integration.
+"""Agent endpoints: API key auth for AI assistant integration.
 
 All endpoints use X-API-Key header authentication.
 The agent can do everything a user can do through these endpoints.

@@ -156,7 +156,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <h2 className="text-[16px] font-semibold">API Key</h2>
-              <p className="text-[12px] text-muted-foreground">For your AI agent — use as header: X-API-Key</p>
+              <p className="text-[12px] text-muted-foreground">For your AI agent, use as header: X-API-Key</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -175,7 +175,7 @@ export default function SettingsPage() {
           {newApiKey && (
             <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
               <p className="text-[12px] text-amber-600 dark:text-amber-400 font-semibold mb-1">
-                New API key — copy it now, it will not be shown again:
+                New API key, copy it now, it will not be shown again:
               </p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-[12px] font-mono break-all">{newApiKey}</code>
@@ -278,7 +278,7 @@ export default function SettingsPage() {
         />
       </Suspense>
 
-      {/* Accounts — credit-card settlement patterns */}
+      {/* Accounts: credit-card settlement patterns */}
       <AccountsSection />
 
       {/* Danger zone */}
@@ -451,7 +451,7 @@ function BrokersSection({ settings, edits, onChange, onSaveThenAction }: Brokers
             >
               {envOptions.map(opt => (
                 <option key={opt.value} value={opt.value} disabled={!opt.enabled}>
-                  {opt.label}{!opt.enabled ? " — not available" : ""}
+                  {opt.label}{!opt.enabled ? " (not available)" : ""}
                 </option>
               ))}
             </select>
@@ -542,7 +542,7 @@ function BrokersSection({ settings, edits, onChange, onSaveThenAction }: Brokers
 }
 
 
-// ─── Accounts section — credit-card settlement patterns ────────────────────
+// ─── Accounts section: credit-card settlement patterns ────────────────────
 // Configures the issuer-match keywords services/settlement.py uses to detect
 // a credit card's bank-side statement payment (e.g. Migros Cumulus, issued
 // by Cembra) and auto-reset that card's balance to 0 on import.
@@ -612,7 +612,7 @@ function AccountsSection() {
       <p className="text-[12px] text-muted-foreground mb-5">
         When a bank import contains the payment to your card issuer, FinPilot categorizes it as a
         Transfer and resets that card&apos;s balance to 0. Configure the keywords used to match the
-        issuer (comma-separated) — leave blank to use the defaults.
+        issuer (comma-separated); leave blank to use the defaults.
       </p>
 
       <div className="space-y-4">

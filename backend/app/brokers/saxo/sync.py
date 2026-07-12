@@ -2,8 +2,8 @@
 
 Creates one virtual `Account` row per user on first sync ("Saxo SIM"), then
 upserts Saxo positions into `stock_positions` keyed by (user_id, symbol,
-account_id). Saxo cash goes into `accounts.balance` on that virtual account
-— it's never mixed with the manual CASH StockPosition.
+account_id). Saxo cash goes into `accounts.balance` on that virtual account;
+it's never mixed with the manual CASH StockPosition.
 
 This keeps agent-written (manual) positions cleanly separated from
 broker-reported positions. The portfolio page can render them together or

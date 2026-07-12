@@ -7,7 +7,7 @@ Create Date: 2026-07-08 00:00:00.000000
 Removes the AI stock-analysis and AI-trading stack: market_analyses,
 post_mortems, buy_assessments, pending_orders, signal_history, tool_weights,
 tool_weight_proposals. The AI analysis approach was tried and abandoned (see
-README) — only `symbol_classifications` (asset-type tagging) survives from
+README): only `symbol_classifications` (asset-type tagging) survives from
 that era, plus the plain StockPosition/StockTransaction/PortfolioSnapshot
 tables which were never coupled to it.
 
@@ -17,7 +17,7 @@ Before running this migration against a live database, archive the data with:
 
 downgrade() recreates all seven tables exactly as they existed (columns,
 indexes, constraints) so a rollback is possible, but the data itself is only
-recoverable from the JSON export or a DB backup — dropping a table always
+recoverable from the JSON export or a DB backup: dropping a table always
 destroys its rows.
 """
 from typing import Sequence, Union

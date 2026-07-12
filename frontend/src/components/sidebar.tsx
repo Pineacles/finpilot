@@ -33,7 +33,7 @@ const nav = [
 
 // Theme preference lives in localStorage/matchMedia, outside React. Reading
 // it via useSyncExternalStore (rather than useState + an effect that calls
-// setState synchronously — react-hooks/set-state-in-effect) renders the
+// setState synchronously, react-hooks/set-state-in-effect) renders the
 // server-safe default on first paint and swaps in the real value once the
 // client can check localStorage, without a hydration-mismatch warning.
 type ThemeListener = () => void;
@@ -66,7 +66,7 @@ export function Sidebar() {
   const { logout } = useAuth();
   const dark = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getThemeServerSnapshot);
 
-  // Synchronize the `dark` class on <html> with the current theme — a
+  // Synchronize the `dark` class on <html> with the current theme: a
   // genuine external-system side effect, not a setState call, so it belongs
   // in an effect.
   useEffect(() => {

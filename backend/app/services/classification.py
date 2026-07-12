@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 VALID_ASSET_TYPES = {"equity", "etf", "index", "crypto", "bond", "commodity", "cash"}
 DEFAULT_ASSET_TYPE = "equity"
 
-# Fallback list when yfinance lookup fails — well-known S&P / world / region indexes
+# Fallback list when yfinance lookup fails: well-known S&P / world / region indexes
 # and the most common total-market / tech ETFs. Keeps the card correct even when
 # the network lookup breaks.
 _KNOWN_INDEX_TICKERS: dict[str, str] = {
@@ -87,7 +87,7 @@ async def auto_detect_asset_type(symbol: str) -> tuple[str, str]:
     if symbol == "CASH":
         return ("cash", "auto")
 
-    # Hardcoded list first — it's instant and covers the most common benchmarks
+    # Hardcoded list first: it's instant and covers the most common benchmarks
     # even when the network is unreliable.
     if symbol in _KNOWN_INDEX_TICKERS:
         return (_KNOWN_INDEX_TICKERS[symbol], "auto")
@@ -114,7 +114,7 @@ async def get_classification(
 async def get_asset_types_bulk(
     db: AsyncSession, user_id: str, symbols: list[str]
 ) -> dict[str, str]:
-    """Batch lookup — returns {symbol_upper: asset_type}. Unclassified → default."""
+    """Batch lookup, returns {symbol_upper: asset_type}. Unclassified → default."""
     if not symbols:
         return {}
     symbols_upper = [s.upper() for s in symbols]
@@ -144,7 +144,7 @@ async def set_classification(
     symbol = symbol.upper().strip()
     existing = await get_classification(db, user_id, symbol)
     if existing:
-        # Don't let 'auto' overwrite a manual classification — manual takes priority.
+        # Don't let 'auto' overwrite a manual classification: manual takes priority.
         if source == "auto" and existing.source in {"user", "agent"}:
             return existing
         existing.asset_type = asset_type

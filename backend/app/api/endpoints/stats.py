@@ -1,6 +1,6 @@
-"""Statistics endpoints — monthly and yearly aggregated data.
+"""Statistics endpoints: monthly and yearly aggregated data.
 
-Business logic lives in app.services.stats_service — this router just calls
+Business logic lives in app.services.stats_service; this router just calls
 into it and shapes the HTTP response.
 """
 from fastapi import APIRouter, Depends

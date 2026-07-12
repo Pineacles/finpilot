@@ -4,7 +4,7 @@ Revision ID: f4b1c2d3e4f5
 Revises: a7b8c9d0e1f2
 Create Date: 2026-07-08 10:00:00.000000
 
-Nullable — existing merchant rules have no created timestamp, the merchants
+Nullable: existing merchant rules have no created timestamp, the merchants
 page shows "-" for those. See app.models.merchant.Merchant.
 """
 from typing import Sequence, Union

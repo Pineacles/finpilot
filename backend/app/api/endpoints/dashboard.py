@@ -120,7 +120,7 @@ async def set_account_balance(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Set the actual balance for an account. Stores directly — no fake transactions."""
+    """Set the actual balance for an account. Stores directly; no fake transactions."""
     try:
         previous, account = await account_service.set_account_balance(db, user.id, account_id, body.balance)
     except AccountNotFoundError:

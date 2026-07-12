@@ -79,7 +79,7 @@ async def test_enabled_but_no_tokens_returns_not_connected(db, user_id):
     await _seed_saxo_account(db, user_id)
 
     await settings_svc.set_setting(db, user_id, "saxo_enabled", "1")
-    # Do not set access or refresh tokens — they remain empty strings / default
+    # Do not set access or refresh tokens; they remain empty strings / default
 
     result = await _call_endpoint(db, user_id)
     assert result["connected"] is False

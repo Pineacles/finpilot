@@ -1,7 +1,7 @@
 # Saxo Bank adapter
 
 Pluggable broker adapter for the Saxo Bank OpenAPI. **SIM environment only**
-in this release — LIVE hosts are wired but rejected at runtime. Order routing
+in this release: LIVE hosts are wired but rejected at runtime. Order routing
 (`placeOrder` / `cancelOrder` / `modifyOrder`) is not enabled; calls raise
 `TradingDisabledError`.
 
@@ -28,20 +28,20 @@ in this release — LIVE hosts are wired but rejected at runtime. Order routing
 
 ## Kill-switch
 
-Flipping **Enable** off in Settings halts all Saxo traffic on the next request
-— no HTTP call is made, no refresh is attempted, no log line is emitted. Flip
+Flipping **Enable** off in Settings halts all Saxo traffic on the next request:
+no HTTP call is made, no refresh is attempted, no log line is emitted. Flip
 it back on to resume; tokens stay valid across toggles until you hit
 **Disconnect**, which wipes them and forces a fresh OAuth flow.
 
 ## Token handling
 
 - **Access token**: ~20 minutes. Refreshed automatically with a 60s skew.
-- **Refresh token**: ~1 hour, **rotates on every use** — using it once
+- **Refresh token**: ~1 hour, **rotates on every use**: using it once
   invalidates it. The adapter persists the new triple
   (`access`, `refresh`, `expires_at`) in a single DB transaction, so a crash
   mid-refresh cannot leave the store inconsistent. If the old refresh token
   was already consumed server-side when we crashed, the next call falls back
-  to `AuthState.NEEDS_AUTH` and prompts the user to reconnect — no permanent
+  to `AuthState.NEEDS_AUTH` and prompts the user to reconnect, with no permanent
   lockout.
 
 ## Rate limiting

@@ -66,7 +66,7 @@ async def test_flip_off_at_runtime_halts_activity(db, user_id, saxo_adapter):
     })
 
     SIM = "https://gateway.saxobank.com/sim/openapi"
-    # Phase 1: enabled — one real call that respx satisfies.
+    # Phase 1: enabled, one real call that respx satisfies.
     with respx.mock() as mock:
         route_on = mock.get(f"{SIM}/port/v1/accounts/me").respond(
             json={"Data": [{"AccountKey": "AK1", "ClientKey": "CK1", "DisplayName": "SIM", "Currency": "USD"}]}
@@ -75,7 +75,7 @@ async def test_flip_off_at_runtime_halts_activity(db, user_id, saxo_adapter):
         assert len(accounts) == 1
         assert route_on.called
 
-    # Flip off at runtime — next call must make zero HTTP traffic.
+    # Flip off at runtime: next call must make zero HTTP traffic.
     await settings_svc.set_many_atomic(db, user_id, {"saxo_enabled": "0"})
     with respx.mock(assert_all_called=False) as mock:
         route_off = mock.get(f"{SIM}/port/v1/accounts/me").respond(json={"Data": []})

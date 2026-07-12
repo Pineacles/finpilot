@@ -1,4 +1,4 @@
-"""GET/POST /api/dashboard/portfolio/trade — currency mismatch must reject
+"""GET/POST /api/dashboard/portfolio/trade: currency mismatch must reject
 with 422 (naming both currencies + a suggested ticker) unless the caller
 sets confirm_currency=true. We call the endpoint handler directly (same
 pattern as tests/brokers/test_saxo_sub_portfolio.py) to exercise the full
@@ -52,7 +52,7 @@ async def test_confirm_currency_true_proceeds_with_quote_currency(db, user_id):
 
 
 async def test_matching_currency_does_not_raise(db, user_id):
-    """No mismatch at all — regular happy path, no 422."""
+    """No mismatch at all: regular happy path, no 422."""
     quote = {"price": 10.0, "currency": "USD", "name": "Test Co"}
     body = TradeRequest(symbol="TEST", type="buy", quantity=1, currency="USD", deduct_from_cash=False)
 

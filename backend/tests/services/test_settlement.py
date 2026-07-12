@@ -1,4 +1,4 @@
-"""Credit-card settlement auto-reset — detection, shared balance math,
+"""Credit-card settlement auto-reset: detection, shared balance math,
 idempotency across re-imports, and correctness across two consecutive
 settlement cycles with card purchases in between.
 
@@ -22,7 +22,7 @@ from sqlalchemy import select, and_
 
 def _camt053(amount: str, booking_date: str, ref: str, creditor: str = "Cembra Money Bank AG") -> str:
     """Minimal (no-namespace) camt.053 XML with a single outgoing (DBIT)
-    ICDT entry — enough for services/camt053.parse_camt053 to extract a
+    ICDT entry: enough for services/camt053.parse_camt053 to extract a
     negative bank transaction whose merchant is the creditor name."""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <Document>
@@ -171,7 +171,7 @@ async def test_reimporting_same_bank_file_does_not_double_settle(db, user_id):
     assert r1["imported"] == 1
     assert len(r1["settlements"]) == 1
 
-    # Re-import the identical file — existing dedup (by AcctSvcrRef) skips the
+    # Re-import the identical file: existing dedup (by AcctSvcrRef) skips the
     # row entirely, so settlement detection never even runs on it again.
     r2 = await import_transactions(db, user_id, bank.id, xml, use_ai=False)
     assert r2["imported"] == 0
@@ -239,7 +239,7 @@ async def test_settlement_transactions_excluded_from_stats(db, user_id):
     await import_transactions(db, user_id, bank.id, xml, use_ai=False)
 
     stats = await stats_service.monthly_stats(db, user_id, year=2026, month=1)
-    # Only the original CHF 1000 card purchase counts as a real expense —
+    # Only the original CHF 1000 card purchase counts as a real expense:
     # neither the CHF 1000 bank payment (Transfer) nor the CHF 1000 card
     # offset (Transfer) should add to expenses/income.
     assert stats["summary"]["expenses"] == pytest.approx(1000.0)

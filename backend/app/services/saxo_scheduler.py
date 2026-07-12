@@ -2,7 +2,7 @@
 
 Runs every 5 minutes. For each user with Saxo enabled and a refresh token,
 triggers a refresh if the access token is within 10 minutes of expiring.
-This keeps tokens alive without waiting for user-initiated API calls — which
+This keeps tokens alive without waiting for user-initiated API calls, which
 is the only thing that would otherwise refresh under the reactive path.
 
 Started from the FastAPI lifespan in `app.main`.
@@ -53,7 +53,7 @@ async def _users_to_refresh() -> list[str]:
         if not kv.get("saxo_refresh_token"):
             continue
         if kv.get("saxo_needs_reauth") == "1":
-            continue  # Nothing we can do — user must re-auth via the UI
+            continue  # Nothing we can do: user must re-auth via the UI
         try:
             expires_at = int(kv.get("saxo_token_expires_at") or "0")
         except (ValueError, TypeError):
@@ -65,7 +65,7 @@ async def _users_to_refresh() -> list[str]:
 
 
 async def _refresh_one(user_id: str) -> None:
-    """Trigger the adapter's refresh for a single user. Swallows errors —
+    """Trigger the adapter's refresh for a single user. Swallows errors;
     the adapter already records them to `saxo_last_error` / `saxo_needs_reauth`."""
     from app.brokers import get_adapter
     adapter = get_adapter("saxo")
@@ -75,7 +75,7 @@ async def _refresh_one(user_id: str) -> None:
             await adapter._token_and_env(db, user_id)
             logger.info("saxo scheduler refreshed user=%s", user_id)
         except RuntimeError as e:
-            # needs_auth — adapter already recorded the error and flipped the flag.
+            # needs_auth: adapter already recorded the error and flipped the flag.
             logger.info("saxo scheduler refresh_failed user=%s reason=%s", user_id, e)
         except Exception as e:
             logger.warning("saxo scheduler refresh_error user=%s %s: %s",

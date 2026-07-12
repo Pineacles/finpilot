@@ -23,7 +23,7 @@ function parseLayout(raw: string | undefined): LayoutItem[] {
 }
 
 /** Persists widget visibility + order as JSON under the `dashboard_layout`
- * user setting (generic k/v store — see backend/app/services/settings.py).
+ * user setting (generic k/v store, see backend/app/services/settings.py).
  * Array order IS the display order; no separate `order` field needed. */
 export function useDashboardLayout() {
   const settingsQuery = useSettingsQuery();

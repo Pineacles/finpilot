@@ -105,7 +105,7 @@ async def test_get_positions_maps_payload(db, user_id, saxo_adapter):
 
 
 async def test_expired_access_token_triggers_refresh(db, user_id, saxo_adapter):
-    # Access token already expired — any call should refresh first.
+    # Access token already expired: any call should refresh first.
     await _seed_connected(db, user_id, expires_in_seconds=-60)
 
     with respx.mock() as mock:

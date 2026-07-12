@@ -1,4 +1,4 @@
-"""GET/POST/DELETE /api/dashboard/watchlist — endpoint-level: duplicate
+"""GET/POST/DELETE /api/dashboard/watchlist, endpoint-level: duplicate
 add must 409, invalid symbol must 400, delete of unknown symbol must 404.
 Endpoint handlers are called directly (no HTTP transport), matching the
 pattern in tests/brokers/test_saxo_sub_portfolio.py.

@@ -1,7 +1,7 @@
-"""Merchant auto-categorization rule CRUD — shared between the JWT dashboard
+"""Merchant auto-categorization rule CRUD, shared between the JWT dashboard
 router (api/endpoints/merchants.py) and the API-key agent router
 (api/endpoints/agent_finance_router.py). These are user-owned "when a
-transaction matches pattern X, categorize it as Y" rules — distinct from
+transaction matches pattern X, categorize it as Y" rules, distinct from
 `transaction_service.upsert_merchant_rule`, which is the auto-upsert path
 categorization triggers; this module is the direct user-facing CRUD.
 """

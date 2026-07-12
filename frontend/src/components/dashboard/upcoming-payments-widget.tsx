@@ -34,7 +34,7 @@ interface UpcomingItem {
   recurringId?: string;
 }
 
-/** Bills due in the next 30 days — both tracked RecurringExpenses and
+/** Bills due in the next 30 days: both tracked RecurringExpenses and
  * auto-detected suggestions inferred from transaction history. Suggestions
  * can be accepted (creates a tracked RecurringExpense) or dismissed
  * (remembered in user settings so they aren't re-suggested). */
@@ -169,7 +169,7 @@ export function UpcomingPaymentsWidget() {
                     <button
                       onClick={() => accept(item)}
                       disabled={busyKey === item.key}
-                      title="Accept — track as a recurring expense"
+                      title="Accept: track as a recurring expense"
                       className="rounded-lg p-1.5 hover:bg-accent active:scale-[0.98] cursor-pointer transition-all text-gain"
                     >
                       {busyKey === item.key ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
@@ -177,7 +177,7 @@ export function UpcomingPaymentsWidget() {
                     <button
                       onClick={() => dismiss(item)}
                       disabled={busyKey === item.key}
-                      title="Dismiss — don't suggest again"
+                      title="Dismiss, don't suggest again"
                       className="rounded-lg p-1.5 hover:bg-accent active:scale-[0.98] cursor-pointer transition-all text-muted-foreground"
                     >
                       <X className="h-4 w-4" />

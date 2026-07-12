@@ -27,10 +27,10 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 
 // ─── KPI icon badge accents ────────────────────────────────────────────────
 const KPI_ACCENTS = [
-  "linear-gradient(135deg, #16a34a, #22c55e)",  // Income   – green
-  "linear-gradient(135deg, #dc2626, #ef4444)",  // Expenses – red
-  "linear-gradient(135deg, #2f5bff, #8b5cf6)",  // Net      – blue/purple
-  "linear-gradient(135deg, #f59e0b, #fb923c)",  // Daily    – amber
+  "linear-gradient(135deg, #16a34a, #22c55e)",  // Income: green
+  "linear-gradient(135deg, #dc2626, #ef4444)",  // Expenses: red
+  "linear-gradient(135deg, #2f5bff, #8b5cf6)",  // Net: blue/purple
+  "linear-gradient(135deg, #f59e0b, #fb923c)",  // Daily: amber
 ];
 
 // ─── Change badge ──────────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ export default function StatsPage() {
         className="flex items-center justify-end flex-wrap gap-4"
       >
         <div className="flex items-center gap-3">
-          {/* Tab switcher — glass pill style (matches RangeSwitcher) */}
+          {/* Tab switcher: glass pill style (matches RangeSwitcher) */}
           <div className="flex items-center gap-1 p-1 glass bg-card rounded-[14px]">
             {["monthly", "yearly"].map(t => (
               <button

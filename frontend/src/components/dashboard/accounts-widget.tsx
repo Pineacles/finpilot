@@ -8,8 +8,8 @@ import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { useOverviewQuery, queryKeys } from "@/hooks/queries";
 
-/** Bank + credit card accounts with balances. Balances can be fixed inline —
- * the "gateway for the user's AI agent" principle applies to humans too:
+/** Bank + credit card accounts with balances. Balances can be fixed inline,
+ * since the "gateway for the user's AI agent" principle applies to humans too:
  * easy to see and easy to correct. */
 export function AccountsWidget() {
   const { data, isLoading } = useOverviewQuery();

@@ -161,7 +161,7 @@ async def bulk_categorize(
 ) -> int:
     """Set category_id on every listed transaction that belongs to user_id.
 
-    IDs that don't exist or belong to another user are silently skipped —
+    IDs that don't exist or belong to another user are silently skipped;
     returns the number of transactions actually updated. Retrains the
     user's ML classifier afterwards (same behavior on both surfaces).
     """
@@ -186,7 +186,7 @@ async def bulk_delete_transactions(db: AsyncSession, user_id: str, transaction_i
     """Delete every transaction id in the list that belongs to user_id.
 
     IDs that don't exist or belong to another user are silently ignored (no
-    error) — returns the number of rows actually deleted.
+    error); returns the number of rows actually deleted.
     """
     if not transaction_ids:
         return 0
@@ -211,7 +211,7 @@ async def upsert_merchant_rule(
 
     Builds patterns from both the new merchant name and the original name
     (plus an optional extra pattern, e.g. a description-filter keyword).
-    Always scoped to `user_id` — a previous copy of this helper (in the agent
+    Always scoped to `user_id`: a previous copy of this helper (in the agent
     router) queried Merchant by name only, which could match another user's
     rule; that bug is fixed by consolidating on this implementation.
     """

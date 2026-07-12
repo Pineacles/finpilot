@@ -14,7 +14,7 @@ export function cn(...classes: (string | false | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }
 
-/** "prices as of X" — relative time for a nullable ISO timestamp. Returns
+/** "prices as of X": relative time for a nullable ISO timestamp. Returns
  * "unknown" rather than silently showing nothing when we have no timestamp
  * at all (e.g. a price that has never successfully been fetched). */
 export function formatRelativeTime(iso: string | null | undefined): string {

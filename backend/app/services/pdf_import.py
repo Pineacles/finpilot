@@ -238,7 +238,7 @@ def _extract_amount_with_sign(text: str, page_idx: int,
         # Find a matching sign entry (approximate top match)
         sign = None
         for top, s in page_signs.items():
-            # Can't precisely match — just return the first amount we find
+            # Can't precisely match, just return the first amount we find
             # and use keyword-based sign detection as fallback
             pass
 

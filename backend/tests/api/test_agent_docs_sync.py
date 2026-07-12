@@ -1,10 +1,10 @@
 """Docs/route sync: the /api/docs/agent* endpoints are generated from the
 live route table (app.services.docs_service), so every route they document
-must exist on the app — and every /api/agent route must be documented.
+must exist on the app, and every /api/agent route must be documented.
 This is the regression guard that makes stale docs structurally impossible.
 
 Uses FastAPI's TestClient without the lifespan context (no DB, no
-SECRET_KEY validation needed — the docs endpoints are pure introspection).
+SECRET_KEY validation needed: the docs endpoints are pure introspection).
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def _live_agent_routes() -> set[tuple[str, str]]:
 
 def test_docs_json_matches_live_routes_exactly(client):
     """Every endpoint in /api/docs/agent/json exists on the app, and every
-    live /api/agent route appears in the docs. Set equality — no drift in
+    live /api/agent route appears in the docs. Set equality: no drift in
     either direction."""
     resp = client.get("/api/docs/agent/json")
     assert resp.status_code == 200

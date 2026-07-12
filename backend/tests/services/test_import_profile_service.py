@@ -1,4 +1,4 @@
-"""ImportProfile CRUD — per-user scoping for saved CSV column mappings."""
+"""ImportProfile CRUD: per-user scoping for saved CSV column mappings."""
 from __future__ import annotations
 
 import pytest

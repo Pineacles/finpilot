@@ -1,4 +1,4 @@
-"""SaxoAdapter — implements BrokerAdapter against Saxo Bank OpenAPI.
+"""SaxoAdapter: implements BrokerAdapter against Saxo Bank OpenAPI.
 
 Design notes:
     - All per-user state (credentials, tokens, PKCE verifiers) lives in the
@@ -6,7 +6,7 @@ Design notes:
     - Every public call reads `saxo_enabled` first. When false, the call returns
       the "disabled" sentinel without touching the network or emitting logs.
     - Token refresh is serialized per user by an `asyncio.Lock`. Refresh tokens
-      rotate on every use — the new access+refresh+expiry are persisted in a
+      rotate on every use: the new access+refresh+expiry are persisted in a
       single `set_many_atomic()` commit. A crash mid-flight leaves the user
       with the old (now-invalid) refresh token; the next call will fail refresh
       and flip to NEEDS_AUTH rather than loop forever.
@@ -305,7 +305,7 @@ class SaxoAdapter(BrokerAdapter):
         """Return (access_token, environment). Refreshes the access token if expired.
 
         Raises `RuntimeError("needs_auth")` if the user has no refresh token or
-        the refresh attempt fails — the caller should map that to AuthState.NEEDS_AUTH.
+        the refresh attempt fails; the caller should map that to AuthState.NEEDS_AUTH.
         """
         env = saxo_config.resolve(await self._env_name(db, user_id))
         expires_at = _as_int(await settings_svc.get_setting(db, user_id, "saxo_token_expires_at"))
@@ -322,7 +322,7 @@ class SaxoAdapter(BrokerAdapter):
         tokens and flip `saxo_needs_reauth=1` so the UI can prompt Reconnect.
         """
         async with self._refresh_lock(user_id):
-            # Recheck inside the lock — another coroutine may have refreshed.
+            # Recheck inside the lock: another coroutine may have refreshed.
             expires_at = _as_int(await settings_svc.get_setting(db, user_id, "saxo_token_expires_at"))
             access = await settings_svc.get_setting(db, user_id, "saxo_access_token")
             if access and expires_at > time.time() + _ACCESS_TOKEN_SKEW_SECONDS:
@@ -356,7 +356,7 @@ class SaxoAdapter(BrokerAdapter):
                         attempt, user_id, exc.status, permanent, oauth_error or "-",
                     )
                     if permanent:
-                        # Refresh token is dead — clear and require re-auth.
+                        # Refresh token is dead: clear and require re-auth.
                         await settings_svc.delete_keys(db, user_id, [
                             "saxo_access_token",
                             "saxo_refresh_token",
@@ -372,14 +372,14 @@ class SaxoAdapter(BrokerAdapter):
                         delay += random.uniform(0, 1.5)
                         await asyncio.sleep(delay)
                         continue
-                    # Exhausted retries on transient error — record but keep tokens.
+                    # Exhausted retries on transient error: record but keep tokens.
                     await self._record_error(db, user_id, f"refresh_transient_exhausted:{last_error}")
                     raise RuntimeError("needs_auth") from None
 
                 await self._persist_tokens(db, user_id, body, fallback_refresh=refresh_token)
                 return body["access_token"]
 
-            # Should be unreachable — the loop always continues or raises.
+            # Should be unreachable: the loop always continues or raises.
             raise RuntimeError("needs_auth")
 
     async def _persist_tokens(
@@ -421,7 +421,7 @@ def _extract_oauth_error(detail: str | None) -> str | None:
 
     `detail` comes from SaxoHTTPClient._safe_detail, which hands back either
     the raw error code or a short `http_NNN`. When Saxo's token endpoint
-    returns a JSON body we can also see it in detail — try both shapes.
+    returns a JSON body we can also see it in detail, so try both shapes.
     """
     if not detail:
         return None

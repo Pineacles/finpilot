@@ -1,4 +1,4 @@
-"""Public portfolio sharing endpoints — unauthenticated read-only views."""
+"""Public portfolio sharing endpoints: unauthenticated read-only views."""
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -31,7 +31,7 @@ async def _lookup_public_user(db: AsyncSession, token: str) -> User:
 async def get_public_portfolio(token: str, db: AsyncSession = Depends(get_db)):
     """Mirrors the private dashboard's valuation logic exactly (same
     honesty guarantees: no silent FX=1.0, staleness/warnings surfaced) via
-    portfolio_service.get_public_portfolio — this router only resolves the
+    portfolio_service.get_public_portfolio; this router only resolves the
     share token and adds the display name."""
     user = await _lookup_public_user(db, token)
     data = await portfolio_service.get_public_portfolio(db, user.id)
@@ -40,7 +40,7 @@ async def get_public_portfolio(token: str, db: AsyncSession = Depends(get_db)):
 
 @public_router.get("/portfolio/{token}/chart/{ticker}")
 async def get_public_chart(token: str, ticker: str, range: str = "1y", interval: str | None = None, db: AsyncSession = Depends(get_db)):
-    """Public price chart — validates the share token first."""
+    """Public price chart. Validates the share token first."""
     await _lookup_public_user(db, token)
     valid_ranges = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
     if range not in valid_ranges:
@@ -61,7 +61,7 @@ async def get_public_chart(token: str, ticker: str, range: str = "1y", interval:
 
 @public_router.get("/portfolio/{token}/trades")
 async def get_public_trades(token: str, symbol: str | None = None, limit: int = 100, db: AsyncSession = Depends(get_db)):
-    """Public trade history — validates the share token first."""
+    """Public trade history. Validates the share token first."""
     user = await _lookup_public_user(db, token)
 
     query = select(StockTransaction).where(StockTransaction.user_id == user.id)

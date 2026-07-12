@@ -126,7 +126,7 @@ async def trigger_seed_merchants(
 
 # ── Generic CSV column-mapper import ────────────────────────────────
 # For any CSV format not recognized by detect_format() above (e.g. a
-# Cumulus/Cembra card export) — preview the columns, let the user map them,
+# Cumulus/Cembra card export): preview the columns, let the user map them,
 # then import through the exact same pipeline (dedup/categorize/settlement)
 # via import_transactions(pre_parsed=...).
 
@@ -155,7 +155,7 @@ async def import_mapped_csv(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Import a CSV using an explicit user-supplied column mapping — for any
+    """Import a CSV using an explicit user-supplied column mapping, for any
     format detect_format() doesn't recognize."""
     try:
         mapping_dict = json.loads(mapping)

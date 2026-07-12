@@ -4,7 +4,7 @@
  * TanStack Query hooks for the pages touched in this phase (transactions,
  * merchants, dashboard/overview, recurring, settings, categories). Other
  * pages (portfolio, goals, stats, budgets) keep their existing
- * useState/useEffect data loading — not refactored this phase.
+ * useState/useEffect data loading; not refactored this phase.
  *
  * Each mutation invalidates the query keys it can affect so pages using
  * these hooks stay in sync after a create/update/delete without manual
@@ -172,7 +172,7 @@ export function useDeleteRecurring() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Settings (generic k/v store — also backs dashboard layout & the     */
+/*  Settings (generic k/v store, also backs dashboard layout & the      */
 /*  dismissed-suggestions list)                                        */
 /* ------------------------------------------------------------------ */
 export function useSettingsQuery() {

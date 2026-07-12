@@ -33,7 +33,7 @@ const emptyForm = (accounts: AccountOption[]) => ({
   notes: "",
 });
 
-/** "Add transaction" button + dialog — the manual counterpart to CSV import.
+/** "Add transaction" button + dialog: the manual counterpart to CSV import.
  * Lets the user (or their agent, via the same underlying endpoint) record a
  * transaction that never came through a bank file. */
 export function AddTransactionDialog({ accounts, categories, onCreated }: AddTransactionDialogProps) {

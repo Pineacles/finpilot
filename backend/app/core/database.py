@@ -6,7 +6,7 @@ from app.core.config import settings
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.ENVIRONMENT == "development",
-    # Never log bound parameter values — they may contain tokens, passwords, or
+    # Never log bound parameter values: they may contain tokens, passwords, or
     # API keys stored in user_settings. SQL statements still log.
     hide_parameters=True,
 )

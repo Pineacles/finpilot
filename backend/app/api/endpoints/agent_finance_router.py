@@ -1,4 +1,4 @@
-"""Agent sub-router — API key auth for AI assistant integration."""
+"""Agent sub-router: API key auth for AI assistant integration."""
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -165,7 +165,7 @@ async def agent_monthly_stats(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Monthly stats — same as dashboard endpoint but with API key auth."""
+    """Monthly stats, same as dashboard endpoint but with API key auth."""
     return await stats_service.monthly_stats(db, user.id, year=year, month=month)
 
 
@@ -175,7 +175,7 @@ async def agent_yearly_stats(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Yearly stats — same as dashboard endpoint but with API key auth."""
+    """Yearly stats, same as dashboard endpoint but with API key auth."""
     return await stats_service.yearly_stats(db, user.id, year=year)
 
 
@@ -231,7 +231,7 @@ async def agent_update_transaction(
     """Update a transaction's merchant/category/notes. By default the
     merchant rename and category change also apply to all other transactions
     with the same merchant (apply_merchant_to_all / apply_category_to_all,
-    optionally narrowed by description_filter) — the primary "fix a data
+    optionally narrowed by description_filter): the primary "fix a data
     mistake everywhere at once" tool. Same behavior as the dashboard PATCH."""
     try:
         return await transaction_service.update_transaction(db, user.id, transaction_id, body)
@@ -459,7 +459,7 @@ async def agent_create_recurring(
     user: User = Depends(get_user_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a recurring expense — accept a /recurring/detected suggestion
+    """Create a recurring expense: accept a /recurring/detected suggestion
     (POST the suggested fields) or add one manually."""
     return await recurring_service.create_recurring(db, user.id, body)
 
@@ -586,7 +586,7 @@ async def agent_delete_merchant(
 # Read the account list/balances and fix data mistakes (wrong anchor
 # balance, wrong settlement-match keywords for card-payoff detection).
 # Deliberately NOT here: creating/deleting accounts, connecting brokers
-# (see app.api.endpoints.docs — excluded-from-agent rationale).
+# (see app.api.endpoints.docs for the excluded-from-agent rationale).
 
 @router.get("/accounts", response_model=list[AccountOut], summary="List accounts with computed balances")
 async def agent_list_accounts(
@@ -617,7 +617,7 @@ async def agent_set_account_balance(
     db: AsyncSession = Depends(get_db),
 ):
     """Fix an account's balance anchor to match the real bank/card statement.
-    Stores directly — no fake transactions created."""
+    Stores directly; no fake transactions created."""
     try:
         previous, account = await account_service.set_account_balance(db, user.id, account_id, body.balance)
     except AccountNotFoundError:
@@ -638,7 +638,7 @@ async def agent_update_settlement_patterns(
     db: AsyncSession = Depends(get_db),
 ):
     """Configure the issuer-match keywords used to detect this credit card's
-    settlement payment on bank import (services/settlement.py) — fixes a
+    settlement payment on bank import (services/settlement.py): fixes a
     card that isn't auto-resetting to zero after the statement is paid."""
     try:
         return await account_service.update_settlement_patterns(db, user.id, account_id, body.patterns)

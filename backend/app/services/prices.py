@@ -17,7 +17,7 @@ _HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 # In-memory cache: ticker -> {data, fetched_at}
 _price_cache: dict[str, dict] = {}
-CACHE_TTL = 30  # 30 seconds — frequent enough for live feel without hammering Yahoo
+CACHE_TTL = 30  # 30 seconds: frequent enough for live feel without hammering Yahoo
 
 
 async def get_quote(ticker: str, cache_ttl: int | None = None) -> dict | None:
@@ -65,7 +65,7 @@ async def get_quote(ticker: str, cache_ttl: int | None = None) -> dict | None:
             }
             data["change"] = data["price"] - data["prev_close"]
             data["change_pct"] = (data["change"] / data["prev_close"] * 100) if data["prev_close"] else 0
-            # Fresh, successful fetch this request — not a stale fallback.
+            # Fresh, successful fetch this request, not a stale fallback.
             data["quote_fetch_failed"] = False
 
             _price_cache[ticker] = {"data": data, "fetched_at": now}
@@ -75,7 +75,7 @@ async def get_quote(ticker: str, cache_ttl: int | None = None) -> dict | None:
         logger.error(f"Yahoo quote error for {ticker}: {e}")
         if cached:
             # We have something to show, but be honest that *this request's*
-            # live fetch failed — callers use this to decide staleness/warnings
+            # live fetch failed: callers use this to decide staleness/warnings
             # instead of silently treating the cached value as fresh.
             return {**cached["data"], "quote_fetch_failed": True}
         return None
@@ -102,15 +102,15 @@ async def get_fx_rate(from_ccy: str, to_ccy: str) -> float | None:
 
     IMPORTANT: this used to silently fall back to 1.0 on failure, which
     quietly corrupted CHF totals whenever Yahoo's FX endpoint hiccuped.
-    Callers MUST treat None as "unknown" — either use get_cached_fx_rate()
+    Callers MUST treat None as "unknown": either use get_cached_fx_rate()
     for a best-effort stale value (and surface a warning that it's stale),
     or exclude the affected amount from CHF totals with a warning naming
     the affected symbol(s). Never substitute 1.0.
 
     Subunit codes (GBp, ZAC, etc.) are automatically promoted to their major
-    currency before the FX lookup — callers need not pre-normalize.
+    currency before the FX lookup; callers need not pre-normalize.
     """
-    # Normalize subunit codes up front — GBp -> GBP, etc.
+    # Normalize subunit codes up front: GBp -> GBP, etc.
     from_ccy, _ = normalize_currency(from_ccy)
     to_ccy, _ = normalize_currency(to_ccy)
 
@@ -138,7 +138,7 @@ async def get_fx_rate(from_ccy: str, to_ccy: str) -> float | None:
     except Exception as e:
         logger.warning(f"FX rate fetch failed for {pair}: {e}")
 
-    # Try a fresh live fetch of the reverse pair — some crosses are only
+    # Try a fresh live fetch of the reverse pair: some crosses are only
     # listed one direction on Yahoo. Still an honest, fresh computation.
     reverse_pair = f"{to_ccy}{from_ccy}=X"
     now = time.time()
@@ -164,7 +164,7 @@ async def get_fx_rate(from_ccy: str, to_ccy: str) -> float | None:
 
 
 def get_cached_fx_rate(from_ccy: str, to_ccy: str) -> float | None:
-    """Best-effort *stale* FX rate lookup, ignoring TTL — a fallback for when
+    """Best-effort *stale* FX rate lookup, ignoring TTL: a fallback for when
     get_fx_rate() returns None. Returns None if this pair (or its reverse)
     has never been successfully fetched in this process's lifetime.
 

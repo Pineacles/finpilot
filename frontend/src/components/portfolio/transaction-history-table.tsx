@@ -51,7 +51,7 @@ export function TransactionHistoryTable({ trades, onOpenChart }: TransactionHist
                     <td className="px-5 py-3"><span className={`text-[12px] px-2.5 py-1 rounded-lg font-semibold uppercase ${TYPE_STYLES[t.type] || TYPE_STYLES.withdraw}`}>{t.type}</span></td>
                     <td className="px-5 py-3 text-[13px] tabular-nums text-right">{t.quantity}</td>
                     <td className="px-5 py-3 text-[13px] tabular-nums text-right"><span>{t.price.toFixed(2)}</span>{t.currency !== "CHF" && <span className="text-[11px] text-muted-foreground ml-1">{t.currency}</span>}</td>
-                    <td className="px-5 py-3 text-[13px] tabular-nums text-right text-muted-foreground">{t.fees > 0 ? formatCurrency(t.fees_chf) : "—"}</td>
+                    <td className="px-5 py-3 text-[13px] tabular-nums text-right text-muted-foreground">{t.fees > 0 ? formatCurrency(t.fees_chf) : "-"}</td>
                     <td className="px-5 py-3 text-[14px] font-medium tabular-nums text-right">{formatCurrency(t.total_chf)}</td>
                     <td className="px-5 py-3 text-center">{t.symbol !== "CASH" && <button onClick={() => onOpenChart(t.symbol)} className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer" title={`Chart for ${t.symbol}`}><LineChart className="h-4 w-4 text-primary" /></button>}</td>
                   </tr>

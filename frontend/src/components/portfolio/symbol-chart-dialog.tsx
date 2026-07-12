@@ -44,7 +44,7 @@ export function SymbolChartDialog({ symbol, onClose, fetchChart }: SymbolChartDi
   return (
     <Dialog open={symbol !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="rounded-3xl max-w-2xl">
-        <DialogHeader><DialogTitle className="flex items-center gap-2"><LineChart className="h-5 w-5 text-primary" />{symbol} — Price Chart</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><LineChart className="h-5 w-5 text-primary" />{symbol}: Price Chart</DialogTitle></DialogHeader>
         <div className="flex gap-1 mb-3">
           {RANGES.map((r) => (
             <button key={r.value} onClick={() => setRange(r.value)} className={`px-3 py-1 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${range === r.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"}`}>{r.label}</button>

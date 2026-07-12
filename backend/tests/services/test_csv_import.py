@@ -1,4 +1,4 @@
-"""CSV bank-statement import — Valiant and PostFinance parsing, format
+"""CSV bank-statement import: Valiant and PostFinance parsing, format
 detection, dedup on re-import, unsupported-format errors, and the
 "Pending" (email-notification) transaction upgrade path.
 

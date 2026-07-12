@@ -16,7 +16,7 @@ on boot.
 
 Uses batch_alter_table so it also works on SQLite (which cannot ADD a NOT NULL
 column without a default via plain ALTER). On a database that has merchant
-rows but no user_id column, the NOT NULL add will fail loudly — backfill
+rows but no user_id column, the NOT NULL add will fail loudly: backfill
 user_id manually in that case (no sensible automatic default exists for a
 per-user table).
 """

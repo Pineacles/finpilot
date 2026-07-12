@@ -13,7 +13,7 @@ interface UncategorizedPanelProps {
   onDone: () => void | Promise<void>;
 }
 
-/** Bulk-categorization panel for transactions with no category — manual bulk
+/** Bulk-categorization panel for transactions with no category: manual bulk
  * apply or AI-assisted categorization. Shown above the main table only when
  * there's something to categorize. */
 export function UncategorizedPanel({ uncategorized, categories, onDone }: UncategorizedPanelProps) {

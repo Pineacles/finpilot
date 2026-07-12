@@ -77,11 +77,11 @@ async def regenerate_api_key(
 ):
     """Generate a new API key for the authenticated user.
 
-    Returns the new key ONCE in plain text — store it immediately.
+    Returns the new key ONCE in plain text: store it immediately.
     The old key is invalidated; any agents using it must be updated.
     """
     new_key = generate_api_key()
     user.api_key = new_key
     await db.commit()
     logger.info("API key regenerated for user %s", user.id[:8])
-    return {"api_key": new_key, "message": "Store this key immediately — it will not be shown again."}
+    return {"api_key": new_key, "message": "Store this key immediately, it will not be shown again."}

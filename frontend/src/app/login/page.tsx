@@ -44,7 +44,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      {/* Floating theme toggle — top-right of viewport */}
+      {/* Floating theme toggle, top-right of viewport */}
       <button
         onClick={toggleTheme}
         className="glass fixed top-6 right-6 w-[42px] h-[42px] rounded-[14px] flex items-center justify-center text-foreground hover:brightness-110 transition-all cursor-pointer"

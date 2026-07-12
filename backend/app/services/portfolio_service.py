@@ -30,7 +30,7 @@ def _as_aware_utc(dt: datetime | None) -> datetime | None:
     """Some DB drivers (e.g. SQLite, some asyncpg/timezone setups) hand back
     naive datetimes for a DateTime(timezone=True) column even though we
     always write UTC-aware values. Normalize before comparing against
-    datetime.now(timezone.utc) — otherwise a naive/aware subtraction raises
+    datetime.now(timezone.utc): otherwise a naive/aware subtraction raises
     TypeError and would take down the whole portfolio response."""
     if dt is None:
         return None
@@ -38,7 +38,7 @@ def _as_aware_utc(dt: datetime | None) -> datetime | None:
 
 # Best-effort hint for "you probably meant the listing on this exchange"
 # when a trade's user-supplied currency doesn't match the ticker's quote
-# currency. Not exhaustive — just a nudge, shown alongside the raw mismatch.
+# currency. Not exhaustive, just a nudge, shown alongside the raw mismatch.
 TICKER_SUFFIX_HINTS: dict[str, str] = {
     "GBP": ".L",   # London Stock Exchange
     "EUR": ".DE",  # Frankfurt (common default; actual exchange varies)
@@ -169,7 +169,7 @@ async def _price_stock_positions(
     db: AsyncSession, stock_positions: list[StockPosition]
 ) -> tuple[dict[str, dict], set[str], list[str]]:
     """Refresh live quotes onto `stock_positions` (persists last_price /
-    last_price_at / unrealized_pnl for successful fetches only — a failed
+    last_price_at / unrealized_pnl for successful fetches only: a failed
     fetch this request never bumps last_price_at, so staleness stays honest).
 
     Returns (quotes, failed_symbols, warnings).
@@ -198,7 +198,7 @@ async def _price_stock_positions(
 
     if failed_symbols:
         warnings.append(
-            f"Live price refresh failed for {', '.join(sorted(failed_symbols))} — "
+            f"Live price refresh failed for {', '.join(sorted(failed_symbols))}, "
             f"showing the last known price instead."
         )
 
@@ -210,7 +210,7 @@ async def _fx_rates_for_positions(
 ) -> tuple[dict[str, float], set[str], list[str]]:
     """Resolve CHF FX rates for every currency in use. Never silently
     defaults a missing rate to 1.0: falls back to the last known cached
-    rate (with a warning), or — if we've never known this rate — excludes
+    rate (with a warning), or, if we've never known this rate, excludes
     that currency's positions from CHF totals (with a warning naming them).
 
     Returns (fx_rates, currencies_excluded_from_totals, warnings).
@@ -230,13 +230,13 @@ async def _fx_rates_for_positions(
         if stale_rate is not None:
             fx_rates[ccy] = stale_rate
             warnings.append(
-                f"Live {ccy}→{BASE_CCY} exchange rate lookup failed — using the last known rate."
+                f"Live {ccy}→{BASE_CCY} exchange rate lookup failed, using the last known rate."
             )
         else:
             excluded_currencies.add(ccy)
             affected = sorted({p.symbol for p in stock_positions if p.currency == ccy})
             warnings.append(
-                f"No {ccy}→{BASE_CCY} exchange rate available — "
+                f"No {ccy}→{BASE_CCY} exchange rate available, "
                 f"{', '.join(affected)} excluded from CHF totals until it's back."
             )
 
@@ -246,7 +246,7 @@ async def _fx_rates_for_positions(
 async def _build_holdings_payload(db: AsyncSession, user_id: str, positions: list[StockPosition]) -> dict:
     """Shared valuation core for the private dashboard and the public share
     view: live prices, CHF conversion, staleness, asset-type, warnings.
-    Does NOT persist a snapshot or compute net_deposits — callers that need
+    Does NOT persist a snapshot or compute net_deposits: callers that need
     those (the private view) add them on top.
     """
     cash_pos = next((p for p in positions if p.symbol == "CASH"), None)
@@ -373,7 +373,7 @@ async def get_portfolio(db: AsyncSession, user_id: str) -> dict:
     payload = await _build_holdings_payload(db, user_id, positions)
 
     # Net deposits (all-time): CASH deposits minus withdrawals. This is the
-    # denominator for true all-time P&L — market-value-of-stocks + cash minus
+    # denominator for true all-time P&L: market-value-of-stocks + cash minus
     # the money the user actually put in. Reading from cost-basis would
     # under-report P&L when realised gains have already been booked to cash.
     dep_result = await db.execute(
@@ -503,7 +503,7 @@ async def execute_trade(
     trade_price = price or quote["price"]
     total_cost = trade_price * quantity + fees
 
-    # Currency check — we never silently overwrite what the user typed.
+    # Currency check: we never silently overwrite what the user typed.
     # If the quote disagrees, the caller must explicitly confirm the
     # override (confirm_currency=true) before we proceed with the quote's
     # currency; otherwise we reject with enough detail to fix the input.
@@ -613,8 +613,8 @@ async def get_fx_rates_for_trades(trades: list[StockTransaction], base: str = "C
 
     Falls back to a stale cached rate if the live lookup fails; a currency
     genuinely missing from the dict (never known) is left out, and callers
-    fall back to displaying 1x for that historical row rather than crashing
-    — this is a secondary, backwards-looking display total, not the primary
+    fall back to displaying 1x for that historical row rather than crashing.
+    This is a secondary, backwards-looking display total, not the primary
     CHF totals guarded by get_portfolio()'s warnings contract.
     """
     currencies = {t.currency for t in trades if t.currency != base}
@@ -630,7 +630,7 @@ async def get_fx_rates_for_trades(trades: list[StockTransaction], base: str = "C
 
 async def update_trade(db: AsyncSession, user_id: str, trade_id: str, updates: dict) -> StockTransaction:
     """Update a stock transaction. `updates` keys: symbol, type, quantity,
-    price, fees, currency, date — only non-None values are applied."""
+    price, fees, currency, date. Only non-None values are applied."""
     result = await db.execute(
         select(StockTransaction).where(and_(StockTransaction.id == trade_id, StockTransaction.user_id == user_id))
     )
@@ -826,7 +826,7 @@ async def build_value_timeline(db: AsyncSession, user_id: str) -> list[dict]:
                 prev_dates = [pd for pd in sorted(prices.keys()) if pd <= d]
                 price = prices[prev_dates[-1]] if prev_dates else 0
             # Historical price is in stock's native currency; convert to CHF using current FX rate
-            # (Using current FX rate as a simplification — historical FX rates are out of scope)
+            # (Using current FX rate as a simplification; historical FX rates are out of scope)
             sym_ccy = symbol_currency.get(sym, "USD")
             total_value += _to_chf(qty * price, sym_ccy)
 

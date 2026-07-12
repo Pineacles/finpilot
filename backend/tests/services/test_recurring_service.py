@@ -86,7 +86,7 @@ async def test_delete_recurring_scoped_to_owner(db, user_id):
     ))
     with pytest.raises(RecurringNotFoundError):
         await recurring_service.delete_recurring(db, "someone-else", rec.id)
-    # Still there — a mismatched-owner delete must not remove it
+    # Still there: a mismatched-owner delete must not remove it
     assert len(await recurring_service.list_recurring(db, user_id)) == 1
 
 

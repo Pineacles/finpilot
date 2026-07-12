@@ -5,7 +5,7 @@ Revises: e2f3a4b5c6d7
 Create Date: 2026-07-08 09:00:00.000000
 
 Tracking-only watchlist (selective stocks the user wants to keep an eye on,
-no AI analysis/recommendations) — see app.models.watchlist.WatchlistItem.
+no AI analysis/recommendations); see app.models.watchlist.WatchlistItem.
 """
 from typing import Sequence, Union
 

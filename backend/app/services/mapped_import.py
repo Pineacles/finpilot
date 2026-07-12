@@ -1,7 +1,7 @@
 """Generic CSV column-mapper import.
 
 For any CSV export FinPilot doesn't already know how to parse (Cumulus card
-exports, a new bank, etc.) — the user maps columns once (date/amount/
+exports, a new bank, etc.), the user maps columns once (date/amount/
 description, or debit+credit split) via POST /api/import/csv/preview then
 POST /api/import/csv/mapped, optionally saving the mapping as a reusable
 ImportProfile. The mapped rows are converted into the same `raw transaction
@@ -123,7 +123,7 @@ def parse_swiss_amount(raw: str, decimal_separator: str = ".") -> float:
 
 
 class ColumnMapping:
-    """Plain container mirroring app.schemas.import_profile.ColumnMapping —
+    """Plain container mirroring app.schemas.import_profile.ColumnMapping,
     kept import-free here so this module has no dependency on pydantic
     schemas; the endpoint layer converts."""
 

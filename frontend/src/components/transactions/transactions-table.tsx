@@ -329,7 +329,7 @@ export function TransactionsTable({
                           className="h-9 w-full rounded-xl bg-accent px-3 text-[15px] outline-none placeholder:text-muted-foreground/40 focus:ring-2 focus:ring-primary/30"
                         />
                       ) : (
-                        <span className="text-[13px] text-muted-foreground truncate block max-w-[220px]">{txn.notes || "—"}</span>
+                        <span className="text-[13px] text-muted-foreground truncate block max-w-[220px]">{txn.notes || "-"}</span>
                       )}
                     </td>
 

@@ -10,7 +10,7 @@ import { WIDGET_BY_ID } from "./widget-registry";
 
 /** "Edit layout" toggle + the panel it opens: show/hide each widget and
  * reorder with up/down buttons (no drag-and-drop dependency). Persists via
- * useDashboardLayout — every other consumer of that hook (the dashboard
+ * useDashboardLayout: every other consumer of that hook (the dashboard
  * grid itself) re-renders automatically through the shared query cache. */
 export function EditLayoutBar() {
   const [editing, setEditing] = useState(false);

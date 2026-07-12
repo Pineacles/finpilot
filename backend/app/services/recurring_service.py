@@ -2,7 +2,7 @@
 
 Shared between the JWT-authenticated dashboard router (finance.py) and the
 API-key agent router (agent_finance_router.py) so the two surfaces can't
-drift out of sync — same pattern as transaction_service.py.
+drift out of sync, same pattern as transaction_service.py.
 """
 from __future__ import annotations
 

@@ -50,7 +50,7 @@ def test_classify_invalid_client_is_permanent():
 
 
 def test_classify_401_without_error_code_is_permanent():
-    # 401 on the token endpoint means the refresh token or client creds are bad — re-auth needed.
+    # 401 on the token endpoint means the refresh token or client creds are bad: re-auth needed.
     assert classify_refresh_error(http_status=401, oauth_error=None) is True
 
 
@@ -138,7 +138,7 @@ async def test_transient_failure_retries_then_succeeds(db, user_id, saxo_adapter
 
 
 async def test_transient_exhausted_keeps_tokens(db, user_id, saxo_adapter):
-    """All 3 attempts fail with 503 — do NOT wipe tokens (it's Saxo's problem)."""
+    """All 3 attempts fail with 503: do NOT wipe tokens (it's Saxo's problem)."""
     await _seed_expired_tokens(db, user_id)
 
     with patch("app.brokers.saxo.adapter.asyncio.sleep", new=AsyncMock()):
@@ -147,7 +147,7 @@ async def test_transient_exhausted_keeps_tokens(db, user_id, saxo_adapter):
             with pytest.raises(RuntimeError, match="needs_auth"):
                 await saxo_adapter._token_and_env(db, user_id)
 
-    # Tokens still present (user hasn't lost re-auth yet — Saxo was just flaky)
+    # Tokens still present (user hasn't lost re-auth yet, Saxo was just flaky)
     assert await settings_svc.get_setting(db, user_id, "saxo_refresh_token") == "refresh-old"
     assert await settings_svc.get_setting(db, user_id, "saxo_needs_reauth") in ("", "0")
     last_error = await settings_svc.get_setting(db, user_id, "saxo_last_error")
@@ -219,7 +219,7 @@ async def test_scheduler_skips_fresh_tokens(db, user_id):
 
 
 async def test_scheduler_skips_needs_reauth_users(db, user_id):
-    """Once a user is flagged needs_reauth the scheduler stops trying —
+    """Once a user is flagged needs_reauth the scheduler stops trying:
     only the UI Reconnect can fix it."""
     from app.services.saxo_scheduler import _users_to_refresh
     import app.services.saxo_scheduler as sched

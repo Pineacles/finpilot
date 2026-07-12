@@ -1,4 +1,4 @@
-"""portfolio_service: honesty guarantees — no silent stale prices, no silent
+"""portfolio_service: honesty guarantees. No silent stale prices, no silent
 FX=1.0, no silent currency overwrite on trade entry.
 
 These replace the old behavior where:
@@ -62,7 +62,7 @@ async def test_quote_fetch_failure_populates_warning_and_marks_stale(db, user_id
 async def test_quote_fetch_failure_within_threshold_not_flagged_stale(db, user_id):
     """A failed fetch this request still produces a warning, but the
     staleness *badge* only lights up once the last known price is >15min
-    old — a failure two minutes ago with a fresh-enough cached price
+    old: a failure two minutes ago with a fresh-enough cached price
     shouldn't cry wolf."""
     acct = await _make_brokerage(db, user_id)
     recent_time = datetime.now(timezone.utc) - timedelta(minutes=2)

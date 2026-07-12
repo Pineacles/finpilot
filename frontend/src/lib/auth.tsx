@@ -22,7 +22,7 @@ const AuthContext = createContext<AuthCtx>({
 // (react-hooks/set-state-in-effect) and briefly render the wrong value on
 // every mount. useSyncExternalStore instead renders `getServerSnapshot`
 // (unauthenticated) during SSR/first paint, then swaps in the real
-// `getSnapshot` value as soon as the client can read localStorage — with no
+// `getSnapshot` value as soon as the client can read localStorage, with no
 // hydration-mismatch warning, which is exactly what it's designed for.
 type AuthListener = () => void;
 let authListeners: AuthListener[] = [];

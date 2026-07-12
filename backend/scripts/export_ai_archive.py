@@ -2,7 +2,7 @@
 
 The AI analysis stack (market analyses, post-mortems, buy assessments, pending
 orders, signal history, tool weights, tool weight proposals) was removed from
-the product — the approach was tried in production and didn't work (see the
+the product. The approach was tried in production and didn't work (see the
 project README). The `f3a8c91b5d2e_drop_ai_analysis_tables` migration drops
 the underlying tables outright. Run this script first if you want a copy of
 the data for your own records; it does not touch the database.

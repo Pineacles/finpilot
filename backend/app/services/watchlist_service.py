@@ -1,4 +1,4 @@
-"""Watchlist — selective stock tracking with NO analysis or recommendations.
+"""Watchlist: selective stock tracking with NO analysis or recommendations.
 
 Shared between the JWT-authenticated dashboard router (watchlist.py) and the
 API-key agent router (agent_portfolio_router.py) so both surfaces stay in
