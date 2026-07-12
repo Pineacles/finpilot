@@ -305,3 +305,74 @@ async def test_compute_total_wealth_falls_back_to_avg_cost_without_live_price(db
     total = await portfolio_service.compute_total_wealth(db, user_id)
 
     assert total == 5 * 80.0
+
+
+# ── Value timeline: GBp (pence) trades must not book as pounds ────────────
+
+async def test_value_timeline_normalizes_subunit_currency(db, user_id):
+    """Regression: a Shell buy of 2 @ 3322.50 GBp deducted 6645 POUNDS from
+    the timeline's cash balance (about 100x the real cost), cratering the
+    chart for the whole holding period."""
+    from app.models.stock import StockTransaction
+
+    acct = await _make_brokerage(db, user_id)
+    db.add_all([
+        StockTransaction(
+            user_id=user_id, account_id=acct.id, symbol="CASH", type="deposit",
+            quantity=1000.0, price=1, fees=0, currency="CHF",
+            executed_at=datetime(2026, 4, 1, tzinfo=timezone.utc),
+        ),
+        StockTransaction(
+            user_id=user_id, account_id=acct.id, symbol="SHEL.L", type="buy",
+            quantity=2, price=3322.5, fees=343.0, currency="GBp",
+            executed_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+        ),
+    ])
+    await db.commit()
+
+    async def fake_history(sym, range="1y", interval="1d"):
+        return [{"date": "2026-04-16", "close": 3322.5}]  # GBp close
+
+    async def fake_fx(from_ccy, to_ccy):
+        return 1.10 if from_ccy == "GBP" else 1.0
+
+    with patch.object(portfolio_service, "get_history", side_effect=fake_history), \
+         patch.object(portfolio_service, "get_fx_rate", side_effect=fake_fx):
+        timeline = await portfolio_service.build_value_timeline(db, user_id)
+
+    assert timeline, "timeline should not be empty"
+    last = timeline[-1]
+    # Cost: (2 * 3322.5 + 343) GBp = 69.88 GBP = 76.87 CHF. Cash after buy:
+    # 1000 - 76.87 = 923.13; holding value: 66.45 GBP = 73.10 CHF.
+    assert last["value"] == pytest.approx(1000 - 76.87 + 73.10, abs=0.5)
+    # The old bug made the value collapse to about -6300; guard the sign too.
+    assert last["value"] > 900
+
+
+# ── execute_trade: subunit prices (GBp pence) are stored in major units ───
+
+async def test_execute_trade_normalizes_subunit_price_to_major_units(db, user_id):
+    """Regression: a trade entered as 3322.50 GBp was stored as 3322.50 GBP
+    (the .upper() call erased the pence subunit before normalization), so
+    every downstream consumer read a 100x price."""
+    from sqlalchemy import select
+    from app.models.stock import StockTransaction
+
+    quote = {"price": 33.225, "currency": "GBP", "name": "Shell PLC"}
+    with patch("app.services.portfolio_service.get_quote", return_value=quote), \
+         patch("app.services.portfolio_service.get_fx_rate", return_value=1.10), \
+         patch.object(classification, "ensure_classified", side_effect=Exception("offline")):
+        result = await portfolio_service.execute_trade(
+            db, user_id, symbol="SHEL.L", type="buy", quantity=2,
+            price=3322.5, fees=343.0, currency="GBp", deduct_from_cash=False,
+        )
+
+    assert result["currency"] == "GBP"
+    assert result["price"] == pytest.approx(33.225)
+
+    stored = (await db.execute(
+        select(StockTransaction).where(StockTransaction.symbol == "SHEL.L")
+    )).scalar_one()
+    assert stored.price == pytest.approx(33.225)
+    assert stored.fees == pytest.approx(3.43)
+    assert stored.currency == "GBP"

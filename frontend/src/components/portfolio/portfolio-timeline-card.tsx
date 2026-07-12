@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { BarChart3 } from "lucide-react";
-import { Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid, ComposedChart, Line, Bar } from "recharts";
+import { Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Line, ReferenceDot } from "recharts";
 import { GlassCard } from "@/components/glass-card";
 import { RangeSwitcher } from "@/components/range-switcher";
 import { formatCurrency } from "@/lib/format";
@@ -11,6 +11,32 @@ import type { ValueTimelinePoint } from "@/lib/types";
 const TIMELINE_RANGES = ["1W", "1M", "3M", "6M", "1Y", "ALL"] as const;
 type TimelineRange = (typeof TIMELINE_RANGES)[number];
 const DAYS_MAP: Record<TimelineRange, number> = { "1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 365, ALL: 10000 };
+
+type TradeEntry = NonNullable<ValueTimelinePoint["trades"]>[number];
+
+// Trade-day marker color: a day can mix trade types (e.g. a sell funding a
+// buy), so pick one color by priority: sell > buy > deposit/withdraw.
+function markerColorFor(trades: ValueTimelinePoint["trades"]): string | null {
+  if (!trades || trades.length === 0) return null;
+  if (trades.some((t) => t.type === "sell")) return "#ef4444";
+  if (trades.some((t) => t.type === "buy")) return "#22c55e";
+  return "#3b82f6";
+}
+
+function tradeLineLabel(t: TradeEntry): { text: string; color: string } {
+  if (t.symbol === "CASH") {
+    return t.type === "deposit"
+      ? { text: `Deposit ${formatCurrency(t.quantity)}`, color: "text-blue-500" }
+      : { text: `Withdraw ${formatCurrency(t.quantity)}`, color: "text-amber-500" };
+  }
+  return t.type === "buy"
+    ? { text: `Buy ${t.quantity} ${t.symbol} @ ${t.price.toFixed(2)}`, color: "text-gain" }
+    : { text: `Sell ${t.quantity} ${t.symbol} @ ${t.price.toFixed(2)}`, color: "text-loss" };
+}
+
+function compactChf(v: number): string {
+  return Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0);
+}
 
 interface PortfolioTimelineCardProps {
   timeline: ValueTimelinePoint[];
@@ -23,10 +49,7 @@ interface TimelineChartDatum {
   value: number;
   cost: number;
   pnl: number;
-  dailyChange: number;
-  gain: number;
-  loss: number;
-  tradeLabels: string | null;
+  marker: string | null;
   trades: ValueTimelinePoint["trades"];
 }
 
@@ -42,25 +65,72 @@ interface TimelineTooltipContentProps {
 
 export function PortfolioTimelineCard({ timeline }: PortfolioTimelineCardProps) {
   const [timelineRange, setTimelineRange] = useState<TimelineRange>("3M");
-  if (timeline.length === 0) return null;
 
-  const allChartData = timeline.map((pt, i) => {
-    const prev = i > 0 ? timeline[i - 1] : pt;
-    const dailyChange = pt.value - prev.value;
-    const tradeLabels = pt.trades?.map((t) => {
-      if (t.symbol === "CASH") return `${t.type === "deposit" ? "+ Deposit" : "- Withdraw"} ${formatCurrency(t.quantity)}`;
-      return `${t.type === "buy" ? "+ Buy" : "- Sell"} ${t.quantity} ${t.symbol} @ ${t.price.toFixed(2)}`;
-    }).join("\n") || null;
-    return { date: pt.date, value: pt.value, cost: pt.cost, pnl: pt.pnl, dailyChange, gain: dailyChange >= 0 ? dailyChange : 0, loss: dailyChange < 0 ? dailyChange : 0, tradeLabels, trades: pt.trades };
-  });
+  const allChartData: TimelineChartDatum[] = useMemo(
+    () =>
+      timeline.map((pt) => ({
+        date: pt.date,
+        value: pt.value,
+        cost: pt.cost,
+        pnl: pt.pnl,
+        marker: markerColorFor(pt.trades),
+        trades: pt.trades,
+      })),
+    [timeline],
+  );
 
   const days = DAYS_MAP[timelineRange];
-  const chartData = allChartData.slice(Math.max(0, allChartData.length - days));
+  const chartData = useMemo(
+    () => allChartData.slice(Math.max(0, allChartData.length - days)),
+    [allChartData, days],
+  );
+
+  // Single shared y-axis domain: padded to whatever is visible (value and
+  // cost together, since both plot on it), never zero-anchored or forced
+  // symmetric.
+  const yDomain = useMemo<[number, number]>(() => {
+    if (chartData.length === 0) return [0, 1];
+    let min = Infinity;
+    let max = -Infinity;
+    for (const d of chartData) {
+      if (d.value < min) min = d.value;
+      if (d.value > max) max = d.value;
+      if (d.cost < min) min = d.cost;
+      if (d.cost > max) max = d.cost;
+    }
+    const span = max - min || Math.abs(max) || 1;
+    return [min - span * 0.04, max + span * 0.04];
+  }, [chartData]);
+
+  if (timeline.length === 0) {
+    return (
+      <div>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-10 w-10 rounded-2xl bg-indigo-100 dark:bg-indigo-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" strokeWidth={1.8} /></div>
+          <h2 className="text-[16px] font-semibold">Portfolio Timeline</h2>
+        </div>
+        <GlassCard delay={0.42} className="!p-4">
+          <div className="h-60 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <BarChart3 className="h-8 w-8 opacity-30" />
+            <p className="text-[13px]">No trades yet. Record a trade or deposit to see your timeline.</p>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  }
+
   const lastPt = timeline[timeline.length - 1];
   const rangeFirst = chartData[0];
   const rangeLast = chartData[chartData.length - 1];
-  const totalReturn = rangeLast ? rangeLast.value - rangeFirst.value : 0;
-  const totalReturnPct = rangeFirst && rangeFirst.value > 0 ? (rangeLast.value / rangeFirst.value - 1) * 100 : 0;
+
+  const rangeChangeChf = rangeLast.value - rangeFirst.value;
+  const rangeChangePct = rangeFirst.value !== 0 ? (rangeLast.value / rangeFirst.value - 1) * 100 : 0;
+  const suppressRangePct = rangeFirst.value < 100;
+  const trendUp = rangeLast.value >= rangeFirst.value;
+  const trendColor = trendUp ? "#22c55e" : "#ef4444";
+
+  const allTimePnl = lastPt.pnl;
+  const allTimePnlPct = lastPt.cost > 0 ? (lastPt.pnl / lastPt.cost) * 100 : 0;
 
   return (
     <div>
@@ -69,10 +139,24 @@ export function PortfolioTimelineCard({ timeline }: PortfolioTimelineCardProps) 
           <div className="h-10 w-10 rounded-2xl bg-indigo-100 dark:bg-indigo-500/15 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" strokeWidth={1.8} /></div>
           <h2 className="text-[16px] font-semibold">Portfolio Timeline</h2>
         </div>
-        <div className="sm:ml-auto flex items-center gap-3">
-          <span className="text-[13px] text-muted-foreground">Current</span>
-          <span className="text-[20px] font-bold tabular-nums font-mono">{formatCurrency(lastPt.value)}</span>
-          <span className={`text-[13px] font-semibold ${totalReturn >= 0 ? "text-gain" : "text-loss"}`}>{totalReturn >= 0 ? "+" : ""}{formatCurrency(totalReturn)} ({totalReturnPct >= 0 ? "+" : ""}{totalReturnPct.toFixed(1)}%)</span>
+        <div className="sm:ml-auto flex flex-wrap items-center gap-x-5 gap-y-1">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[13px] text-muted-foreground">Current</span>
+            <span className="text-[20px] font-bold tabular-nums font-mono">{formatCurrency(lastPt.value)}</span>
+          </div>
+          <div className="flex flex-col items-end leading-tight">
+            <span className={`text-[13px] font-semibold tabular-nums ${rangeChangeChf >= 0 ? "text-gain" : "text-loss"}`}>
+              {rangeChangeChf >= 0 ? "+" : ""}{formatCurrency(rangeChangeChf)}
+              {!suppressRangePct && ` (${rangeChangePct >= 0 ? "+" : ""}${rangeChangePct.toFixed(1)}%)`}
+            </span>
+            <span className="text-[10px] text-muted-foreground">{timelineRange.toLowerCase()} change</span>
+          </div>
+          <div className="flex flex-col items-end leading-tight">
+            <span className={`text-[13px] font-semibold tabular-nums ${allTimePnl >= 0 ? "text-gain" : "text-loss"}`}>
+              {allTimePnl >= 0 ? "+" : ""}{formatCurrency(allTimePnl)} ({allTimePnlPct >= 0 ? "+" : ""}{allTimePnlPct.toFixed(1)}%)
+            </span>
+            <span className="text-[10px] text-muted-foreground">vs deposits</span>
+          </div>
         </div>
       </div>
       <GlassCard delay={0.42} className="!p-4">
@@ -83,48 +167,50 @@ export function PortfolioTimelineCard({ timeline }: PortfolioTimelineCardProps) 
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
               <defs>
-                <linearGradient id="sg-tl-gain" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#22c55e" stopOpacity={0.15} /><stop offset="100%" stopColor="#22c55e" stopOpacity={0} /></linearGradient>
-                <linearGradient id="sg-tl-loss" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef4444" stopOpacity={0.15} /><stop offset="100%" stopColor="#ef4444" stopOpacity={0} /></linearGradient>
+                <linearGradient id="sg-tl-gain" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#22c55e" stopOpacity={0.25} /><stop offset="100%" stopColor="#22c55e" stopOpacity={0} /></linearGradient>
+                <linearGradient id="sg-tl-loss" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef4444" stopOpacity={0.25} /><stop offset="100%" stopColor="#ef4444" stopOpacity={0} /></linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d: string) => d.slice(5)} stroke="var(--muted-foreground)" />
-              <YAxis yAxisId="value" tick={{ fontSize: 10 }} domain={["auto", "auto"]} stroke="var(--muted-foreground)" tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0))} />
-              <YAxis yAxisId="change" orientation="right" tick={{ fontSize: 9 }} stroke="var(--muted-foreground)" tickFormatter={(v: number) => (v >= 1000 || v <= -1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0))} width={45} />
-              <Tooltip content={({ active, payload, label }: TimelineTooltipContentProps) => {
-                if (!active || !payload?.length) return null;
-                const d = payload[0]?.payload;
-                const change = d?.dailyChange ?? 0;
-                return (
-                  <div className="bg-popover border border-border rounded-xl p-3 shadow-lg text-[13px] space-y-1 max-w-[260px]">
-                    <p className="font-medium">{new Date(String(label)).toLocaleDateString("en-CH", { day: "numeric", month: "short", year: "numeric" })}</p>
-                    <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">Value</span><span className="font-semibold tabular-nums">{formatCurrency(d?.value ?? 0)}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">Cost</span><span className="tabular-nums">{formatCurrency(d?.cost ?? 0)}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">P&L</span><span className={`font-semibold tabular-nums ${(d?.pnl ?? 0) >= 0 ? "text-gain" : "text-loss"}`}>{(d?.pnl ?? 0) >= 0 ? "+" : ""}{formatCurrency(d?.pnl ?? 0)}</span></div>
-                    <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">Day</span><span className={`font-medium tabular-nums ${change >= 0 ? "text-gain" : "text-loss"}`}>{change >= 0 ? "+" : ""}{formatCurrency(change)}</span></div>
-                    {d?.tradeLabels && <div className="pt-1.5 mt-1.5 border-t border-border space-y-0.5">{d.tradeLabels.split("\n").map((line: string, i: number) => <p key={i} className={`text-[12px] font-medium ${line.startsWith("+") ? (line.includes("Deposit") ? "text-blue-500" : "text-gain") : line.includes("Withdraw") ? "text-amber-500" : "text-loss"}`}>{line}</p>)}</div>}
-                  </div>
-                );
-              }} />
-              <Bar yAxisId="change" dataKey="gain" fill="#22c55e" opacity={0.5} radius={[2, 2, 0, 0]} barSize={3} />
-              <Bar yAxisId="change" dataKey="loss" fill="#ef4444" opacity={0.5} radius={[0, 0, 2, 2]} barSize={3} />
-              <Area yAxisId="value" type="monotone" dataKey="value" stroke={lastPt.pnl >= 0 ? "#22c55e" : "#ef4444"} strokeWidth={2} fill={lastPt.pnl >= 0 ? "url(#sg-tl-gain)" : "url(#sg-tl-loss)"} />
-              <Line yAxisId="value" type="monotone" dataKey="cost" stroke="var(--muted-foreground)" strokeWidth={1} strokeDasharray="4 3" dot={false} />
-              {timeline.filter((pt) => pt.trades && pt.trades.length > 0 && chartData.some((cd) => cd.date === pt.date)).map((pt, i) => {
-                const t = pt.trades![0];
-                const color = t.symbol === "CASH" ? (t.type === "deposit" ? "#3b82f6" : "#f59e0b") : t.type === "buy" ? "#22c55e" : "#ef4444";
-                return <ReferenceLine key={`tl-${i}`} yAxisId="value" x={pt.date} stroke={color} strokeDasharray="3 3" strokeWidth={1.5} />;
-              })}
+              <YAxis tick={{ fontSize: 10 }} domain={yDomain} stroke="var(--muted-foreground)" tickFormatter={compactChf} width={44} />
+              <Tooltip
+                cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
+                content={({ active, payload, label }: TimelineTooltipContentProps) => {
+                  if (!active || !payload?.length) return null;
+                  const d = payload[0]?.payload;
+                  if (!d) return null;
+                  return (
+                    <div className="bg-popover border border-border rounded-xl p-3 shadow-lg text-[12px] space-y-1 max-w-[260px]">
+                      <p className="font-medium text-[13px]">{new Date(String(label)).toLocaleDateString("en-CH", { day: "numeric", month: "short", year: "numeric" })}</p>
+                      <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">Value</span><span className="font-semibold tabular-nums">{formatCurrency(d.value)}</span></div>
+                      <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">Deposited</span><span className="tabular-nums">{formatCurrency(d.cost)}</span></div>
+                      <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">P&L</span><span className={`font-semibold tabular-nums ${d.pnl >= 0 ? "text-gain" : "text-loss"}`}>{d.pnl >= 0 ? "+" : ""}{formatCurrency(d.pnl)}</span></div>
+                      {d.trades && d.trades.length > 0 && (
+                        <div className="pt-1.5 mt-1.5 border-t border-border space-y-0.5">
+                          {d.trades.map((t, i) => {
+                            const { text, color } = tradeLineLabel(t);
+                            return <p key={i} className={`text-[12px] font-medium ${color}`}>{text}</p>;
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }}
+              />
+              <Area type="monotone" dataKey="value" stroke={trendColor} strokeWidth={2} fill={trendUp ? "url(#sg-tl-gain)" : "url(#sg-tl-loss)"} isAnimationActive={false} />
+              <Line type="stepAfter" dataKey="cost" stroke="var(--muted-foreground)" strokeWidth={1} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
+              {chartData.filter((d) => d.marker).map((d) => (
+                <ReferenceDot key={`marker-${d.date}`} x={d.date} y={d.value} r={3.5} fill={d.marker!} stroke="var(--background)" strokeWidth={1.5} ifOverflow="visible" />
+              ))}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
         <div className="flex flex-wrap items-center gap-4 mt-3 px-1">
-          <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#22c55e]/70 inline-block" /><span className="text-[11px] text-muted-foreground">Profit</span></div>
-          <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#ef4444]/70 inline-block" /><span className="text-[11px] text-muted-foreground">Loss</span></div>
+          <div className="flex items-center gap-1.5"><span className="w-4 h-0.5 rounded-full inline-block" style={{ backgroundColor: trendColor }} /><span className="text-[11px] text-muted-foreground">Value</span></div>
           <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-muted-foreground" /><span className="text-[11px] text-muted-foreground">Cost basis</span></div>
-          <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#22c55e]" /><span className="text-[11px] text-muted-foreground">Buy</span></div>
-          <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#ef4444]" /><span className="text-[11px] text-muted-foreground">Sell</span></div>
-          <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#3b82f6]" /><span className="text-[11px] text-muted-foreground">Deposit</span></div>
-          <div className="flex items-center gap-1.5"><span className="w-4 h-0 inline-block border-t-2 border-dashed border-[#f59e0b]" /><span className="text-[11px] text-muted-foreground">Withdraw</span></div>
+          <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block bg-[#22c55e]" /><span className="text-[11px] text-muted-foreground">Buy</span></div>
+          <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block bg-[#ef4444]" /><span className="text-[11px] text-muted-foreground">Sell</span></div>
+          <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full inline-block bg-[#3b82f6]" /><span className="text-[11px] text-muted-foreground">Deposit / Withdraw</span></div>
           <span className="text-[11px] text-muted-foreground ml-auto">Showing {timelineRange === "ALL" ? "all history" : `last ${timelineRange}`}</span>
         </div>
       </GlassCard>

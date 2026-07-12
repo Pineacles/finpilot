@@ -552,7 +552,6 @@ async def execute_trade(
         raise InvalidTickerError(ticker)
 
     trade_price = price or quote["price"]
-    total_cost = trade_price * quantity + fees
 
     # Currency check: we never silently overwrite what the user typed.
     # If the quote disagrees, the caller must explicitly confirm the
@@ -560,9 +559,20 @@ async def execute_trade(
     # currency; otherwise we reject with enough detail to fix the input.
     yf_ccy = quote.get("currency", "").upper()
     CASH_CCY = "CHF"
-    trade_ccy = currency.upper() if currency else ""
-    # Normalize user-supplied currency in case it's a subunit code
-    trade_ccy, _ = normalize_currency(trade_ccy) if trade_ccy else ("", 1.0)
+    # Normalize the RAW user currency string: a subunit code (e.g. GBp
+    # pence) also rescales the user-supplied price and fees, so stored
+    # trades are always major-currency denominated. Must happen before any
+    # .upper() call: "GBp".upper() == "GBP" would erase the subunit and
+    # book a 3322.50-pence trade as 3322.50 pounds. Quote prices are
+    # already major-unit normalized by get_quote, so only a user-supplied
+    # price is rescaled.
+    trade_ccy = ""
+    if currency:
+        trade_ccy, ccy_divisor = normalize_currency(currency)
+        if price and ccy_divisor != 1.0:
+            trade_price = trade_price / ccy_divisor
+            fees = fees / ccy_divisor
+    total_cost = trade_price * quantity + fees
     if yf_ccy and trade_ccy and trade_ccy != yf_ccy:
         if not confirm_currency:
             raise CurrencyMismatchError(ticker=ticker, user_currency=trade_ccy, quote_currency=yf_ccy)
@@ -806,12 +816,18 @@ async def build_value_timeline(db: AsyncSession, user_id: str) -> list[dict]:
         if hist:
             price_history[sym] = {h["date"]: h["close"] for h in hist}
 
-    # Collect unique trade currencies and prefetch FX rates to CHF
+    # Collect unique trade currencies and prefetch FX rates to CHF.
+    # Currencies are normalized to their major unit first: a GBp (pence)
+    # trade must be divided by 100 and converted at the GBP rate, otherwise
+    # a 3322.50-GBp Shell buy books as 3322.50 POUNDS and craters the
+    # timeline's cash balance by 100x the real amount.
     # (Cash position is always CHF-denominated; stock trades may be in any currency)
-    trade_currencies: set[str] = {t.currency.upper() for t in all_trades if t.symbol != "CASH"}
+    trade_currencies: set[str] = {
+        normalize_currency(t.currency)[0] for t in all_trades if t.symbol != "CASH"
+    }
     for t in all_trades:
         if t.symbol != "CASH":
-            symbol_currency[t.symbol] = t.currency.upper()
+            symbol_currency[t.symbol] = t.currency
     fx_rates: dict[str, float] = {}
     for ccy in trade_currencies:
         rate = await get_fx_rate(ccy, "CHF")
@@ -824,7 +840,8 @@ async def build_value_timeline(db: AsyncSession, user_id: str) -> list[dict]:
         # This is a historical timeline reconstruction, not the live totals
         # guarded by get_portfolio()'s warnings contract; a 1x fallback here
         # only bites if we've *never* known this currency's rate at all.
-        return amount * fx_rates.get(ccy.upper(), 1.0)
+        major, divisor = normalize_currency(ccy)
+        return amount / divisor * fx_rates.get(major, 1.0)
 
     # Collect all unique dates from price history
     all_dates: set[str] = set()
@@ -837,13 +854,19 @@ async def build_value_timeline(db: AsyncSession, user_id: str) -> list[dict]:
     if not all_dates:
         return []
 
-    sorted_dates = sorted(all_dates)
+    # Price history can reach further back than the account: dates before
+    # the first trade would just chart a meaningless flat zero tail.
+    first_date_iso = first_date.isoformat()
+    sorted_dates = sorted(d for d in all_dates if d >= first_date_iso)
 
     # Walk through dates, building cumulative positions (all values in CHF)
     holdings: dict[str, float] = {}  # symbol -> quantity
     cash = 0.0  # CHF cash balance
     net_deposits = 0.0  # cumulative deposits minus withdrawals (CHF)
     trade_idx = 0
+    # Most recent trade price per symbol: the valuation fallback for symbols
+    # with no fetchable price history (in the symbol's trade currency).
+    last_trade_price: dict[str, float] = {}
 
     timeline = []
     for d in sorted_dates:
@@ -863,15 +886,15 @@ async def build_value_timeline(db: AsyncSession, user_id: str) -> list[dict]:
                     cash -= t.quantity
                     net_deposits -= t.quantity
             elif t.type == "buy":
-                trade_ccy = t.currency.upper()
-                cost_chf = _to_chf(t.quantity * t.price + t.fees, trade_ccy)
+                cost_chf = _to_chf(t.quantity * t.price + t.fees, t.currency)
                 holdings[t.symbol] = holdings.get(t.symbol, 0) + t.quantity
                 cash -= cost_chf
+                last_trade_price[t.symbol] = t.price
             elif t.type == "sell":
-                trade_ccy = t.currency.upper()
-                proceeds_chf = _to_chf(t.quantity * t.price - t.fees, trade_ccy)
+                proceeds_chf = _to_chf(t.quantity * t.price - t.fees, t.currency)
                 holdings[t.symbol] = max(0, holdings.get(t.symbol, 0) - t.quantity)
                 cash += proceeds_chf
+                last_trade_price[t.symbol] = t.price
 
             trade_idx += 1
 
@@ -886,7 +909,10 @@ async def build_value_timeline(db: AsyncSession, user_id: str) -> list[dict]:
             if price is None:
                 # Find the most recent price before this date
                 prev_dates = [pd for pd in sorted(prices.keys()) if pd <= d]
-                price = prices[prev_dates[-1]] if prev_dates else 0
+                # No history at all (unlisted symbol, failed fetch): fall
+                # back to the most recent trade price instead of valuing the
+                # holding at 0, which used to crater the chart.
+                price = prices[prev_dates[-1]] if prev_dates else last_trade_price.get(sym, 0)
             # Historical price is in stock's native currency; convert to CHF using current FX rate
             # (Using current FX rate as a simplification; historical FX rates are out of scope)
             sym_ccy = symbol_currency.get(sym, "USD")
