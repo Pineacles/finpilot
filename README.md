@@ -1,15 +1,26 @@
 # FinPilot
 
-A personal Swiss finance tracker. Import e-banking exports, get auto-categorized
-transactions that improve as you correct them, watch a lean ETF/stock portfolio
-with honest (no-recommendation) pricing, and give a personal AI agent a small,
-safe API surface to read your financial state and fix data mistakes.
+**Self-hosted personal finance tracking, built around Swiss e-banking.**
 
-Built as a portfolio project — see [Architecture](#architecture) and
-[Tech stack](#tech-stack) below for the parts worth reading as code samples.
+[![CI](https://github.com/Pineacles/finpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/Pineacles/finpilot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
+![Next.js 16](https://img.shields.io/badge/next.js-16-black?logo=nextdotjs)
 
-![CI](https://github.com/your-org/finpilot/actions/workflows/ci.yml/badge.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+FinPilot imports your bank's e-banking exports and categorizes every
+transaction — and gets better each time you correct it. It keeps a lean view
+of your ETF and stock holdings with honest pricing (stale quotes and failed FX
+lookups are flagged, never papered over), and exposes a small,
+key-authenticated API so a personal AI agent can read your financial state and
+fix data mistakes — without access to anything else.
+
+It runs my own household's finances daily. If you're here to read code, start
+with [Architecture](#architecture) and the import pipeline under
+[Features](#features).
+
+## Screenshots
+
+*(Add screenshots here, generated from `seed.py --demo` data)*
 
 ## Features
 
@@ -194,10 +205,6 @@ can't drift between the two. See the API docs (dev only) or
 [`agent_finance_router.py`](backend/app/api/endpoints/agent_finance_router.py) /
 [`agent_portfolio_router.py`](backend/app/api/endpoints/agent_portfolio_router.py)
 for the route map.
-
-## Screenshots
-
-*(Add screenshots here)*
 
 ## License
 
