@@ -178,6 +178,9 @@ All variables are documented in [`.env.example`](.env.example).
 | `POSTGRES_PASSWORD` | **yes** | none | Postgres password |
 | `POSTGRES_USER` / `POSTGRES_DB` | no | `finpilot` | Postgres user/database name |
 | `DB_PORT` / `API_PORT` / `WEB_PORT` | no | `5432` / `8001` / `3010` | Host ports for Compose |
+| `BIND_HOST` | no | `127.0.0.1` | Address the published ports bind to; set `0.0.0.0` to reach the app from other machines |
+| `TOKEN_ENCRYPTION_KEY` | no | empty | Fernet key; encrypts the Gmail app password and Saxo access token at rest (keep a backup of it) |
+| `ALLOWED_PRIVATE_HOSTS` | no | empty | Hostnames AI/search URLs may reach on private addresses (e.g. `ollama,searxng`); other private targets are blocked |
 | `ENVIRONMENT` | no | `development` | Set to `production` to disable `/docs` |
 | `CORS_ORIGINS` | no | `http://localhost:3000,http://localhost:3010` | Allowed CORS origins |
 | `ANTHROPIC_API_KEY` | no | none | Server-wide default Anthropic key for the AI categorization fallback; each user can override it (and pick a different provider) in Settings |

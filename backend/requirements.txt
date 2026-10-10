@@ -16,6 +16,7 @@ thefuzz==0.22.1
 scikit-learn==1.6.1
 joblib==1.4.2
 slowapi>=0.1.9
+cryptography>=43,<51
 
 # Dev / test
 pytest==8.3.3

@@ -16,6 +16,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings as env_settings
+from app.core.crypto import decrypt_value, encrypt_value
 from app.models.settings import UserSetting
 
 # Setting keys and their env var fallbacks
@@ -79,6 +80,19 @@ LEGACY_ALIASES = {
 # compatibility, just not enumerated).
 DEPRECATED_KEYS = set(LEGACY_ALIASES.values())
 
+# Keys stored encrypted at rest (see app.core.crypto). No-op without
+# TOKEN_ENCRYPTION_KEY.
+ENCRYPTED_KEYS = {"gmail_app_password", "saxo_access_token"}
+
+
+def _enc(key: str, value: str) -> str:
+    return encrypt_value(value) if key in ENCRYPTED_KEYS else value
+
+
+def _dec(key: str, value: str) -> str:
+    return decrypt_value(value) if key in ENCRYPTED_KEYS else value
+
+
 # Keys that should be masked in API responses
 SENSITIVE_KEYS = {
     "anthropic_api_key",
@@ -114,7 +128,7 @@ async def get_setting(db: AsyncSession, user_id: str, key: str) -> str:
     )
     setting = result.scalar_one_or_none()
     if setting and setting.value:
-        return setting.value
+        return _dec(key, setting.value)
 
     # Legacy-key fallback (e.g. "ai_model" falls back to "analysis_model")
     legacy_key = LEGACY_ALIASES.get(key)
@@ -147,7 +161,7 @@ async def get_all_settings(db: AsyncSession, user_id: str) -> dict[str, str]:
     result = await db.execute(
         select(UserSetting).where(UserSetting.user_id == user_id)
     )
-    db_settings = {s.key: s.value for s in result.scalars().all()}
+    db_settings = {s.key: _dec(s.key, s.value) for s in result.scalars().all()}
 
     await _migrate_legacy_settings(db, user_id, db_settings)
 
@@ -193,6 +207,7 @@ async def set_setting(db: AsyncSession, user_id: str, key: str, value: str) -> N
         )
     )
     existing = result.scalar_one_or_none()
+    value = _enc(key, value)
     if existing:
         existing.value = value
     else:
@@ -227,6 +242,7 @@ async def set_many_atomic(db: AsyncSession, user_id: str, settings: dict[str, st
     for key, value in settings.items():
         if value is None:
             continue
+        value = _enc(key, value)
         if key in by_key:
             by_key[key].value = value
         else:

@@ -26,6 +26,17 @@ from app.services.categorize import batch_categorize_with_ai, categorize_transac
 from app.services.seed_merchants import seed_merchants
 
 
+@pytest.fixture(autouse=True)
+def _no_dns_in_url_guard(monkeypatch):
+    """The SSRF guard resolves hostnames; these tests use fake hosts and a
+    mocked transport, so skip the DNS lookup (guard itself is tested in
+    test_security_hardening.py)."""
+    async def _ok(url, *, field):
+        return None
+
+    monkeypatch.setattr(categorize, "assert_public_http_url", _ok)
+
+
 async def _category(db, user_id, name: str) -> Category:
     result = await db.execute(
         select(Category).where(and_(Category.user_id == user_id, Category.name == name))

@@ -188,7 +188,12 @@ async def delete_position(
 # ── Price chart ──────────────────────────────────────────────────
 
 @router.get("/chart/{ticker}")
-async def get_price_chart(ticker: str, range: str = "1y", interval: str | None = None):
+async def get_price_chart(
+    ticker: str,
+    range: str = "1y",
+    interval: str | None = None,
+    user: User = Depends(get_current_user),
+):
     valid_ranges = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
     if range not in valid_ranges:
         raise HTTPException(status_code=400, detail=f"Invalid range")

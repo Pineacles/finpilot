@@ -1,10 +1,10 @@
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.client_ip import get_client_ip
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token
 from app.models.user import User
@@ -12,7 +12,7 @@ from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_client_ip)
 
 
 @router.post("/login", response_model=TokenResponse)

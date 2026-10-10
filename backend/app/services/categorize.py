@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.finance import Category, Transaction
 from app.models.merchant import Merchant
 from app.services.settings import get_setting
+from app.services.url_guard import UnsafeURLError, assert_public_http_url
 from app.services import classifier
 
 # Swiss transaction normalization
@@ -342,6 +343,11 @@ async def _search_merchant_context(search_url: str, merchants: list[str]) -> dic
 
     base = search_url.rstrip("/")
     contexts: dict[str, str] = {}
+    try:
+        await assert_public_http_url(base, field="ai_search_url")
+    except UnsafeURLError as e:
+        logger.warning(f"SearXNG lookup skipped: {e}")
+        return {}
 
     async def _lookup(client: httpx.AsyncClient, merchant: str) -> None:
         try:
@@ -526,6 +532,7 @@ async def _call_ai(
             return _parse_json_text(text), None
 
         if config.provider == "openai":
+            await assert_public_http_url(config.base_url, field="ai_base_url")
             headers = {}
             if config.api_key:
                 headers["Authorization"] = f"Bearer {config.api_key}"
@@ -545,6 +552,7 @@ async def _call_ai(
                 return _parse_json_text(content), None
 
         # custom
+        await assert_public_http_url(config.endpoint, field="ai_endpoint")
         headers = {"Content-Type": "application/json"}
         if config.auth_header:
             headers["Authorization"] = config.auth_header

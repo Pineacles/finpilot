@@ -24,6 +24,13 @@ export async function handler(req: NextRequest) {
   const apiKey = req.headers.get("x-api-key");
   if (apiKey) headers["X-API-Key"] = apiKey;
 
+  // Forward the real client address so the backend rate limiter can tell
+  // visitors apart (the backend trusts these only from the proxy network).
+  const cfIp = req.headers.get("cf-connecting-ip");
+  if (cfIp) headers["CF-Connecting-IP"] = cfIp;
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) headers["X-Forwarded-For"] = xff;
+
   let body: BodyInit | undefined;
   if (req.method !== "GET" && req.method !== "HEAD") {
     if (isMultipart) {
