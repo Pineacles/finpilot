@@ -62,3 +62,6 @@ screenshots/
 !docs/screenshots/
 !docs/screenshots/**
 docker-compose.override.yml
+
+# Local env backups
+.env.bak*
