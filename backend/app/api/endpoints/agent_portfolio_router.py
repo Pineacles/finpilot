@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.uploads import read_upload
 from app.api.deps.auth import get_user_by_api_key
 from app.core.database import get_db
 from app.models.account import Account
@@ -198,7 +199,7 @@ async def agent_import_file(
     if ext not in ("csv", "xml", "tsv"):
         raise HTTPException(status_code=400, detail="File must be .csv, .tsv, or .xml")
 
-    raw = await file.read()
+    raw = await read_upload(file)
     for encoding in ("utf-8-sig", "utf-8", "iso-8859-1", "cp1252"):
         try:
             content = raw.decode(encoding)
@@ -243,7 +244,7 @@ async def agent_preview_csv(
 ):
     """Sniff delimiter/encoding and return the header + first ~10 rows so a
     column mapping can be constructed for /import/mapped."""
-    raw = await file.read()
+    raw = await read_upload(file)
     try:
         return mapped_import.preview_csv(raw)
     except ValueError as e:
@@ -275,7 +276,7 @@ async def agent_import_mapped_csv(
     if not acct_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Account not found")
 
-    raw = await file.read()
+    raw = await read_upload(file)
     try:
         internal_mapping = mapped_import.ColumnMapping(**column_mapping.model_dump())
         raw_transactions = mapped_import.parse_mapped_csv(raw, internal_mapping)

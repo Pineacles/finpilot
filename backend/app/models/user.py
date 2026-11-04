@@ -13,7 +13,8 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    api_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    # "sha256:<hex>" of the agent API key; the key itself is shown once on creation.
+    api_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     base_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="CHF")
     public_share_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True, default=None)

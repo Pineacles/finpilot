@@ -205,7 +205,7 @@ def parse_postfinance_pdf(raw_bytes: bytes) -> dict:
             "payment_type": "",
         })
 
-    logger.info(f"PostFinance PDF: {len(final)} txns, opening={opening_balance}, closing={closing_balance}")
+    logger.info(f"PostFinance PDF: {len(final)} txns parsed")
 
     return {
         "transactions": final,

@@ -2,6 +2,7 @@
 
 No API key needed. Supports stocks, ETFs, crypto, indices.
 """
+import re
 import time
 import logging
 from datetime import datetime, timezone
@@ -15,6 +16,15 @@ logger = logging.getLogger(__name__)
 _BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
 _HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+# Yahoo symbols: letters, digits and . - ^ = (e.g. BRK-B, NESN.SW, ^GSPC,
+# CHFEUR=X). Anything else (slashes, ?, #, %, whitespace) could redirect the
+# request to another Yahoo path, so it is refused before a URL is built.
+_TICKER_RE = re.compile(r"^[A-Za-z0-9^][A-Za-z0-9.^=\-]{0,19}$")
+
+
+def is_valid_ticker(ticker: str) -> bool:
+    return isinstance(ticker, str) and bool(_TICKER_RE.fullmatch(ticker))
+
 # In-memory cache: ticker -> {data, fetched_at}
 _price_cache: dict[str, dict] = {}
 CACHE_TTL = 30  # 30 seconds: frequent enough for live feel without hammering Yahoo
@@ -22,6 +32,9 @@ CACHE_TTL = 30  # 30 seconds: frequent enough for live feel without hammering Ya
 
 async def get_quote(ticker: str, cache_ttl: int | None = None) -> dict | None:
     """Get current price + metadata for a ticker. Optional cache_ttl override."""
+    if not is_valid_ticker(ticker):
+        logger.warning("Rejected invalid ticker format")
+        return None
     now = time.time()
     ttl = cache_ttl if cache_ttl is not None else CACHE_TTL
     cached = _price_cache.get(ticker)
@@ -193,6 +206,9 @@ async def get_history(ticker: str, range: str = "1y", interval: str = "1d") -> l
     range: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, max
     interval: 1m, 5m, 15m, 1d, 1wk, 1mo
     """
+    if not is_valid_ticker(ticker):
+        logger.warning("Rejected invalid ticker format")
+        return []
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(

@@ -11,6 +11,9 @@ import re
 import xml.etree.ElementTree as ET
 from datetime import date
 
+from defusedxml import DefusedXmlException
+from defusedxml.ElementTree import fromstring as _safe_fromstring
+
 
 def _find_ns(root: ET.Element) -> str:
     tag = root.tag
@@ -49,8 +52,8 @@ def parse_statement_period(content: str) -> tuple[date | None, date | None]:
     window for treating the statement as authoritative.
     """
     try:
-        root = ET.fromstring(content)
-    except ET.ParseError:
+        root = _safe_fromstring(content)
+    except (ET.ParseError, DefusedXmlException):
         return None, None
     ns = _find_ns(root)
     stmt = _f(root, "BkToCstmrStmt/Stmt", ns)
@@ -74,7 +77,11 @@ def parse_statement_period(content: str) -> tuple[date | None, date | None]:
 
 def parse_camt053(content: str, owner_name: str = "") -> list[dict]:
     """Parse camt.053 XML. owner_name is used to detect self-referencing entries."""
-    root = ET.fromstring(content)
+    try:
+        # defusedxml rejects entity expansion / external entities (XML bombs, XXE)
+        root = _safe_fromstring(content)
+    except (ET.ParseError, DefusedXmlException) as e:
+        raise ValueError(f"Invalid camt.053 XML: {e}") from e
     ns = _find_ns(root)
 
     # Detect account owner from the file

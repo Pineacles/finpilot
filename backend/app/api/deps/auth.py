@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import decode_token
+from app.core.security import decode_token, hash_api_key
 from app.models.user import User
 
 bearer_scheme = HTTPBearer()
@@ -34,7 +34,7 @@ async def get_user_by_api_key(
     x_api_key: str = Header(...),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    result = await db.execute(select(User).where(User.api_key == x_api_key))
+    result = await db.execute(select(User).where(User.api_key == hash_api_key(x_api_key)))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=401, detail="Invalid API key")

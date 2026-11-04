@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -22,6 +23,16 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def generate_api_key() -> str:
     return secrets.token_urlsafe(48)
+
+
+API_KEY_HASH_PREFIX = "sha256:"
+
+
+def hash_api_key(key: str) -> str:
+    """Storage form of an agent API key. Keys are 288-bit random values, so a
+    plain SHA-256 (no salt, no work factor) is enough and allows an indexed
+    lookup."""
+    return API_KEY_HASH_PREFIX + hashlib.sha256(key.encode()).hexdigest()
 
 
 def create_access_token(user_id: str) -> str:

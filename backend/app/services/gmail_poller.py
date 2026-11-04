@@ -10,6 +10,7 @@ Email format:
 import re
 import imaplib
 import email
+import email.utils
 import logging
 from datetime import datetime, date, timezone
 from email.header import decode_header
@@ -59,6 +60,62 @@ def parse_valiant_email(body: str) -> dict | None:
     }
 
 
+# Authentication-Results is stamped by Gmail's own servers. Only the topmost
+# header whose authserv-id is Gmail's counts; a sender can add lookalike
+# headers, but they land below the one Gmail inserts.
+_TRUSTED_AUTHSERV = "mx.google.com"
+_DKIM_PASS = re.compile(r"\bdkim=pass\b[^;]*", re.IGNORECASE)
+_DKIM_DOMAIN = re.compile(r"header\.(?:d|i)=@?([A-Za-z0-9.-]+)", re.IGNORECASE)
+
+
+def sender_filter_is_safe(value: str) -> bool:
+    """A sender filter goes into a quoted IMAP search string: no quotes,
+    backslashes or control characters (CR/LF would inject commands)."""
+    return bool(value) and not any(c in '"\\' or ord(c) < 32 or ord(c) == 127 for c in value)
+
+
+def _from_address(msg) -> str:
+    return email.utils.parseaddr(msg.get("From", ""))[1].strip().lower()
+
+
+def has_passing_dkim(msg) -> bool:
+    """True when Gmail's Authentication-Results reports dkim=pass for a domain
+    aligned with the From: address (same domain, or a parent or subdomain)."""
+    from_addr = _from_address(msg)
+    if "@" not in from_addr:
+        return False
+    from_domain = from_addr.rsplit("@", 1)[1]
+    headers = msg.get_all("Authentication-Results") or []
+    for header in headers:
+        header = " ".join(str(header).split())
+        authserv = header.split(";", 1)[0].strip().lower()
+        if authserv != _TRUSTED_AUTHSERV:
+            continue
+        # Only the topmost trusted header is evaluated.
+        for chunk in _DKIM_PASS.findall(header):
+            m = _DKIM_DOMAIN.search(chunk)
+            if not m:
+                continue
+            d = m.group(1).lower().strip(".")
+            if from_domain == d or from_domain.endswith("." + d) or d.endswith("." + from_domain):
+                return True
+        return False
+    return False
+
+
+def sender_matches(msg, senders: list[str]) -> bool:
+    """IMAP FROM is a substring search; require the actual From: address to
+    match a configured sender (full address or bare domain)."""
+    from_addr = _from_address(msg)
+    if not from_addr:
+        return False
+    for s in senders:
+        s = s.lower()
+        if from_addr == s or ("@" not in s and from_addr.endswith("@" + s.lstrip("@"))):
+            return True
+    return False
+
+
 async def poll_gmail(db: AsyncSession, user_id: str) -> dict:
     """Poll Gmail for new Valiant notifications.
 
@@ -80,6 +137,12 @@ async def poll_gmail(db: AsyncSession, user_id: str) -> dict:
     # Configurable sender filter (default: Valiant)
     sender_filter = await get_setting(db, user_id, "gmail_sender_filter")
     senders = [s.strip() for s in sender_filter.split(",") if s.strip()] if sender_filter else ["noreply@valiant.ch"]
+    unsafe = [s for s in senders if not sender_filter_is_safe(s)]
+    if unsafe:
+        logger.warning("Gmail: ignoring %d sender filter entries with illegal characters", len(unsafe))
+        senders = [s for s in senders if sender_filter_is_safe(s)]
+    if not senders:
+        return {"new_transactions": 0, "balance": None, "errors": ["Invalid sender filter"]}
 
     # Find or create bank account
     result = await db.execute(
@@ -119,7 +182,7 @@ async def poll_gmail(db: AsyncSession, user_id: str) -> dict:
             return {"new_transactions": 0, "balance": None, "errors": []}
 
         uids = data[0].split()
-        logger.info(f"Gmail: found {len(uids)} potential new Valiant emails (UIDs from {last_uid})")
+        logger.info(f"Gmail: found {len(uids)} potential new notification emails (UIDs from {last_uid})")
 
         for uid_bytes in uids:
             uid = int(uid_bytes)
@@ -133,6 +196,14 @@ async def poll_gmail(db: AsyncSession, user_id: str) -> dict:
 
             raw_email = msg_data[0][1]
             msg = email.message_from_bytes(raw_email)
+
+            # From: is attacker-controlled; trust the mail only when Gmail
+            # verified a DKIM signature from the sender's own domain.
+            if not sender_matches(msg, senders) or not has_passing_dkim(msg):
+                logger.warning(f"Gmail UID {uid}: skipped, sender not verified by DKIM")
+                if uid > max_uid:
+                    max_uid = uid
+                continue
 
             # Get email date
             date_str = msg.get("Date", "")
@@ -201,7 +272,7 @@ async def poll_gmail(db: AsyncSession, user_id: str) -> dict:
             if uid > max_uid:
                 max_uid = uid
 
-            logger.info(f"Gmail: {parsed['type']} CHF {parsed['amount']}, balance CHF {parsed['balance']}")
+            logger.info(f"Gmail UID {uid}: created pending {parsed['type']} transaction")
 
         imap.logout()
 

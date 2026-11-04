@@ -82,7 +82,17 @@ DEPRECATED_KEYS = set(LEGACY_ALIASES.values())
 
 # Keys stored encrypted at rest (see app.core.crypto). No-op without
 # TOKEN_ENCRYPTION_KEY.
-ENCRYPTED_KEYS = {"gmail_app_password", "saxo_access_token"}
+ENCRYPTED_KEYS = {
+    "gmail_app_password",
+    "saxo_access_token",
+    "saxo_app_secret",
+    "saxo_refresh_token",
+    "ai_api_key",
+    "anthropic_api_key",
+    "ai_auth_header",
+    "analysis_auth_header",
+    "agent_auth_header",
+}
 
 
 def _enc(key: str, value: str) -> str:
@@ -140,7 +150,7 @@ async def get_setting(db: AsyncSession, user_id: str, key: str) -> str:
         )
         legacy_setting = legacy_result.scalar_one_or_none()
         if legacy_setting and legacy_setting.value:
-            return legacy_setting.value
+            return _dec(legacy_key, legacy_setting.value)
 
     # Env var fallback
     env_key = SETTING_KEYS.get(key)

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
-from app.core.security import generate_api_key
+from app.core.security import generate_api_key, hash_api_key
 from app.models.user import User
 from app.schemas.user_settings import (
     SettingsGetResponse,
@@ -50,12 +50,9 @@ def _validate_url_setting(value: str, field_name: str) -> None:
 
 
 def _mask_api_key(key: str) -> str:
-    """Return a masked API key showing only the last 4 characters."""
-    if not key:
-        return ""
-    if len(key) <= 4:
-        return "****"
-    return "••••••••••••" + key[-4:]
+    """Placeholder shown for an existing key. Only a hash is stored, so no
+    part of the real key can be displayed."""
+    return "••••••••••••" if key else ""
 
 
 @router.get("", response_model=SettingsGetResponse)
@@ -159,7 +156,7 @@ async def regenerate_api_key(
     The old key is invalidated; any agents using it must be updated.
     """
     new_key = generate_api_key()
-    user.api_key = new_key
+    user.api_key = hash_api_key(new_key)
     await db.commit()
     logger.info("API key regenerated for user %s", user.id[:8])
     return {"api_key": new_key, "message": "Store this key immediately, it will not be shown again."}

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.uploads import read_upload
 from app.api.deps.auth import get_current_user
 from app.core.database import get_db
 from app.models.account import Account
@@ -39,7 +40,7 @@ async def upload_file(
     if ext not in ("csv", "xml", "tsv", "pdf"):
         raise HTTPException(status_code=400, detail="File must be .csv, .tsv, .xml, or .pdf")
 
-    raw = await file.read()
+    raw = await read_upload(file)
 
     # PDF files are handled separately (binary, not text)
     if ext == "pdf":
@@ -137,7 +138,7 @@ async def preview_csv_file(
 ):
     """Sniff delimiter/encoding and return the header + first ~10 rows so the
     frontend can render a column-mapping UI."""
-    raw = await file.read()
+    raw = await read_upload(file)
     try:
         preview = mapped_import.preview_csv(raw)
     except ValueError as e:
@@ -170,7 +171,7 @@ async def import_mapped_csv(
     if not acct_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Account not found")
 
-    raw = await file.read()
+    raw = await read_upload(file)
     try:
         internal_mapping = mapped_import.ColumnMapping(**column_mapping.model_dump())
         raw_transactions = mapped_import.parse_mapped_csv(raw, internal_mapping)

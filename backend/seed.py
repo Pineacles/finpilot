@@ -2,7 +2,7 @@
 
 Credentials are read from environment variables:
   SEED_EMAIL    : defaults to admin@example.com
-  SEED_PASSWORD : defaults to change-me (change before use!)
+  SEED_PASSWORD : required, no default
 
 Optional --demo flag additionally generates ~6 months of plausible but
 entirely FAKE Swiss personal-finance data, so the app's features are visible
@@ -42,7 +42,7 @@ from app.services.csv_import import import_transactions
 from app.services.seed_merchants import seed_merchants
 
 SEED_EMAIL = os.environ.get("SEED_EMAIL", "admin@example.com")
-SEED_PASSWORD = os.environ.get("SEED_PASSWORD", "change-me")
+SEED_PASSWORD = os.environ.get("SEED_PASSWORD", "")
 
 # Fixed fake calendar window for --demo data. Deliberately NOT "today minus 6
 # months": the data is synthetic, so pinning it to a fixed window keeps the
@@ -52,6 +52,8 @@ DEMO_RNG_SEED = 20260107
 
 
 async def seed(demo: bool = False):
+    if not SEED_PASSWORD:
+        raise SystemExit("SEED_PASSWORD must be set (there is no default password).")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -65,7 +67,7 @@ async def seed(demo: bool = False):
         user = User(
             email=SEED_EMAIL,
             password_hash=hash_password(SEED_PASSWORD),
-            api_key=api_key,
+            api_key=hash_api_key(api_key),
             display_name="Admin",
             base_currency="CHF",
         )

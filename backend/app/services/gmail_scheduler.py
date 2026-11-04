@@ -69,7 +69,7 @@ async def _poll_loop():
                     last_polled[user_id] = now
 
                     if result["new_transactions"] > 0:
-                        logger.info(f"Gmail auto-poll: {result['new_transactions']} new, balance={result['balance']}")
+                        logger.info(f"Gmail auto-poll: {result['new_transactions']} new transactions")
 
         except Exception as e:
             logger.error(f"Gmail scheduler error: {e}", exc_info=True)

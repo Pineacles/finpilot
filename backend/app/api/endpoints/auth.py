@@ -29,7 +29,8 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("30/minute")
+async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     try:
         payload = decode_token(body.refresh_token)
         if payload.get("type") != "refresh":

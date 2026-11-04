@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,6 +12,8 @@ from app.core.config import settings
 from app.services.gmail_scheduler import start_scheduler as start_gmail_scheduler, stop_scheduler as stop_gmail_scheduler
 from app.services.saxo_scheduler import start_scheduler as start_saxo_scheduler, stop_scheduler as stop_saxo_scheduler
 
+logger = logging.getLogger(__name__)
+
 limiter = Limiter(key_func=get_client_ip)
 
 
@@ -23,6 +26,11 @@ def _validate_settings() -> None:
             "SECRET_KEY is missing or too weak. "
             "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\" "
             "and set it in your .env file."
+        )
+    if not settings.TOKEN_ENCRYPTION_KEY.strip():
+        logger.warning(
+            "TOKEN_ENCRYPTION_KEY is empty: Gmail, Saxo, AI and agent credentials "
+            "are stored in plaintext in the database. Set a Fernet key to encrypt them."
         )
 
 
