@@ -4,6 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 // Local dev: falls back to localhost:8001
 const API_URL = process.env.API_URL || "http://localhost:8001";
 
+const TRUST_PROXY_HEADERS = ["1", "true", "yes"].includes(
+  (process.env.TRUST_PROXY_HEADERS || "").toLowerCase(),
+);
+
 export async function handler(req: NextRequest) {
   const path = req.nextUrl.pathname.replace(/^\/api/, "");
   const url = `${API_URL}/api${path}${req.nextUrl.search}`;
@@ -24,12 +28,15 @@ export async function handler(req: NextRequest) {
   const apiKey = req.headers.get("x-api-key");
   if (apiKey) headers["X-API-Key"] = apiKey;
 
-  // Forward the real client address so the backend rate limiter can tell
-  // visitors apart (the backend trusts these only from the proxy network).
-  const cfIp = req.headers.get("cf-connecting-ip");
-  if (cfIp) headers["CF-Connecting-IP"] = cfIp;
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) headers["X-Forwarded-For"] = xff;
+  // Forward the client address for the backend rate limiter only when the
+  // operator says a trusted proxy (e.g. Cloudflare) sets these headers.
+  // Otherwise a client could send its own and pick its rate-limit bucket.
+  if (TRUST_PROXY_HEADERS) {
+    const cfIp = req.headers.get("cf-connecting-ip");
+    if (cfIp) headers["CF-Connecting-IP"] = cfIp;
+    const xff = req.headers.get("x-forwarded-for");
+    if (xff) headers["X-Forwarded-For"] = xff;
+  }
 
   let body: BodyInit | undefined;
   if (req.method !== "GET" && req.method !== "HEAD") {

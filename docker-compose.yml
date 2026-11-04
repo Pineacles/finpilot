@@ -30,6 +30,7 @@ services:
       ANALYSIS_MODEL: ${ANALYSIS_MODEL:-claude-haiku-4-5-20251001}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
       ALLOWED_PRIVATE_HOSTS: ${ALLOWED_PRIVATE_HOSTS:-}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
       CLASSIFIER_MODEL_DIR: /data/models
     ports:
       - "${BIND_HOST:-127.0.0.1}:${API_PORT:-8001}:8000"
@@ -46,6 +47,7 @@ services:
     restart: unless-stopped
     environment:
       API_URL: http://api:8000
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
     ports:
       - "${BIND_HOST:-127.0.0.1}:${WEB_PORT:-3010}:3000"
     depends_on:

@@ -2,14 +2,16 @@
 
 The API sits behind the Next.js proxy (and, in production, a Cloudflare
 tunnel), so the direct TCP peer is always the proxy. Forwarded headers are
-honoured only when the direct peer is on a private/loopback network (the
-docker network or localhost); otherwise the peer address itself is used, so a
-caller that reaches the API directly cannot spoof its own bucket.
+honoured only when TRUST_PROXY_HEADERS is enabled AND the direct peer is on a
+private/loopback network (the docker network or localhost); otherwise the peer
+address itself is used, so a caller cannot spoof its own bucket.
 """
 
 import ipaddress
 
 from starlette.requests import Request
+
+from app.core.config import settings
 
 
 def _parse(value: str):
@@ -27,6 +29,8 @@ def get_client_ip(request: Request) -> str:
     peer = request.client.host if request.client else "unknown"
     peer_ip = _parse(peer)
     if peer_ip is None or not _is_internal(peer_ip):
+        return peer
+    if not settings.TRUST_PROXY_HEADERS:
         return peer
 
     cf = _parse(request.headers.get("cf-connecting-ip", ""))

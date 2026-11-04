@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     # Everything else must resolve to a public address (SSRF guard).
     ALLOWED_PRIVATE_HOSTS: str = ""
 
+    # Honour CF-Connecting-IP / X-Forwarded-For for rate limiting. Off by
+    # default: only enable when every request reaches the app through a proxy
+    # that sets or overwrites those headers (e.g. a Cloudflare tunnel in front
+    # of the web container). Otherwise a client can pick its own rate bucket.
+    TRUST_PROXY_HEADERS: bool = False
+
     # AI Analysis
     ANTHROPIC_API_KEY: str = ""
     ANALYSIS_MODEL: str = "claude-haiku-4-5-20251001"

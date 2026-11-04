@@ -15,20 +15,31 @@ def _req(peer: str, headers: dict[str, str] | None = None) -> Request:
     return Request({"type": "http", "headers": raw, "client": (peer, 1234)})
 
 
-def test_client_ip_trusts_cf_header_from_internal_peer():
+@pytest.fixture
+def trust_proxy(monkeypatch):
+    monkeypatch.setattr(settings, "TRUST_PROXY_HEADERS", True)
+
+
+def test_client_ip_ignores_forwarded_headers_by_default():
+    assert settings.TRUST_PROXY_HEADERS is False
+    hdrs = {"CF-Connecting-IP": "1.1.1.1", "X-Forwarded-For": "2.2.2.2"}
+    assert get_client_ip(_req("172.18.0.5", hdrs)) == "172.18.0.5"
+
+
+def test_client_ip_trusts_cf_header_from_internal_peer(trust_proxy):
     assert get_client_ip(_req("172.18.0.5", {"CF-Connecting-IP": "1.1.1.1"})) == "1.1.1.1"
 
 
-def test_client_ip_ignores_headers_from_public_peer():
+def test_client_ip_ignores_headers_from_public_peer(trust_proxy):
     assert get_client_ip(_req("8.8.4.4", {"CF-Connecting-IP": "1.1.1.1"})) == "8.8.4.4"
 
 
-def test_client_ip_xff_skips_internal_hops_and_spoofed_left():
+def test_client_ip_xff_skips_internal_hops_and_spoofed_left(trust_proxy):
     xff = "9.9.9.9, 1.1.1.1, 10.0.0.2"
     assert get_client_ip(_req("127.0.0.1", {"X-Forwarded-For": xff})) == "1.1.1.1"
 
 
-def test_client_ip_falls_back_to_peer():
+def test_client_ip_falls_back_to_peer(trust_proxy):
     assert get_client_ip(_req("172.18.0.5")) == "172.18.0.5"
     assert get_client_ip(_req("172.18.0.5", {"CF-Connecting-IP": "garbage"})) == "172.18.0.5"
 
