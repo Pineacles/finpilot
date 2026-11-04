@@ -48,14 +48,16 @@ The screenshots use a deterministic, fully synthetic demo dataset (`backend/seed
 | External | Yahoo Finance, Saxo OpenAPI, Anthropic / OpenAI-compatible LLM, Gmail IMAP |
 | Infra | Docker Compose, GitHub Actions (pytest, tsc, eslint, build) |
 
+Privacy: AI categorization sends merchant names, amounts and descriptions to the AI endpoint you configure, and Yahoo Finance receives the tickers you hold.
+
 Architecture, data model and integrations are described in [docs/architecture.md](docs/architecture.md).
 
 ## Run it locally
 
 ```bash
-cp .env.example .env        # set SECRET_KEY and POSTGRES_PASSWORD
+cp .env.example .env        # set SECRET_KEY and POSTGRES_PASSWORD (optionally TOKEN_ENCRYPTION_KEY)
 docker compose up -d        # web on :3010, api on :8001
-docker compose exec api python seed.py --demo
+docker compose exec -e SEED_PASSWORD='choose-a-password' api python seed.py --demo
 ```
 
 Tests run offline: `cd backend && pytest tests -q`, and `cd frontend && npx tsc --noEmit`.
